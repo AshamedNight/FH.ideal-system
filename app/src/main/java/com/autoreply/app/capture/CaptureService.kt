@@ -78,11 +78,34 @@ class CaptureService : AccessibilityService() {
         return super.onUnbind(intent)
     }
 
-    /** 配置的目标包名集合。空表示"没指定，任何非自身界面都算"。 */
+    /** 配置的目标包名集合。空表示"没指定，任何非系统界面都算"。 */
     fun targets(): List<String> = config?.targetPackages ?: emptyList()
 
+    /**
+     * 系统界面判断 —— 这些永远不是要抓的对象。
+     *
+     * 没有这一层会出大问题：包名留空时原本的规则是"非本 App 即目标"，
+     * 而导航栏、状态栏、桌面、输入法统统满足"非本 App"，于是点抓取拿到的是
+     * com.android.systemui 的 navigation_bar_frame —— 看起来像抓取坏了，
+     * 实际是把系统悬浮窗当成了目标界面。
+     *
+     * 用关键字匹配而不是枚举全部包名：各家 ROM 的 launcher / 输入法包名太多，
+     * 穷举必然漏。
+     */
+    private fun isSystemUi(pkg: String): Boolean {
+        if (pkg == packageName) return true
+        if (pkg.startsWith("com.android.systemui")) return true
+        if (pkg.startsWith("com.android.settings")) return true
+        if (pkg.contains("launcher", ignoreCase = true)) return true
+        if (pkg.contains("inputmethod", ignoreCase = true)) return true
+        if (pkg.contains("permissioncontroller", ignoreCase = true)) return true
+        if (pkg.startsWith("com.android.packageinstaller")) return true
+        return false
+    }
+
     fun isTarget(pkg: String?): Boolean {
-        if (pkg == null || pkg == packageName) return false
+        if (pkg == null) return false
+        if (isSystemUi(pkg)) return false
         val list = targets()
         return list.isEmpty() || list.contains(pkg)
     }
