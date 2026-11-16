@@ -72,6 +72,19 @@ class AppConfig(context: Context) {
         get() = sp.getString(KEY_LLM_MODEL, "deepseek-chat") ?: ""
         set(value) = sp.edit().putString(KEY_LLM_MODEL, value.trim()).apply()
 
+    /**
+     * 只给「模型请求」用的代理，例：`http://127.0.0.1:7890` 或 `socks5://127.0.0.1:1080`。
+     *
+     * 和「手机开系统级 VPN」的区别很大：系统级 VPN 会让**所有 App** 都从代理出去，
+     * 目标平台看到的是境外 IP；而这里只有我们发往模型接口的那一次请求走代理，
+     * 目标 App 的流量完全不经过它。
+     *
+     * 留空则直连（走电脑中转时留空即可 —— 中转本身在局域网里）。
+     */
+    var llmProxy: String
+        get() = sp.getString(KEY_LLM_PROXY, "") ?: ""
+        set(value) = sp.edit().putString(KEY_LLM_PROXY, value.trim()).apply()
+
     var persona: String
         get() = sp.getString(KEY_PERSONA, DEFAULT_PERSONA) ?: DEFAULT_PERSONA
         set(value) = sp.edit().putString(KEY_PERSONA, value).apply()
@@ -120,6 +133,7 @@ class AppConfig(context: Context) {
         private const val KEY_LLM_URL = "llm_url"
         private const val KEY_LLM_KEY = "llm_key"
         private const val KEY_LLM_MODEL = "llm_model"
+        private const val KEY_LLM_PROXY = "llm_proxy"
         private const val KEY_PERSONA = "persona"
         private const val KEY_PERSONA_JSON = "persona_json"
         private const val KEY_BANNED = "banned"

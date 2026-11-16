@@ -57,7 +57,7 @@ class ReplyEngine(
 
         val system = buildSystem(persona, config.maxReplyChars)
         val baseUser = buildUser(turns)
-        val client = LlmClient(config.llmBaseUrl, config.llmApiKey, config.llmModel)
+        val client = LlmClient(config.llmBaseUrl, config.llmApiKey, config.llmModel, config.llmProxy)
 
         var lastHit = ""
         for (attempt in 1..MAX_ATTEMPTS) {

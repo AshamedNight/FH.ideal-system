@@ -64,7 +64,9 @@ class SettingsActivity : Activity() {
         root.addView(field("llmBaseUrl", "接口地址", config.llmBaseUrl, InputType.TYPE_TEXT_VARIATION_URI))
         root.addView(field("llmApiKey", "API Key", config.llmApiKey, InputType.TYPE_TEXT_VARIATION_PASSWORD))
         root.addView(field("llmModel", "模型名", config.llmModel, InputType.TYPE_CLASS_TEXT))
-        root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，不要给手机挂代理，改成电脑中转：\nhttp://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
+        root.addView(field("llmProxy", "代理（可选）", config.llmProxy, InputType.TYPE_TEXT_VARIATION_URI))
+        root.addView(note("代理只作用于「发往模型接口」的请求，目标 App 的流量不经过它 —— 所以不必为此打开手机的系统级 VPN。\n例：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080（Termux 里跑的代理填这里）。走电脑中转时留空。"))
+        root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，也可改成电脑中转：http://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
 
         root.addView(section("人设"))
         root.addView(multi("persona", config.persona, 8))
@@ -103,6 +105,7 @@ class SettingsActivity : Activity() {
         config.llmBaseUrl = textOf("llmBaseUrl")
         config.llmApiKey = textOf("llmApiKey")
         config.llmModel = textOf("llmModel")
+        config.llmProxy = textOf("llmProxy")
         config.persona = textOf("persona")
         config.personaJson = textOf("personaJson")
         config.bannedWords = textOf("bannedWords")

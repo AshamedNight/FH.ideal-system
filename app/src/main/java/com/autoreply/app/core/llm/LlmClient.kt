@@ -3,6 +3,9 @@ package com.autoreply.app.core.llm
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.URI
 import java.net.URL
 
 /**
@@ -20,6 +23,14 @@ class LlmClient(
     private val baseUrl: String,
     private val apiKey: String,
     private val model: String,
+    /**
+     * 只给这次请求用的代理，如 `http://127.0.0.1:7890` / `socks5://127.0.0.1:1080`。
+     * 留空直连。
+     *
+     * 这是"手机不挂系统级 VPN"的关键：系统级 VPN 会让所有 App 都从境外出口出去
+     * （目标平台看到境外 IP），而这里只影响我们发往模型接口的这一次请求。
+     */
+    private val proxyUrl: String = "",
     private val timeoutMs: Int = 30_000,
 ) {
 
@@ -53,7 +64,7 @@ class LlmClient(
             }.toString()
 
             val url = URL(baseUrl.trim().trimEnd('/') + "/chat/completions")
-            conn = (url.openConnection() as HttpURLConnection).apply {
+            conn = openConnection(url).apply {
                 requestMethod = "POST"
                 connectTimeout = timeoutMs
                 readTimeout = timeoutMs
@@ -85,6 +96,39 @@ class LlmClient(
             Result.Err("请求失败：${e.javaClass.simpleName} ${e.message.orEmpty().take(120)}")
         } finally {
             conn?.disconnect()
+        }
+    }
+
+    /**
+     * 按 [proxyUrl] 建连接。地址写错时**退回直连**而不是直接失败 ——
+     * 代理是可选项，配错了不该让整条链路瘫掉，只是这一次可能连不上上游，
+     * 报错会落在网络层，仍然能看出是"连不上"而不是"配置崩了"。
+     */
+    private fun openConnection(url: URL): HttpURLConnection {
+        val raw = proxyUrl.trim()
+        if (raw.isEmpty()) return url.openConnection() as HttpURLConnection
+
+        return try {
+            val uri = URI(if (raw.contains("://")) raw else "http://$raw")
+            val host = uri.host
+            if (host.isNullOrEmpty()) {
+                url.openConnection() as HttpURLConnection
+            } else {
+                val port = when {
+                    uri.port > 0 -> uri.port
+                    uri.scheme.equals("socks5", true) || uri.scheme.equals("socks", true) -> 1080
+                    uri.scheme.equals("https", true) -> 443
+                    else -> 80
+                }
+                val type = if (uri.scheme?.startsWith("socks", ignoreCase = true) == true) {
+                    Proxy.Type.SOCKS
+                } else {
+                    Proxy.Type.HTTP
+                }
+                url.openConnection(Proxy(type, InetSocketAddress(host, port))) as HttpURLConnection
+            }
+        } catch (_: Exception) {
+            url.openConnection() as HttpURLConnection
         }
     }
 
