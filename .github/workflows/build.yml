@@ -97,15 +97,18 @@ jobs:
       # 初次排查时就在这上面浪费了两轮。
       - name: Summarize build errors
         if: failure()
+        # tee -a 同时写进 Step Summary 和本步骤的输出。
+        # 只写 Summary 的话用户还得去找那个区块；写到 stdout 后，
+        # 日志最后几行直接就是错误，翻都不用翻。
         run: |
           {
             echo '## 构建失败：编译器输出'
             echo ''
             echo '```'
-            grep -E '^e: |^w: .*error|^\* What went wrong|^> [A-Z]' /tmp/build.log | head -40 \
+            grep -E '^e: |^\* What went wrong|^> [A-Z]' /tmp/build.log | head -40 \
               || echo '（没匹配到 e: 行，请展开上面的完整日志）'
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:

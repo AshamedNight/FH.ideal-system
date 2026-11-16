@@ -12,11 +12,18 @@ object NodeQuery {
 
     private const val MAX_DEPTH = 24
 
-    /** 深度优先遍历。最多下探 [maxDepth] 层，防止极端页面把栈打爆。 */
+    /**
+     * 深度优先遍历。最多下探 [maxDepth] 层，防止极端页面把栈打爆。
+     *
+     * 参数顺序有讲究：[maxDepth] 必须排在 [hit] 之前。
+     * Kotlin 的 trailing lambda 只认最后一个参数，如果写成 (root, hit, maxDepth)，
+     * 调用处 `collect(root) { ... }` 会把这个 lambda 当成 maxDepth（要 Int），
+     * 报 "Type mismatch: inferred type is () -> Boolean but Int was expected"。
+     */
     fun collect(
         root: AccessibilityNodeInfo,
-        hit: (AccessibilityNodeInfo) -> Boolean,
         maxDepth: Int = MAX_DEPTH,
+        hit: (AccessibilityNodeInfo) -> Boolean,
     ): List<AccessibilityNodeInfo> {
         val out = ArrayList<AccessibilityNodeInfo>()
         val stack = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
