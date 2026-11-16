@@ -12,6 +12,7 @@ import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import com.autoreply.app.R
 import com.autoreply.app.core.AppConfig
 
 /**
