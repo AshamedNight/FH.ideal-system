@@ -30,3 +30,8 @@ _legacy/gateway/recordings/
 *.db-wal
 *.jsonl
 *.log
+
+# 真机 dump 里有真实聊天内容，不进仓库
+/dump.txt
+/dump-*.txt
+/dumps/

@@ -17,6 +17,7 @@
     <string name="btn_open_target">打开目标应用</string>
     <string name="btn_dump">抓取当前界面</string>
     <string name="btn_copy">复制结果</string>
+    <string name="btn_probe">读消息并试填</string>
     <string name="btn_settings">设置</string>
     <string name="btn_stop">停止</string>
 

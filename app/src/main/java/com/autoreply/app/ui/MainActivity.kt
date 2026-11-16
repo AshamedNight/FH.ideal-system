@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.app.Activity
 import android.widget.Button
@@ -12,6 +14,10 @@ import android.widget.Toast
 import com.autoreply.app.R
 import com.autoreply.app.capture.CaptureService
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.platform.AccessibilityReplySink
+import com.autoreply.app.platform.FillResult
+import com.autoreply.app.platform.NodeQuery
+import com.autoreply.app.platform.Profiles
 
 /**
  * 首页。刻意只有状态 + 几个开关，不放任何"开始"主动作 ——
@@ -25,6 +31,8 @@ class MainActivity : Activity() {
     private lateinit var statusNotify: TextView
     private lateinit var statusLevel: TextView
     private lateinit var output: TextView
+
+    private val uiHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,11 +107,116 @@ class MainActivity : Activity() {
             clipboard.setPrimaryClip(ClipData.newPlainText("autoreply-dump", content))
             toast("已复制 ${content.length} 个字符")
         }
+
+        findViewById<Button>(R.id.btn_probe).setOnClickListener { runProbe() }
+    }
+
+    /**
+     * 链路自检：读消息 → 拼一句测试草稿 → 填进输入框 → 回读校验。
+     *
+     * 刻意不接模型：这一步要证明的是「能不能读到、能不能写进去」，
+     * 模型接进来只会让失败原因变得模糊 —— 到底是读错了、写错了，还是模型答错了。
+     * 链路通了再接模型，出问题一眼知道该查哪。
+     */
+    private fun runProbe() {
+        val service = CaptureService.instance
+        if (service == null) {
+            toast("读屏没开")
+            return
+        }
+        val root = service.targetRoot()
+        if (root == null) {
+            output.text = buildString {
+                append("目标界面不在前台。\n")
+                append("先切到目标 App 的聊天页，停留 2 秒，再切回来点这个按钮。\n\n")
+                append("# ---- 当前窗口 ----\n")
+                append(service.describeWindows())
+            }
+            return
+        }
+
+        val pkg = root.packageName?.toString().orEmpty()
+        val profile = Profiles.forPackage(pkg)
+        if (profile == null) {
+            val known = Profiles.supported().joinToString("\n").ifEmpty { "（一个都没有）" }
+            output.text = "「$pkg」还没有界面配置。\n\n已配置的平台：\n$known\n\n" +
+                "把这个 App 的 dump 发给我，加一段配置就能用。"
+            return
+        }
+
+        if (!NodeQuery.isChatPage(root, profile)) {
+            output.text = "当前界面不像是聊天页（pageHint 没命中）。已配的选择器对不上现在这一页。"
+            return
+        }
+
+        val messages = NodeQuery.readMessages(root, profile)
+        if (messages.isEmpty()) {
+            output.text = buildString {
+                append("没读到消息，消息选择器可能失效了。\n\n")
+                append("# ---- 当前窗口 ----\n")
+                append(service.describeWindows())
+            }
+            return
+        }
+
+        val sb = StringBuilder()
+        sb.append("读到 ${messages.size} 条（左=对方 / 右=我）：\n\n")
+        messages.forEach { m ->
+            sb.append(if (m.fromOther) "[对方] " else "[我]   ")
+            sb.append(m.text.replace("\n", " "))
+            sb.append("   x=").append(m.rect.centerX())
+            sb.append('\n')
+        }
+
+        val lastOther = messages.lastOrNull { it.fromOther }
+        if (lastOther == null) {
+            sb.append("\n最后几条都不是对方发的，不生成草稿。")
+            output.text = sb.toString()
+            return
+        }
+
+        // 测试草稿故意带标记：万一手滑点了发送，对面也能看出是测试，不会造成误会
+        val draft = "【测试】收到：${lastOther.text.take(12)}"
+        val sink = AccessibilityReplySink(service, profile)
+        val result = sink.fill(draft)
+        sb.append("\n草稿：").append(draft)
+        sb.append("\n填字：").append(
+            when (result) {
+                is FillResult.Ok -> "成功，已写入输入框（未发送）"
+                is FillResult.Unavailable -> "失败 — ${result.reason}"
+                is FillResult.Mismatch -> "回读不一致 — ${result.actual}"
+            }
+        )
+        output.text = sb.toString()
+
+        // 回读校验：ACTION_SET_TEXT 返回 true 不代表界面真的变了，
+        // 部分自绘输入框会在下一帧被 App 覆盖掉。
+        uiHandler.postDelayed({
+            val fresh = service.targetRoot()
+            if (fresh == null) {
+                output.append("\n校验：已不在目标界面，跳过")
+                return@postDelayed
+            }
+            val actual = NodeQuery.inputText(fresh, profile)
+            val note = when {
+                actual == draft -> "✓ 回读一致"
+                actual.isNullOrEmpty() -> "✗ 回读为空（App 把内容清掉了）"
+                else -> "⚠ 回读是「$actual」"
+            }
+            output.append("\n校验：$note")
+        }, 320L)
     }
 
     override fun onResume() {
         super.onResume()
         refresh()
+    }
+
+    override fun onDestroy() {
+        // 延迟回读的 runnable 必须撤掉：Activity 销毁之后再碰 View 会崩，
+        // 而且是那种"偶尔才崩一次"的类型，很难复现。
+        uiHandler.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 
     private fun refresh() {

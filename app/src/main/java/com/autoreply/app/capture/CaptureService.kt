@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.platform.Profiles
 
 /**
  * 读屏服务。
@@ -48,6 +49,9 @@ class CaptureService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         config = AppConfig(this)
+        // 界面配置在服务连上时读一次即可：改了 profiles.json 需要重装包，
+        // 而改动配置本来就是发版行为，不做热加载。
+        Profiles.load(this)
         instance = this
     }
 

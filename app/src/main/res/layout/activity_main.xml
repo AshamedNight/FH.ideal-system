@@ -137,6 +137,23 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/label_probe"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="链路自检：读消息 → 填草稿（不会发送）"
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btn_probe"
+            style="@style/PrimaryButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:text="@string/btn_probe" />
+
+        <TextView
             android:id="@+id/output"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
