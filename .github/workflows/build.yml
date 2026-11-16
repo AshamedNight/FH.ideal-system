@@ -8,7 +8,12 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # 刻意设为 false。
+  # 原来用 true 时，触发第二次会把正在跑的第一次掐掉，日志里只留一句
+  # 「Canceling since a higher priority waiting request exists」——
+  # 看起来像构建失败，实际是并发策略，排查时很容易误判成代码问题。
+  # 单人项目宁可排队多跑一次，也不要"跑到一半被取消"这种假失败。
+  cancel-in-progress: false
 
 permissions:
   contents: write
