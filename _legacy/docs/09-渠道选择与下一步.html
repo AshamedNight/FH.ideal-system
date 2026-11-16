@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>渠道选择 · 微信还是抖音</title>
+<style>
+  :root{
+    --paper:#FBFAF7; --card:#FFFFFF; --card-2:#F5F3EE;
+    --ink:#1C1B18; --ink-2:#3D3B35; --ink-soft:#6B675E; --muted:#96918A;
+    --line:#E5E1D8; --line-2:#EFECE4;
+    --red:#B23B2E; --red-bg:#FBF0ED;
+    --amber:#9A6A12; --amber-bg:#FBF4E4;
+    --green:#2E6B4F; --green-bg:#EDF5F0;
+    --blue:#2F5D8C; --blue-bg:#EDF2F8;
+    --f-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --f-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--f-sans);
+    font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 32px 120px}
+
+  .top{display:flex;justify-content:space-between;align-items:baseline;
+    padding:26px 0 18px;border-bottom:1px solid var(--line);
+    font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;
+    color:var(--muted);text-transform:uppercase}
+  .top b{color:var(--ink);font-weight:600}
+
+  .hero{padding:60px 0 44px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.16em;
+    color:var(--red);text-transform:uppercase;margin-bottom:20px}
+  h1{font-size:42px;line-height:1.2;font-weight:650;letter-spacing:-.02em;
+    max-width:20ch;margin-bottom:24px}
+  .lede{font-size:16.5px;line-height:1.85;color:var(--ink-2);max-width:64ch}
+  .lede b{color:var(--ink);font-weight:620}
+
+  section{padding:58px 0 0}
+  .sec-h{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;
+    padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .sec-n{font-family:var(--f-mono);font-size:11px;color:var(--muted);
+    letter-spacing:.1em;flex-shrink:0}
+  h2{font-size:22px;font-weight:640;letter-spacing:-.01em;line-height:1.4}
+  .sec-sub{font-size:14px;color:var(--ink-soft);margin:16px 0 24px;max-width:68ch}
+  h3{font-size:15.5px;font-weight:640;margin:30px 0 12px}
+
+  p{margin-bottom:14px;color:var(--ink-2);max-width:68ch}
+  p b{color:var(--ink);font-weight:620}
+  code{font-family:var(--f-mono);font-size:12.5px;background:var(--card-2);
+    padding:1.5px 5px;border-radius:3px;color:var(--ink)}
+
+  table{width:100%;border-collapse:collapse;margin:8px 0 22px;font-size:13px}
+  th{text-align:left;font-family:var(--f-mono);font-size:9.5px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);font-weight:500;
+    padding:0 10px 9px 0;border-bottom:1px solid var(--line)}
+  td{padding:11px 10px 11px 0;border-bottom:1px solid var(--line-2);
+    vertical-align:top;line-height:1.6}
+  tr:last-child td{border-bottom:none}
+  .mono{font-family:var(--f-mono);font-size:11.5px}
+  .hi{background:var(--green-bg)}
+
+  .tag{display:inline-block;font-family:var(--f-mono);font-size:9px;
+    letter-spacing:.06em;padding:2px 6px;border-radius:2px;
+    white-space:nowrap;text-transform:uppercase}
+  .tag.ok{background:var(--green-bg);color:var(--green)}
+  .tag.no{background:var(--red-bg);color:var(--red)}
+  .tag.mid{background:var(--amber-bg);color:var(--amber)}
+  .tag.wait{background:var(--blue-bg);color:var(--blue)}
+
+  .rank{counter-reset:r;list-style:none;margin:20px 0}
+  .rank li{counter-increment:r;position:relative;padding:18px 0 18px 52px;
+    border-bottom:1px solid var(--line-2)}
+  .rank li:last-child{border-bottom:none}
+  .rank li::before{content:counter(r);position:absolute;left:0;top:16px;
+    font-family:var(--f-mono);font-size:26px;font-weight:600;color:var(--line);
+    line-height:1;width:36px}
+  .rank b{display:block;font-size:14.5px;margin-bottom:4px;font-weight:640}
+  .rank span{font-size:13px;color:var(--ink-soft);line-height:1.65}
+  .rank em{font-style:normal;font-family:var(--f-mono);font-size:10px;
+    color:var(--muted);letter-spacing:.05em;display:block;margin-top:5px}
+
+  .note{background:var(--card-2);border-left:2px solid var(--red);
+    padding:16px 18px;margin:22px 0;font-size:13.5px;line-height:1.75;color:var(--ink-2)}
+  .note b{color:var(--ink)}
+  .note.green{border-left-color:var(--green)}
+  .note.amber{border-left-color:var(--amber)}
+
+  .cmd{background:#232220;color:#E8E5DE;border-radius:4px;padding:15px 18px;
+    font-family:var(--f-mono);font-size:12.5px;line-height:1.95;
+    overflow-x:auto;margin:16px 0 20px}
+  .cmd .c{color:#8A8578}
+
+  ul.plain{list-style:none;margin:12px 0 18px}
+  ul.plain li{position:relative;padding-left:18px;margin-bottom:9px;
+    font-size:13.5px;line-height:1.7;color:var(--ink-2)}
+  ul.plain li::before{content:"";position:absolute;left:0;top:.72em;
+    width:6px;height:1px;background:var(--muted)}
+  ul.plain b{color:var(--ink)}
+
+  footer{margin-top:68px;padding-top:22px;border-top:1px solid var(--line);
+    font-family:var(--f-mono);font-size:10.5px;color:var(--muted);
+    letter-spacing:.05em;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+
+  @media(max-width:780px){
+    .wrap{padding:0 20px 80px}
+    h1{font-size:31px}
+    th:nth-child(3),td:nth-child(3){display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <span>自动回复 &amp; 获客 · <b>渠道选择</b></span>
+    <span>2026-11-11</span>
+  </div>
+
+  <div class="hero">
+    <div class="kicker">Channel / 微信还是抖音</div>
+    <h1>微信更快，但先接受一个前提</h1>
+    <p class="lede">
+      「微信自动回复」这句话落到实处是<b>企业微信</b>，不是个人微信。
+      个人号那条路腾讯已经明确列为外挂，封号是阶梯式的，不是概率问题。
+      企业微信是官方接口，不需要应用审核，注册个主体就能建应用——
+      所以它确实比抖音快，代价是要写一套加解密。
+    </p>
+  </div>
+
+  <!-- 01 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">01</span>
+      <h2>五条路的真实差距</h2>
+    </div>
+    <p class="sec-sub">
+      「快」要分两层看：多久能拿到资格，多久能写出可用的东西。
+      有的渠道资格当天就有，但代码要写三天；有的反过来。
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>渠道</th><th>官方支持</th><th>资质</th>
+          <th>开发量</th><th>封号风险</th><th>拿到资格</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>企业微信自建应用</b></td>
+          <td><span class="tag ok">是</span></td>
+          <td>企业或个体户</td>
+          <td>2–3 天</td>
+          <td><span class="tag ok">低</span></td>
+          <td>当天</td>
+        </tr>
+        <tr>
+          <td><b>微信公众号客服</b></td>
+          <td><span class="tag ok">是</span></td>
+          <td>认证服务号</td>
+          <td>2–3 天</td>
+          <td><span class="tag ok">低</span></td>
+          <td>认证 1–2 周</td>
+        </tr>
+        <tr>
+          <td><b>QQ + NapCat</b></td>
+          <td><span class="tag no">否</span></td>
+          <td>无</td>
+          <td>1 天</td>
+          <td><span class="tag mid">中</span></td>
+          <td>当天</td>
+        </tr>
+        <tr>
+          <td><b>抖音评论回复</b></td>
+          <td><span class="tag ok">是</span></td>
+          <td>应用审核</td>
+          <td>已完成</td>
+          <td><span class="tag ok">低</span></td>
+          <td>2–3 工作日</td>
+        </tr>
+        <tr>
+          <td><b>微信个人号</b></td>
+          <td><span class="tag no">明确禁止</span></td>
+          <td>—</td>
+          <td>1–2 天</td>
+          <td><span class="tag no">极高</span></td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <b>个人微信为什么不做。</b>
+      腾讯安全中心的外挂打击公告把「微信机器人：定时群发、自动回复、自动聊天」直接列在名单里。
+      这类工具锁死特定微信版本，微信一升级就失效，而且封的是登录账号本身——
+      号里面的联系人、群、聊天记录一起没了。这不是技术方案的问题，是账号资产的问题。
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">02</span>
+      <h2>现有代码能不能直接用</h2>
+    </div>
+    <p class="sec-sub">
+      不能直接跑，但改的是外壳，不是内核。这也是这次拆解想要的结果：
+      加一个渠道 = 加一个适配器。
+    </p>
+
+    <table>
+      <thead>
+        <tr><th style="width:200px">模块</th><th>企业微信要不要改</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr class="hi">
+          <td class="mono">gateway.py（Hub）</td>
+          <td><span class="tag ok">0 行</span></td>
+          <td>注册渠道时传 <code>channels=["wecom"]</code> 就行</td>
+        </tr>
+        <tr class="hi">
+          <td class="mono">necessity.py（判定）</td>
+          <td><span class="tag ok">0 行</span></td>
+          <td>判定只看文本和意图，不看渠道</td>
+        </tr>
+        <tr class="hi">
+          <td class="mono">autopilot.py（放权）</td>
+          <td><span class="tag ok">0 行</span></td>
+          <td>话术风险和额度与渠道无关</td>
+        </tr>
+        <tr class="hi">
+          <td class="mono">store.py（持久化）</td>
+          <td><span class="tag ok">0 行</span></td>
+          <td>队列表本来就按渠道分列</td>
+        </tr>
+        <tr>
+          <td class="mono">persona_schema.py</td>
+          <td><span class="tag mid">换配置</span></td>
+          <td>微信聊天和评论区语态不同，语料要重写</td>
+        </tr>
+        <tr>
+          <td class="mono">新增 wecom_crypto.py</td>
+          <td><span class="tag wait">新写</span></td>
+          <td>AES-256-CBC 加解密 + 签名，约 250 行</td>
+        </tr>
+        <tr>
+          <td class="mono">新增 wecom.py</td>
+          <td><span class="tag wait">新写</span></td>
+          <td>客户端 + 适配器，约 200 行</td>
+        </tr>
+        <tr>
+          <td class="mono">新增 wecom_server.py</td>
+          <td><span class="tag wait">新写</span></td>
+          <td>回调服务，约 280 行</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      这三个新文件已经写完了，并且用两组公开测试向量验证过：
+      FIPS-197 的 AES-256 向量，以及企业微信文档里那份带密文和签名的完整样例。
+      签名算出来是 <code>477715d1…f3e6</code>，解密出的明文和文档展示的一致。
+    </p>
+
+    <div class="note green">
+      <b>加解密的正确性不是靠"看起来能跑"判断的。</b>
+      AES 实现错一位，往往表现为「大部分消息能解、偶尔解出乱码」，
+      排查时根本不知道错在哪。用官方向量对齐，是唯一能一次确认的办法。
+    </div>
+
+    <h3>跑起来长什么样</h3>
+    <div class="cmd">
+<span class="c"># 1. 复制配置模板，填四个值（都在应用详情页）</span>
+cp wecom.example.json wecom.json
+
+<span class="c"># 2. 先只收不回，确认回调通</span>
+python wecom_server.py --config wecom.json --dry
+
+<span class="c"># 3. 关掉 --dry，按闸门决定是否回复</span>
+python wecom_server.py --config wecom.json
+    </div>
+    <p>
+      服务会打印回调地址，填进「应用管理 → 接收消息 → 设置API接收」，
+      填的时候企业微信会立刻发一次验证请求——通过就说明加解密没问题。
+    </p>
+  </section>
+
+  <!-- 03 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">03</span>
+      <h2>「抖音只做评论回复」能省多少工作量</h2>
+    </div>
+
+    <p>
+      <b>省不了多少，因为你现在做的就是最小范围。</b>
+      上传图片、生成文案、自动发布那一大块，从第一轮就否掉了——不是没做，是不该做。
+    </p>
+
+    <p>
+      把项目按工作量拆开看：
+    </p>
+
+    <table>
+      <thead><tr><th>部分</th><th>占比</th><th>换渠道要不要重做</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>判定 + 生成 + 风控 + 放权</td>
+          <td class="mono">约 70%</td>
+          <td>不重做，但需要重新校准（M1/M2）</td>
+        </tr>
+        <tr>
+          <td>语料与人设</td>
+          <td class="mono">持续投入</td>
+          <td>每个账号都要重写</td>
+        </tr>
+        <tr>
+          <td>渠道接入</td>
+          <td class="mono">约 15%</td>
+          <td>每个渠道写一个适配器</td>
+        </tr>
+        <tr>
+          <td>运维（部署/告警/持久化）</td>
+          <td class="mono">约 15%</td>
+          <td>不重做，一套通用</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      接入只占 15%，而其中抖音那一半已经做完了。所以「缩小范围」这个动作，
+      能砍掉的空间很小——真正的成本在「判定准不准、话像不像人」，
+      那部分和渠道无关，也和范围无关。
+    </p>
+
+    <div class="note amber">
+      <b>一个容易算错的账：</b>
+      「只做评论回复」听起来像砍掉了一半功能，实际上从第一轮起项目就只有这一半。
+      现在的瓶颈是 M1（一致率 80%）和 M2（采纳率 60%），
+      两个都是质量指标，不是功能数量。多做一个渠道不会让它们变好，
+      少做一个功能也不会让它们变简单。
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">04</span>
+      <h2>所以下一步按这个顺序</h2>
+    </div>
+
+    <ol class="rank">
+      <li>
+        <b>企业微信跑通真实收发</b>
+        <span>它是唯一「不需要等审核、官方支持、能拿到真实对话数据」的渠道。
+        跑通之后，M1 的一致率可以用真实聊天来测，而不是靠假数据回放。</span>
+        <em>3–5 天 · 需要个体户或企业主体 · 需要一个公网可访问的地址</em>
+      </li>
+      <li>
+        <b>同时申请抖音评论权限</b>
+        <span>个人小程序提交，用途写「统一查阅并回复自己账号下的评论」。审核 2–3 个工作日，
+        这段时间正好用来做第 1 步。</span>
+        <em>提交 1 天 · 等待 2–3 工作日</em>
+      </li>
+      <li>
+        <b>权限下来后，抖音只换适配器</b>
+        <span>判定、生成、放权、持久化全部复用。需要补的是 OAuth 落地页和回调域名——
+        这也是之前列的 P0 四项里的两项。</span>
+        <em>3–5 天 · 主要是备案和部署</em>
+      </li>
+      <li>
+        <b>然后才是 M1 校准</b>
+        <span>拿到真实数据后跑一致率，达不到 80% 就调语料。
+        这一步之前不该开自动发送。</span>
+        <em>1–2 周 · 主要时间花在标注上</em>
+      </li>
+    </ol>
+
+    <p>
+      把企业微信放在第一位，理由不是它更简单，是它<b>能最快拿到真实数据</b>。
+      现在的判定只用 11 条构造的评论验证过，真实分布的差距还没暴露——
+      越早接触真实消息，越早发现判定偏到哪里。
+    </p>
+  </section>
+
+  <!-- 05 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">05</span>
+      <h2>企业微信有三个限制要先知道</h2>
+    </div>
+
+    <table>
+      <thead><tr><th style="width:160px">限制</th><th>影响</th><th>怎么解</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>只能发给内部成员</b></td>
+          <td>自建应用的消息对象是企业成员，不是外部客户。用于「同事之间」或「自己两个号对聊」没问题</td>
+          <td>要触达外部客户，需要开通「微信客服」或「客户联系」，那是另一套接口和权限</td>
+        </tr>
+        <tr>
+          <td><b>回调必须公网可达</b></td>
+          <td>本机 127.0.0.1 收不到平台推送</td>
+          <td>反代（Nginx）+ 域名，或内网穿透。本地调试可以先穿透，正式跑要备案域名</td>
+        </tr>
+        <tr>
+          <td><b>5 秒响应窗口</b></td>
+          <td>判定 + 生成超过 5 秒就超时，平台会重试三次</td>
+          <td>回调只做验签解密入队、立刻返回空串；回复走主动发送，不受窗口限制</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      第一条最容易被忽略。如果你要的是「给外面的人自动回复」，
+      企业微信自建应用做不到，得走微信客服——那是另一套东西，成本更高。
+      如果只是「验证自动回复能不能跑通」，内部应用完全够用，而且当天就能开始。
+    </p>
+
+    <div class="note green">
+      <b>建议先用两个号对聊验证。</b>
+      一个号当客服、一个号当顾客，整个流程（收消息 → 判定 → 生成 → 回复）
+      和真实场景完全一样，只是对象是自己。这一步不需要外部客户，
+      也不需要「微信客服」权限。
+    </div>
+  </section>
+
+  <footer>
+    <span>docs/09 · 渠道选择与下一步</span>
+    <span>210 项测试通过 · 加解密已对齐企业微信官方样例</span>
+  </footer>
+
+</div>
+<script>
+(function () {
+  var items = document.querySelectorAll('tbody tr, .rank li, .note');
+  if (!('IntersectionObserver' in window)) return;
+  items.forEach(function (el) {
+    el.style.opacity = 0;
+    el.style.transform = 'translateY(7px)';
+    el.style.transition = 'opacity .36s ease, transform .36s ease';
+  });
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e, i) {
+      if (!e.isIntersecting) return;
+      var el = e.target;
+      setTimeout(function () {
+        el.style.opacity = 1;
+        el.style.transform = 'none';
+      }, i * 32);
+      io.unobserve(el);
+    });
+  }, { threshold: 0.06 });
+  items.forEach(function (el) { io.observe(el); });
+})();
+</script>
+</body>
+</html>

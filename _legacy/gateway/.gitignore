@@ -1,0 +1,38 @@
+# 运行时产物，不进版本库
+__pycache__/
+*.pyc
+
+# 令牌与状态：含 access_token / refresh_token，绝不能提交
+token.json
+douyin_seen.jsonl
+douyin_own.json
+works_cache.json
+xhs_drafts.jsonl
+outbox/
+
+# 企业微信：wecom.json 里有 corp_secret 和 EncodingAESKey，
+# 泄露等于应用被别人接管；wecom_token.json 是 access_token 缓存。
+# 只提交 wecom.example.json。
+wecom.json
+wecom_token.json
+wecom_sim_state_token.json
+
+# 数据库：含评论原文、用户昵称、回复记录。既是业务数据也是个人信息，
+# 不能因为「测试数据」就提交上去。
+*.db
+*.db-wal
+*.db-shm
+
+# 演示投递产物。recordings/ 下的评论快照要提交（那是测试夹具），
+# 但投递结果里含真实昵称和回复内容，不进库。
+demo_outbox.jsonl
+
+# 标注数据集：含真实评论原文与人工判断，是评估材料不是代码
+recordings/labeling_set.json
+
+# 日志
+*.log
+
+# 本地配置
+.env
+config.local.json

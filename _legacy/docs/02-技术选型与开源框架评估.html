@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>技术选型与开源框架评估 — 多渠道 AI 回复 + 自建陪伴</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Public+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F3F4F1;
+  --surface:#FFFFFF;
+  --surface-2:#E9EBE5;
+  --surface-3:#DFE3DB;
+  --ink:#101418;
+  --ink-soft:#333A40;
+  --muted:#6B7378;
+  --line:#CBD0C7;
+  --line-2:#DDE1D9;
+  --deep:#16243D;
+  --deep-2:#22365A;
+  --accent:#C68A0A;
+  --accent-soft:#F6EAC8;
+  --ok:#0F6B4F;  --ok-bg:#D9E8E0;
+  --warn:#8A6208; --warn-bg:#F4E8CB;
+  --bad:#9B2318;  --bad-bg:#F2DAD5;
+
+  --f-display:"Public Sans","Source Han Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  --f-body:"Public Sans","Source Han Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  --f-mono:"JetBrains Mono","Consolas","Menlo",monospace;
+
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --fast:150ms; --base:300ms; --slow:600ms;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--f-body);
+  font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(var(--line-2) 1px,transparent 1px);
+  background-size:26px 26px;
+  overflow-x:hidden;
+}
+::selection{background:var(--deep);color:#fff}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+/* ---------- 顶栏 ---------- */
+.topbar{
+  position:sticky;top:0;z-index:90;background:rgba(243,244,241,.94);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--deep);
+}
+.topbar-in{
+  max-width:1080px;margin:0 auto;padding:9px 24px;display:flex;align-items:center;gap:14px;
+  font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+}
+.tb-mark{font-weight:700;color:var(--deep)}
+.tb-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none}
+.tb-sep{width:1px;height:12px;background:var(--line)}
+.tb-item{color:var(--muted);white-space:nowrap}
+.tb-item b{color:var(--ink);font-weight:700}
+.tb-right{margin-left:auto;color:var(--muted);white-space:nowrap}
+
+/* ---------- Hero ---------- */
+.hero{padding:64px 0 40px;border-bottom:1px solid var(--deep);position:relative}
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);
+  font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--deep);
+  border:1px solid var(--deep);padding:3px 10px;margin-bottom:26px;
+}
+.hero-eyebrow i{width:5px;height:5px;background:var(--accent);border-radius:50%;display:block}
+h1{
+  font-family:var(--f-display);font-weight:800;font-size:clamp(34px,6.2vw,66px);
+  line-height:1.02;letter-spacing:-.028em;color:var(--deep);max-width:20ch;
+}
+h1 mark{background:none;color:var(--accent);position:relative}
+h1 mark::after{
+  content:"";position:absolute;left:0;right:0;bottom:.06em;height:.1em;
+  background:var(--accent);opacity:.28;
+}
+.hero-lede{margin-top:26px;max-width:60ch;font-size:16.5px;line-height:1.78;color:var(--ink-soft);font-weight:300}
+.hero-lede b{font-weight:600;color:var(--deep)}
+
+/* ---------- 结论条 ---------- */
+.verdict{
+  margin-top:38px;display:grid;grid-template-columns:repeat(3,1fr);
+  border-top:2px solid var(--deep);border-bottom:1px solid var(--line);
+}
+.vc{padding:20px 20px 20px 0;border-right:1px solid var(--line-2)}
+.vc:last-child{border-right:none;padding-right:0}
+.vc:not(:first-child){padding-left:20px}
+.vc-k{
+  font-family:var(--f-mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);display:block;margin-bottom:8px;
+}
+.vc-v{font-family:var(--f-display);font-weight:800;font-size:26px;line-height:1.1;letter-spacing:-.02em;display:block;margin-bottom:6px}
+.vc p{font-size:12.5px;line-height:1.6;color:var(--muted)}
+.c-ok{color:var(--ok)} .c-warn{color:var(--warn)} .c-bad{color:var(--bad)} .c-deep{color:var(--deep)}
+
+/* ---------- 章节 ---------- */
+section{padding:56px 0;border-bottom:1px solid var(--line)}
+.sec-bar{display:flex;align-items:center;gap:14px;margin-bottom:28px}
+.sec-no{
+  font-family:var(--f-mono);font-size:11px;font-weight:700;letter-spacing:.06em;
+  background:var(--deep);color:#fff;padding:2px 8px;flex:none;
+}
+h2{
+  font-family:var(--f-display);font-weight:800;font-size:clamp(23px,3.4vw,32px);
+  letter-spacing:-.022em;color:var(--deep);line-height:1.15;
+}
+.sec-meta{margin-left:auto;font-family:var(--f-mono);font-size:10px;color:var(--muted);letter-spacing:.06em;white-space:nowrap}
+h3{
+  font-family:var(--f-display);font-weight:700;font-size:17px;letter-spacing:-.01em;
+  color:var(--deep);margin:32px 0 12px;display:flex;align-items:center;gap:9px;
+}
+h3::before{content:"";width:16px;height:1px;background:var(--accent);flex:none}
+p.lede{max-width:66ch;color:var(--ink-soft);font-weight:300;font-size:15.5px;margin-bottom:20px}
+p.lede b{font-weight:600;color:var(--deep)}
+
+/* ---------- 表格 ---------- */
+.tbl-wrap{border:1px solid var(--deep);background:var(--surface);overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+thead th{
+  background:var(--deep);color:#E8EBE6;font-family:var(--f-mono);font-weight:500;
+  font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  padding:10px 14px;text-align:left;white-space:nowrap;
+}
+tbody td{padding:11px 14px;border-bottom:1px solid var(--line-2);vertical-align:top;line-height:1.62}
+tbody tr:last-child td{border-bottom:none}
+tbody tr{transition:background var(--fast) var(--ease)}
+tbody tr:hover{background:#F7F8F5}
+.pn{font-weight:600;color:var(--deep);white-space:nowrap}
+.pn small{display:block;font-family:var(--f-mono);font-size:9.5px;color:var(--muted);font-weight:400;margin-top:1px}
+code{
+  font-family:var(--f-mono);font-size:11.5px;background:var(--surface-2);
+  padding:1px 5px;border-radius:2px;color:var(--deep-2);
+}
+.pill{
+  display:inline-flex;align-items:center;gap:5px;font-family:var(--f-mono);
+  font-size:9.5px;letter-spacing:.03em;padding:2px 7px;white-space:nowrap;font-weight:500;
+}
+.pill::before{content:"";width:5px;height:5px;flex:none}
+.p-ok{background:var(--ok-bg);color:var(--ok)} .p-ok::before{background:var(--ok)}
+.p-warn{background:var(--warn-bg);color:var(--warn)} .p-warn::before{background:var(--warn)}
+.p-bad{background:var(--bad-bg);color:var(--bad)} .p-bad::before{background:var(--bad)}
+.p-mut{background:var(--surface-2);color:var(--muted)} .p-mut::before{background:var(--muted)}
+
+/* ---------- 架构 SVG ---------- */
+.diagram{
+  border:1px solid var(--deep);background:var(--surface);padding:22px 18px;margin:8px 0 6px;
+}
+.diagram svg{display:block;width:100%;height:auto}
+.diagram-cap{
+  font-family:var(--f-mono);font-size:10px;color:var(--muted);letter-spacing:.04em;
+  margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);line-height:1.7;
+}
+
+/* ---------- 卡片网格 ---------- */
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:8px}
+.card{
+  border:1px solid var(--line);background:var(--surface);padding:18px;
+  transition:border-color var(--fast) var(--ease),transform var(--fast) var(--ease);
+}
+.card:hover{border-color:var(--deep);transform:translateY(-2px)}
+.card-tag{
+  font-family:var(--f-mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--accent);display:block;margin-bottom:6px;
+}
+.card h4{font-family:var(--f-display);font-weight:700;font-size:15.5px;color:var(--deep);margin-bottom:6px;letter-spacing:-.01em}
+.card p{font-size:12.5px;line-height:1.66;color:var(--ink-soft)}
+.card ul{list-style:none;margin-top:9px;font-size:12px;line-height:1.66;color:var(--muted)}
+.card li{padding-left:11px;position:relative;margin-bottom:3px}
+.card li::before{content:"·";position:absolute;left:1px;color:var(--accent);font-weight:700}
+
+/* ---------- 红绿灯许可证 ---------- */
+.lic{display:grid;gap:10px;margin-top:8px}
+.lic-row{
+  display:grid;grid-template-columns:78px 1fr;gap:16px;border:1px solid var(--line);
+  background:var(--surface);padding:14px 16px;align-items:start;
+}
+.lic-light{
+  font-family:var(--f-mono);font-size:10px;font-weight:700;letter-spacing:.06em;
+  display:flex;flex-direction:column;align-items:center;gap:5px;padding-top:2px;
+}
+.lic-light i{width:22px;height:22px;border-radius:50%;display:block;border:2px solid currentColor}
+.lic-g i{background:var(--ok)}  .lic-g{color:var(--ok)}
+.lic-y i{background:var(--warn)} .lic-y{color:var(--warn)}
+.lic-r i{background:var(--bad)} .lic-r{color:var(--bad)}
+.lic-b h4{font-size:13.5px;font-weight:700;color:var(--deep);margin-bottom:3px}
+.lic-b p{font-size:12.5px;line-height:1.65;color:var(--ink-soft)}
+.lic-b p b{color:var(--bad)}
+
+/* ---------- 方案卡 ---------- */
+.plan{
+  border:1px solid var(--deep);background:var(--surface);margin-bottom:12px;
+  display:grid;grid-template-columns:64px 1fr 168px;
+}
+.plan-n{
+  background:var(--deep);color:#fff;display:flex;align-items:center;justify-content:center;
+  font-family:var(--f-mono);font-size:19px;font-weight:700;
+}
+.plan.pick .plan-n{background:var(--accent);color:var(--deep)}
+.plan-b{padding:16px 18px}
+.plan-b h4{font-size:14.5px;font-weight:700;color:var(--deep);margin-bottom:5px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.plan-b p{font-size:12.5px;line-height:1.7;color:var(--ink-soft)}
+.plan-m{
+  border-left:1px solid var(--line);padding:16px;display:flex;flex-direction:column;
+  justify-content:center;gap:4px;font-family:var(--f-mono);font-size:10px;color:var(--muted);
+  letter-spacing:.03em;white-space:nowrap;
+}
+.tag-rec{
+  font-family:var(--f-mono);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+  background:var(--accent);color:var(--deep);padding:1px 6px;font-weight:700;
+}
+
+/* ---------- 代码块 ---------- */
+.code{
+  border:1px solid var(--deep);background:#111820;color:#C9D2CE;
+  font-family:var(--f-mono);font-size:12px;line-height:1.72;
+  padding:16px 18px;overflow-x:auto;margin-top:10px;
+}
+.code .k{color:#7FB3D5}   /* 关键字 */
+.code .s{color:#A8C98C}   /* 字符串 */
+.code .c{color:#5F6B70;font-style:italic}  /* 注释 */
+.code .n{color:#E0B36A}   /* 名称 */
+
+/* ---------- 提示块 ---------- */
+.note{
+  border-left:3px solid var(--accent);background:var(--accent-soft);
+  padding:14px 18px;margin:20px 0;font-size:13px;line-height:1.7;color:#4A3A0C;
+}
+.note b{color:var(--deep)}
+.danger{
+  border-left:3px solid var(--bad);background:var(--bad-bg);
+  padding:14px 18px;margin:20px 0;font-size:13px;line-height:1.7;color:#5E1710;
+}
+.danger b{color:var(--bad)}
+
+/* ---------- 收尾 ---------- */
+.final{background:var(--deep);color:#DCE2DC;padding:36px 34px;margin-top:32px}
+.final h3{color:#fff;margin-top:0;font-size:18px}
+.final h3::before{background:var(--accent)}
+.final ol{list-style:none;counter-reset:f;display:grid;gap:16px;margin-top:14px}
+.final li{counter-increment:f;padding-left:34px;position:relative;font-size:13.5px;line-height:1.72;color:#B9C2BC}
+.final li::before{
+  content:counter(f,decimal-leading-zero);position:absolute;left:0;top:1px;
+  font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--accent);
+  border:1px solid var(--accent);padding:0 4px;line-height:1.5;
+}
+.final li b{color:#fff;font-weight:600}
+
+footer{padding:26px 0 48px;font-family:var(--f-mono);font-size:10px;color:var(--muted);letter-spacing:.03em;line-height:2}
+
+/* ---------- 入场 ---------- */
+.reveal{opacity:0;transform:translateY(18px)}
+.reveal.in{opacity:1;transform:none;transition:opacity var(--base) var(--ease),transform var(--base) var(--ease)}
+@media(prefers-reduced-motion:reduce){
+  .reveal{opacity:1;transform:none;transition:none}
+  html{scroll-behavior:auto}
+}
+
+/* ---------- 响应式 ---------- */
+@media(max-width:860px){
+  .verdict{grid-template-columns:1fr}
+  .vc{border-right:none;border-bottom:1px solid var(--line-2);padding:16px 0}
+  .vc:not(:first-child){padding-left:0}
+  .vc:last-child{border-bottom:none}
+  .plan{grid-template-columns:52px 1fr}
+  .plan-m{grid-column:1/-1;border-left:none;border-top:1px solid var(--line);flex-direction:row;gap:14px}
+  .lic-row{grid-template-columns:1fr;gap:8px}
+  .lic-light{flex-direction:row;justify-content:flex-start}
+  .sec-meta{display:none}
+}
+@media(max-width:560px){
+  .wrap,.topbar-in{padding-left:16px;padding-right:16px}
+  body{font-size:14px}
+  .hero{padding:40px 0 28px}
+  section{padding:40px 0}
+  .final{padding:24px 20px}
+  .tb-right{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <span class="tb-mark">NEXUS</span>
+    <span class="tb-dot"></span>
+    <span class="tb-item">文档 <b>02</b></span>
+    <span class="tb-sep"></span>
+    <span class="tb-item">技术选型与开源框架评估</span>
+    <span class="tb-right">核查于 2026-11-09</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="hero-eyebrow reveal"><i></i>Framework Selection</div>
+    <h1 class="reveal">平台内<mark>能扒</mark><br>平台外<mark>更能扒</mark></h1>
+    <p class="hero-lede reveal">
+      换了这个问法之后，答案比上一轮乐观得多。你要的两件事其实是两个产品：
+      <b>平台内的文字自动回复</b>，和<b>平台外的 AI 陪伴应用</b>。
+      前者有一整套成熟的社区协议和框架可以扒，后者有一个 MIT 许可、四万四千星的项目几乎现成。
+      真正需要你自己判断的，是许可证和「双端」这两个坑。
+    </p>
+
+    <div class="verdict reveal">
+      <div class="vc">
+        <span class="vc-k">平台内 · 文字回复</span>
+        <span class="vc-v c-ok">能实现</span>
+        <p>QQ 有 OneBot 事实标准；抖音有官方评论回复 API；微信只剩 PC hook 一条路，且底座已停更。</p>
+      </div>
+      <div class="vc">
+        <span class="vc-k">平台外 · 陪伴应用</span>
+        <span class="vc-v c-ok">能实现</span>
+        <p>AIRI（MIT）已把语音、Live2D、陪玩 Minecraft 做完，可直接当底座改。</p>
+      </div>
+      <div class="vc">
+        <span class="vc-k">双端 · 电脑 + 手机</span>
+        <span class="vc-v c-warn">换架构才行</span>
+        <p>手机端去接管微信物理上做不到。正解是执行端放服务器，手机只当遥控器。</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= 01 需求重构 ================= -->
+  <section>
+    <div class="sec-bar reveal">
+      <span class="sec-no">01</span>
+      <h2>先把需求拆成两个产品</h2>
+      <span class="sec-meta">reframe</span>
+    </div>
+    <p class="lede reveal">
+      你说「如果不在平台，那就需要有更多功能，比如语音、陪伴聊天、打游戏」。这句话其实揭示了一个关键分岔：
+      <b>这两个方向的技术栈、许可证、上架路径完全不同，不能塞进同一个 APP 里。</b>
+      硬要合并，结果是两头都做不好——一边被平台封号，一边功能半成品。
+    </p>
+
+    <div class="grid2">
+      <div class="card reveal">
+        <span class="card-tag">Product A</span>
+        <h4>平台内 · 文字回复中台</h4>
+        <p>跑在服务器或 PC 上，接多个平台的消息流，用统一人设生成回复，按风控规则发送。</p>
+        <ul>
+          <li>用户是「你自己」——替你把消息回掉</li>
+          <li>手机端是遥控器，不是执行端</li>
+          <li>核心难点在协议与风控，不在 AI</li>
+          <li>不建议上架应用商店</li>
+        </ul>
+      </div>
+      <div class="card reveal">
+        <span class="card-tag">Product B</span>
+        <h4>平台外 · AI 陪伴应用</h4>
+        <p>你自己的聊天产品。有形象、有声音、有记忆，可以陪你说话、陪你玩。</p>
+        <ul>
+          <li>用户是「你的用户」——你提供产品</li>
+          <li>双端天然成立，iOS 安卓都能上</li>
+          <li>核心难点在语音延迟与人格一致性</li>
+          <li>可以正经收费、正经上架</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="note reveal">
+      <b>取舍建议：</b>把 A 当成你的<b>运营工具</b>（不上架、自用），把 B 当成你的<b>产品</b>（上架、收费）。
+      两者共用同一份「人设中枢」，这正好接上你上一轮问的人设统一窗口——那套设计在这里是通用的。
+    </div>
+  </section>
+
+  <!-- ================= 02 平台通道矩阵 ================= -->
+  <section>
+    <div class="sec-bar reveal">
+      <span class="sec-no">02</span>
+      <h2>平台内文字回复：通道逐条核实</h2>
+      <span class="sec-meta">7 channels</span>
+    </div>
+    <p class="lede reveal">
+      这一轮有一个重要修正：<b>抖音的评论回复是有官方 API 的</b>。上一轮否决的是「内容发布」能力，
+      而「互动管理」是另一个能力包，路径不同。小红书则是反面——官方开放平台以内容发布和数据为主，
+      我没查到面向第三方应用的评论读取/回复接口，社区做法一律是浏览器自动化。
+    </p>
+
+    <div class="tbl-wrap reveal">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:16%">平台</th>
+            <th style="width:22%">可用的通道</th>
+            <th style="width:13%">性质</th>
+            <th style="width:13%">手机端</th>
+            <th>关键前提</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="pn">QQ<small>OneBot 路线</small></td>
+            <td>NapCat / Lagrange / LLOneBot<br><span style="color:var(--muted);font-size:11.5px">统一 OneBot v11 协议</span></td>
+            <td><span class="pill p-warn">社区协议</span></td>
+            <td><span class="pill p-ok">可（遥控）</span></td>
+            <td>NapCat 基于 QQNT 无头端，<b>Linux 服务器可跑</b>，不需要图形界面。这是手机端可行的关键</td>
+          </tr>
+          <tr>
+            <td class="pn">QQ<small>官方 Bot</small></td>
+            <td>QQ 开放平台 API v2</td>
+            <td><span class="pill p-ok">官方</span></td>
+            <td><span class="pill p-ok">可</span></td>
+            <td>只能以机器人身份存在；群内仅接收 @ 消息；有频控；媒体仅文本</td>
+          </tr>
+          <tr>
+            <td class="pn">微信<small>个人号</small></td>
+            <td>WeChatFerry（Hook）</td>
+            <td><span class="pill p-bad">已归档</span></td>
+            <td><span class="pill p-bad">否</span></td>
+            <td><b>2025-05-25 官方归档停更</b>，锁死微信 3.9.5.81，仅 Windows。不能当长期底座</td>
+          </tr>
+          <tr>
+            <td class="pn">微信<small>官方生态</small></td>
+            <td>公众号 / 企业微信 / 微信客服</td>
+            <td><span class="pill p-ok">官方</span></td>
+            <td><span class="pill p-ok">可</span></td>
+            <td>需认证主体；客服消息有 48 小时窗口限制；被动回复 5 秒超时</td>
+          </tr>
+          <tr>
+            <td class="pn">抖音<small>评论回复</small></td>
+            <td><code>/video/comment/reply/</code><br><span style="color:var(--muted);font-size:11.5px">另含 list / reply_list / top</span></td>
+            <td><span class="pill p-ok">官方</span></td>
+            <td><span class="pill p-ok">可</span></td>
+            <td>需申请「互动管理」权限（<code>video.comment</code>）；<b>个人主体通常过不了，需企业或站点资质</b></td>
+          </tr>
+          <tr>
+            <td class="pn">抖音<small>备用</small></td>
+            <td>无头 Chrome + 页面接口</td>
+            <td><span class="pill p-warn">自动化</span></td>
+            <td><span class="pill p-warn">可</span></td>
+            <td>个人开发者拿不到权限时的现实路径。需维护登录态，遇滑块必须停写并转人工</td>
+          </tr>
+          <tr>
+            <td class="pn">小红书<small>评论/私信</small></td>
+            <td>浏览器自动化</td>
+            <td><span class="pill p-warn">自动化</span></td>
+            <td><span class="pill p-warn">可</span></td>
+            <td>未查到面向第三方应用的官方评论接口。风控最严，<b>回复里带站外联系方式几乎必封</b></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="diagram-cap reveal" style="margin-top:14px">
+      ※ 「手机端」一列指的是：能否在手机上作为控制端使用。所有社区协议方案的执行端都在服务器或 PC 上，
+      手机只接收结果与发送指令——这正是下一节要讲的架构。
+    </p>
+  </section>
+
+  <!-- ================= 03 双端真相 ================= -->
+  <section>
+    <div class="sec-bar reveal">
+      <span class="sec-no">03</span>
+      <h2>「电脑和手机都能用」的真实解法</h2>
+      <span class="sec-meta">architecture</span>
+    </div>
+    <p class="lede reveal">
+      这句话有一个隐藏前提需要先破掉：<b>如果你理解成「手机也能去接管微信」，那 iOS 端物理上做不到</b>——
+      系统不允许一个 App 读取并操作另一个 App 的界面。安卓靠无障碍服务勉强可以，但也违反微信规则。
+      <br><br>
+      正确的解法是<b>把执行端和控制端拆开</b>。执行端跑在服务器或常年开机的 PC 上，负责连平台；
+      控制端是手机 APP / 网页 / 桌面客户端，只负责看和指挥。这样「双端」才真正成立，
+      而且顺带解决了另一个问题：你不需要让手机 24 小时亮屏挂着。
+    </p>
+
+    <div class="diagram reveal">
+      <svg viewBox="0 0 680 396" role="img" aria-label="执行端与控制端分离架构图">
+        <defs>
+          <marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 z" fill="#16243D"/>
+          </marker>
+          <marker id="arA" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 z" fill="#C68A0A"/>
+          </marker>
+        </defs>
+
+        <!-- 控制端 -->
+        <text x="16" y="22" font-family="JetBrains Mono, monospace" font-size="9" fill="#6B7378" letter-spacing="1.2">控制端 / CLIENT</text>
+        <rect x="16" y="30" width="132" height="46" fill="#FFFFFF" stroke="#16243D" stroke-width="1"/>
+        <text x="24" y="49" font-family="Public Sans, sans-serif" font-size="11.5" font-weight="600" fill="#16243D">手机 APP</text>
+        <text x="24" y="65" font-family="JetBrains Mono, monospace" font-size="8.5" fill="#6B7378">iOS / Android</text>
+
+        <rect x="16" y="82" width="132" height="46" fill="#FFFFFF" stroke="#16243D" stroke-width="1"/>
+        <text x="24" y="101" font-family="Public Sans, sans-serif" font-size="11.5" font-weight="600" fill="#16243D">网页 / 桌面</text>
+        <text x="24" y="117" font-family="JetBrains Mono, monospace" font-size="8.5" fill="#6B7378">浏览器 / Tauri</text>
+
+        <rect x="16" y="134" width="132" height="52" fill="#F6EAC8" stroke="#C68A0A" stroke-width="1"/>
+        <text x="24" y="153" font-family="Public Sans, sans-serif" font-size="11" font-weight="600" fill="#4A3A0C">只做三件事</text>
+        <text x="24" y="168" font-family="JetBrains Mono, monospace" font-size="8" fill="#8A6208">看 · 批 · 发指令</text>
+        <text x="24" y="180" font-family="JetBrains Mono, monospace" font-size="8" fill="#8A6208">不接触任何平台协议</text>
+
+        <!-- 箭头 1 -->
+        <line x1="148" y1="105" x2="196" y2="105" stroke="#16243D" stroke-width="1.2" marker-end="url(#ar)"/>
+        <text x="152" y="99" font-family="JetBrains Mono, monospace" font-size="7.5" fill="#6B7378">HTTPS</text>
+
+        <!-- 服务端大框 -->
+        <rect x="200" y="30" width="286" height="266" fill="#FFFFFF" stroke="#16243D" stroke-width="1.4"/>
+        <text x="210" y="22" font-family="JetBrains Mono, monospace" font-size="9" fill="#6B7378" letter-spacing="1.2">执行端 / SERVER</text>
+
+        <!-- 网关 -->
+        <rect x="212" y="42" width="262" height="30" fill="#16243D"/>
+        <text x="222" y="61" font-family="Public Sans, sans-serif" font-size="11" font-weight="600" fill="#FFFFFF">你的 API 网关 · 鉴权 / 限流</text>
+
+        <!-- Hub -->
+        <rect x="212" y="82" width="262" height="128" fill="#F7F8F5" stroke="#CBD0C7" stroke-width="1"/>
+        <text x="222" y="98" font-family="JetBrains Mono, monospace" font-size="8" fill="#6B7378" letter-spacing="1">HUB</text>
+
+        <rect x="222" y="106" width="76" height="44" fill="#FFFFFF" stroke="#16243D" stroke-width="1"/>
+        <text x="230" y="123" font-family="Public Sans, sans-serif" font-size="10" font-weight="600" fill="#16243D">人设中枢</text>
+        <text x="230" y="137" font-family="JetBrains Mono, monospace" font-size="7.5" fill="#6B7378">语料 · 知识</text>
+
+        <rect x="306" y="106" width="76" height="44" fill="#F2DAD5" stroke="#9B2318" stroke-width="1"/>
+        <text x="314" y="123" font-family="Public Sans, sans-serif" font-size="10" font-weight="600" fill="#9B2318">风控闸门</text>
+        <text x="314" y="137" font-family="JetBrains Mono, monospace" font-size="7.5" fill="#9B2318">频控 · 边界</text>
+
+        <rect x="390" y="106" width="76" height="44" fill="#FFFFFF" stroke="#16243D" stroke-width="1"/>
+        <text x="398" y="123" font-family="Public Sans, sans-serif" font-size="10" font-weight="600" fill="#16243D">回复引擎</text>
+        <text x="398" y="137" font-family="JetBrains Mono, monospace" font-size="7.5" fill="#6B7378">LLM 可替换</text>
+
+        <rect x="222" y="158" width="244" height="42" fill="#FFFFFF" stroke="#CBD0C7" stroke-width="1" stroke-dasharray="3 2"/>
+        <text x="230" y="174" font-family="Public Sans, sans-serif" font-size="10" font-weight="600" fill="#16243D">待确认队列 / 审计日志</text>
+        <text x="230" y="189" font-family="JetBrains Mono, monospace" font-size="7.5" fill="#6B7378">草稿留存 · 人工放行 · 全量可追溯</text>
+
+        <!-- 适配器层 -->
+        <rect x="212" y="220" width="262" height="64" fill="#FFFFFF" stroke="#16243D" stroke-width="1"/>
+        <text x="222" y="236" font-family="JetBrains Mono, monospace" font-size="8" fill="#6B7378" letter-spacing="1">ADAPTERS</text>
+        <rect x="222" y="244" width="52" height="28" fill="#E9EBE5"/><text x="236" y="262" font-family="JetBrains Mono, monospace" font-size="9" fill="#16243D">QQ</text>
+        <rect x="280" y="244" width="52" height="28" fill="#E9EBE5"/><text x="288" y="262" font-family="JetBrains Mono, monospace" font-size="9" fill="#16243D">微信</text>
+        <rect x="338" y="244" width="52" height="28" fill="#E9EBE5"/><text x="346" y="262" font-family="JetBrains Mono, monospace" font-size="9" fill="#16243D">抖音</text>
+        <rect x="396" y="244" width="66" height="28" fill="#E9EBE5"/><text x="404" y="262" font-family="JetBrains Mono, monospace" font-size="9" fill="#16243D">小红书</text>
+
+        <!-- 箭头到平台 -->
+        <line x1="490" y1="252" x2="540" y2="252" stroke="#16243D" stroke-width="1.2" marker-end="url(#ar)"/>
+
+        <!-- 平台 -->
+        <text x="546" y="22" font-family="JetBrains Mono, monospace" font-size="9" fill="#6B7378" letter-spacing="1.2">平台 / PLATFORM</text>
+        <rect x="546" y="30" width="118" height="196" fill="#F7F8F5" stroke="#CBD0C7" stroke-width="1"/>
+        <text x="558" y="52" font-family="Public Sans, sans-serif" font-size="10.5" fill="#333A40">QQ 群 / 私聊</text>
+        <text x="558" y="76" font-family="Public Sans, sans-serif" font-size="10.5" fill="#333A40">微信（受限）</text>
+        <text x="558" y="100" font-family="Public Sans, sans-serif" font-size="10.5" fill="#333A40">抖音评论</text>
+        <text x="558" y="124" font-family="Public Sans, sans-serif" font-size="10.5" fill="#333A40">小红书评论</text>
+        <line x1="558" y1="142" x2="652" y2="142" stroke="#CBD0C7" stroke-dasharray="2 2"/>
+        <text x="558" y="162" font-family="JetBrains Mono, monospace" font-size="8" fill="#9B2318">Soul / 他趣</text>
+        <text x="558" y="176" font-family="JetBrains Mono, monospace" font-size="8" fill="#9B2318">无开放通道</text>
+        <text x="558" y="196" font-family="JetBrains Mono, monospace" font-size="8" fill="#6B7378">→ 只能人工</text>
+
+        <!-- 底部说明 -->
+        <rect x="16" y="316" width="648" height="62" fill="#F6EAC8" stroke="#C68A0A" stroke-width="1"/>
+        <text x="28" y="336" font-family="Public Sans, sans-serif" font-size="11" font-weight="700" fill="#4A3A0C">为什么必须这样拆</text>
+        <text x="28" y="353" font-family="Public Sans, sans-serif" font-size="10.5" fill="#5A4711">① 手机不需要 24 小时亮屏挂着 · ② 协议端天然跑在服务器上 · ③ iOS 也能用</text>
+        <text x="28" y="369" font-family="Public Sans, sans-serif" font-size="10.5" fill="#5A4711">④ 新增平台只加一个 Adapter，控制端一行不改</text>
+      </svg>
+      <div class="diagram-cap">
+        控制端（手机/网页/桌面）↔ 你的网关 ↔ Hub（人设·闸门·引擎）↔ 适配器 ↔ 平台。
+        所有平台协议都止步于适配器层，控制端永远不需要知道对面是 QQ 还是抖音。
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 04 框架矩阵 ================= -->
+  <section>
+    <div class="sec-bar reveal">
+      <span class="sec-no">04</span>
+      <h2>可以扒的底层框架</h2>
+      <span class="sec-meta">GitHub · 已核实</span>
+    </div>
+    <p class="lede reveal">
+      下面每个项目我都核实过是否存在、是否还在维护、许可证是什么。星数为 2026-11 量级，
+      只用来判断社区活跃度，不作为质量结论。
+    </p>
+
+    <div class="tbl-wrap reveal">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:19%">项目</th>
+            <th style="width:11%">语言</th>
+            <th style="width:11%">许可证</th>
+            <th style="width:10%">活跃度</th>
+            <th>能给你什么 / 要注意什么</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="pn">AstrBot<small>AstrBotDevs/AstrBot</small></td>
+            <td>Python</td>
+            <td><span class="pill p-warn">AGPL-3.0</span></td>
+            <td>46.5k★<br><span style="font-size:10.5px;color:var(--muted)">今日仍在提交</span></td>
+            <td>
+              <b>覆盖最全的一个</b>：QQ 官方 / QQ OneBot / 企业微信 / 微信客服 / 公众号 / 飞书 / 钉钉 / Telegram / Discord / Slack / KOOK，
+              内置人格设定、长期记忆、STT/TTS、WebUI、1000+ 插件。<br>
+              <span style="color:var(--bad)">但 AGPL 是网络传染性许可——改了它并用它提供网络服务，必须开源你的修改。</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="pn">NapCatQQ<small>NapNeko/NapCatQQ</small></td>
+            <td>TS</td>
+            <td>见仓库</td>
+            <td>8.1k★</td>
+            <td>基于 QQNT 的<b>无头协议端</b>，实现 OneBot v11，有 Docker 镜像与 WebUI。
+                Linux 服务器可直接跑，这是 QQ 侧当前最省心的选择。</td>
+          </tr>
+          <tr>
+            <td class="pn">Lagrange.OneBot<small>LagrangeDev</small></td>
+            <td>C#</td>
+            <td>见仓库</td>
+            <td>活跃</td>
+            <td>纯协议实现，<b>不需要安装 QQ 客户端</b>，跨平台。配置项偏底层，但稳定性口碑好。</td>
+          </tr>
+          <tr>
+            <td class="pn">LLOneBot<small>LLOneBot/LLOneBot</small></td>
+            <td>TS</td>
+            <td>见仓库</td>
+            <td>活跃</td>
+            <td>NTQQ 插件形态，同时支持 OneBot 11 / Satori / Milky 三种协议，是唯一三协议并存的实现。</td>
+          </tr>
+          <tr>
+            <td class="pn">NoneBot2</td>
+            <td>Python</td>
+            <td><span class="pill p-ok">MIT</span></td>
+            <td>活跃</td>
+            <td>上层机器人框架，插件生态成熟。默认不绑定平台，靠适配器接 OneBot/Satori 等。</td>
+          </tr>
+          <tr>
+            <td class="pn">WeChatFerry<small>lich0821</small></td>
+            <td>Py/Go/Rust/Java</td>
+            <td><span class="pill p-mut">已归档</span></td>
+            <td><span class="pill p-bad">停更</span></td>
+            <td>微信 PC hook，多语言客户端齐全，曾是事实标准。<b>2025-05-25 归档，锁微信 3.9.5.81，仅 Windows。</b>
+                可作参考实现，不要当长期底座。</td>
+          </tr>
+          <tr>
+            <td class="pn">go-cqhttp</td>
+            <td>Go</td>
+            <td><span class="pill p-mut">已归档</span></td>
+            <td><span class="pill p-bad">停更</span></td>
+            <td>历史教程最多，但内核过旧。<b>新项目不要用。</b></td>
+          </tr>
+          <tr>
+            <td class="pn">AIRI<small>moeru-ai/airi</small></td>
+            <td>TypeScript</td>
+            <td><span class="pill p-ok">MIT</span></td>
+            <td>42–44k★<br><span style="font-size:10.5px;color:var(--muted)">数小时内仍有提交</span></td>
+            <td>自托管 AI 伴侣。<b>实时语音对话、Live2D/VRM、能在 Minecraft / Factorio 里真的陪你玩</b>、
+                长期记忆（DuckDB WASM）。<br>
+                <span style="color:var(--bad)">官方 README 只列 Web / macOS / Windows</span>，
+                安装方式是 winget / Scoop / Homebrew 加网页版，<b>没有任何移动端说明</b>。
+                代码里虽有 Capacitor 痕迹，但未作为正式能力发布。</td>
+          </tr>
+          <tr>
+            <td class="pn">Open-LLM-VTuber<small>t41372</small></td>
+            <td>Python</td>
+            <td><span class="pill p-ok">MIT</span></td>
+            <td>13.5k★</td>
+            <td>语音打断（不用戴耳机）、Live2D、桌宠模式（透明置顶鼠标穿透）、视觉感知、MCP 工具调用。
+                ASR/TTS/LLM 全部可换，能全离线跑。适合做桌面陪伴而<b>不是</b>手机产品。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= 05 许可证 ================= -->
+  <section>
+    <div class="sec-bar reveal">
+      <span class="sec-no">05</span>
+      <h2>许可证：比技术难度更值得先看</h2>
+      <span class="sec-meta">license risk</span>
+    </div>
+    <p class="lede reveal">
+      这是「扒代码」这件事上最容易踩的地方。技术能不能跑通，试一天就知道；
+      许可证选错，等到要收费、要融资、要被收购的时候才发现，代价是重写。
+    </p>
+
+    <div class="lic">
+      <div class="lic-row reveal">
+        <div class="lic-light lic-g"><i></i>绿灯</div>
+        <div class="lic-b">
+          <h4>MIT / Apache-2.0 —— 可以闭源商用</h4>
+          <p>AIRI、Open-LLM-VTuber、NoneBot2 都是 MIT。你可以改完闭源发布、可以收费、不必开源你的修改。
+             唯一义务是保留版权声明。</p>
+        </div>
+      </div>
+
+      <div class="lic-row reveal">
+        <div class="lic-light lic-y"><i></i>黄灯</div>
+        <div class="lic-b">
+          <h4>AGPL-3.0 —— 能用，但有传染性</h4>
+          <p>AstrBot 是 AGPL-3.0。它的特点是<b>网络使用也算分发</b>：只要用户通过网络使用你修改过的版本，
+             你就必须把修改后的完整源码按 AGPL 提供给他们。<br>
+             三种应对：① 完全不改核心，把它当独立进程，你自己写网关调用它（法律上更接近「聚合」）；
+             ② 接受开源，靠服务而非代码收费；③ 换成 MIT 的 NoneBot2 自己搭。</p>
+        </div>
+      </div>
+
+      <div class="lic-row reveal">
+        <div class="lic-light lic-r"><i></i>红灯</div>
+        <div class="lic-b">
+          <h4>已归档项目 —— 不是法律问题，是工程问题</h4>
+          <p>WeChatFerry 已归档、go-cqhttp 已停更。<b>它们锁死在特定微信版本上</b>，微信一升级就失效。
+             拿来读源码、理解协议可以；拿来当底座，等于把一个有明确失效日期的技术依赖写进架构，
+             而这个日期不由你决定。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="danger reveal">
+      <b>还有一个隐藏的许可问题：</b>Live2D 模型文件本身受 Live2D Inc. 的授权条款约束，
+      开源项目的 MIT 只覆盖代码，<b>不覆盖你用的模型资产</b>。要商用就得单独确认模型授权，或改用 VRM。
+    </div>
+  </section>
+
+  <!-- ================= 06 三套组合 ================= -->
+  <section>
+    <div class="sec-bar reveal">
+      <span class="sec-no">06</span>
+      <h2>三套可直接落地的组合</h2>
+      <span class="sec-meta">recommendation</span>
+    </div>
+
+    <div class="plan pick reveal">
+      <div class="plan-n">A</div>
+      <div class="plan-b">
+        <h4>运营工具：AstrBot 或 NoneBot2 + NapCat <span class="tag-rec">先做这个</span></h4>
+        <p>
+          不自研底层。用 NapCat 解决 QQ 连接，用 AstrBot 解决多平台适配与人格管理，
+          你只写「人设 + 风控 + 业务插件」。一周内能看到效果。
+          <br><br>
+          选 AstrBot 的前提是接受 AGPL（或者你只调它的 API 不改核心）；要闭源就换 NoneBot2 自己搭一层。
+        </p>
+      </div>
+      <div class="plan-m">
+        <span>周期 · 1–2 周</span>
+        <span>许可 · 注意 AGPL</span>
+        <span>上架 · 不需要</span>
+      </div>
+    </div>
+
+    <div class="plan pick reveal">
+      <div class="plan-n">B</div>
+      <div class="plan-b">
+        <h4>陪伴产品：AIRI 当底座 + 自研移动端外壳 <span class="tag-rec">上限最高</span></h4>
+        <p>
+          AIRI 是 MIT，可以直接改。它已经把最难的三件事做完：<b>实时语音闭环、Live2D/VRM 驱动、
+          在 Minecraft / Factorio 里真正操作游戏</b>。你要做的是把移动端体验补齐、把人设中文化、
+          把付费和账号体系做出来。
+          <br><br>
+          注意：官方只支持 Web / macOS / Windows，<b>没有移动端</b>，README 里也没有任何 Android / iOS 说明。
+          手机端最省力的路径是把它的 Web 版做成 PWA，或者包一层 Capacitor 外壳——
+          代码里有 Capacitor 痕迹但没作为正式能力发布，等于你要自己补完这一段。
+        </p>
+      </div>
+      <div class="plan-m">
+        <span>周期 · 2–4 个月</span>
+        <span>许可 · MIT 可闭源</span>
+        <span>上架 · 需自补移动壳</span>
+      </div>
+    </div>
+
+    <div class="plan reveal">
+      <div class="plan-n">C</div>
+      <div class="plan-b">
+        <h4>混合形态：A 做工具，B 做产品，共用人设</h4>
+        <p>
+          同一个「人设中枢」同时喂给两套系统：A 用它回别人的消息，B 用它陪你的用户聊天。
+          人设只维护一份，改一处两边同步生效——这正是你上一轮问的那个人设窗口的真正价值。
+        </p>
+      </div>
+      <div class="plan-m">
+        <span>周期 · 叠加</span>
+        <span>许可 · 看各自底座</span>
+        <span>上架 · B 可上架</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 07 已交付骨架 ================= -->
+  <section>
+    <div class="sec-bar reveal">
+      <span class="sec-no">07</span>
+      <h2>已经写好并跑通的最小骨架</h2>
+      <span class="sec-meta">app/gateway/</span>
+    </div>
+    <p class="lede reveal">
+      与其继续讨论架构，我直接把骨架写出来跑了一遍。它不依赖任何第三方包，
+      三个核心路径都有用例覆盖：<b>边界拦截、自动发送、人工审批</b>。
+    </p>
+
+    <div class="code reveal"><span class="c"># python gateway.py demo —— 实际运行输出</span>
+人设：小陆｜示范语料 12 条｜知识 4 条｜边界 9 条
+  [已发送] qq/阿哲 → 承重 30 公斤，桌面放个卡式炉完全没问题。
+  [已发送] qq/阿哲 → 搬得动，2.4 公斤，单手就能拎走，收起来跟伞差不多长。
+  [拦截] qq/阿哲：命中人设边界：便宜
+  [已发送] wechat/米粒 → 在的，你说。
+  [已发送] wechat/米粒 → 今天下单后天到，我这边盯着发货。
+  [已发送] xhs/用户8823 → 链接在主页置顶，或者我私发你。
+  [拦截] wechat/米粒：命中人设边界：退款
+--------------------------------------------------------------------
+审批链路：入队 1 条｜放行 成功｜放行后发送 1 条
+自检：边界拦截 ✓｜自动发送 ✓｜人工审批 ✓
+结果：全部通过</div>
+
+    <h3 class="reveal">加一个渠道要写多少代码</h3>
+    <p class="reveal" style="color:var(--ink-soft);font-size:14px;max-width:66ch">
+      两个方法。适配器只做「收」和「发」，人设、风控、生成逻辑全都不用碰：
+    </p>
+
+    <div class="code reveal"><span class="k">class</span> <span class="n">DouyinAdapter</span>(ChannelAdapter):
+    name = <span class="s">"douyin"</span>
+    auto_send_allowed = <span class="k">False</span>   <span class="c"># 官方通道，先人工确认</span>
+
+    <span class="k">def</span> <span class="n">poll</span>(self) -> list[Inbound]:
+        <span class="c"># 调 /video/comment/list/ 拿新评论，转成 Inbound</span>
+        ...
+
+    <span class="k">def</span> <span class="n">send</span>(self, reply: Reply) -> bool:
+        <span class="c"># 调 /video/comment/reply/ 发回复</span>
+        ...
+
+<span class="c"># 注册，核心一行不用改</span>
+hub.register(DouyinAdapter(...), channels=[<span class="s">"douyin"</span>])</div>
+
+    <h3 class="reveal">写的过程中发现并修掉的两个真问题</h3>
+
+    <p class="reveal" style="color:var(--ink-soft);font-size:14px;max-width:68ch">
+      <b style="color:var(--deep)">第一个：草稿被静默丢弃。</b>
+      第一版里 Hub 用「适配器名」当字典键。跑 demo 时自动发送全过、拦截全过，看起来是绿的——
+      但<b>待确认队列永远是 0</b>，说明人工审批那条路径根本没被执行到。
+      补了用例才暴露：模拟适配器名叫 <code>mock</code>，消息渠道是 <code>wechat</code>，
+      审批时按渠道查不到适配器，草稿被 pop 掉又没发出去，全程没有任何报错。
+      改成「适配器列表 + 渠道到适配器的映射」分开维护后才修好。
+      <br><br>
+      <b style="color:var(--deep)">第二个：中文关键词匹配漏判。</b>
+      人设里写的边界词是「打折」，用户实际说的是「给我打个折」——字面带不上，直接放行。
+      15 个单元测试里这一条是红的，我才发现。
+      修法是允许关键词各字之间最多隔 2 个字（<code>打.{0,2}折</code> 就能命中），
+      同时加了一个反向用例「我今天打了电话」确保不会过度拦截。
+      <br><br>
+      这两个问题都有一个共同点：<b>不报错，只是悄悄做错事</b>。
+      所以骨架阶段就把单测写好，比等到业务代码里才发现便宜得多。
+    </p>
+
+    <div class="code reveal"><span class="c"># python -m unittest test_gateway -v</span>
+Ran 15 tests in 0.002s
+
+OK
+
+<span class="c"># 覆盖：风控纯函数 6 项 · OneBot 事件归一化 4 项 · Hub 路由 4 项</span>
+<span class="c"># 其中 2 项是上面两个真实缺陷的回归锁</span></div>
+  </section>
+
+  <!-- ================= 收尾 ================= -->
+  <section style="border-bottom:none">
+    <div class="final reveal">
+      <h3>四句话收尾</h3>
+      <ol>
+        <li><b>平台内的文字回复能实现，但微信是第一个绕不过去的障碍。</b>
+          QQ 有 OneBot 这套事实标准，NapCat 能无头跑在 Linux 上；抖音有官方评论回复 API（要企业资质）；
+          小红书只能浏览器自动化。微信个人号只剩 WeChatFerry，而它 2025 年 5 月已经归档停更。</li>
+        <li><b>「手机也能用」要靠架构换，不靠技术硬啃。</b>
+          执行端放服务器、控制端放手机，双端才成立。想让手机本地去接管微信，iOS 上不存在这条路。</li>
+        <li><b>陪伴应用这条路更值得投，因为许可证对。</b>
+          AIRI 是 MIT，四万四千星，语音、Live2D、陪玩 Minecraft 都做完了，可以直接改。
+          AstrBot 覆盖平台最多但是 AGPL，改了要开源——这决定你能不能用它做闭源生意。</li>
+        <li><b>底层别自己造，但适配器必须自己写。</b>
+          协议端、消息总线、语音管线都用现成的；把「人设 + 风控 + 适配器」这三样握在手里，
+          这是唯一形成差异、也唯一出事时你能看懂日志的地方。</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    <div>文档 02 / 技术选型与开源框架评估 · 配套可运行骨架见 <b>app/gateway/</b></div>
+    <div>事实核查：抖音开放平台互动管理文档（video.comment）· QQ 开放平台 Bot 文档 · NapCat / Lagrange / LLOneBot 仓库 · AstrBot 仓库与 EULA · WeChatFerry 归档记录 · AIRI 仓库 · Open-LLM-VTuber 仓库</div>
+    <div>星数与维护状态为 2026-11 量级快照，许可证以各仓库 LICENSE 文件为准。</div>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  var els = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    els.forEach(function(el){ el.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (!e.isIntersecting) return;
+      var p = e.target.parentElement;
+      var sibs = p ? Array.prototype.filter.call(p.children, function(c){
+        return c.classList && c.classList.contains('reveal');
+      }) : [];
+      var idx = sibs.indexOf(e.target);
+      var delay = idx > 0 ? Math.min(idx, 3) * 80 : 0;
+      setTimeout(function(){ e.target.classList.add('in'); }, delay);
+      io.unobserve(e.target);
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -6% 0px' });
+  els.forEach(function(el){ io.observe(el); });
+})();
+</script>
+</body>
+</html>

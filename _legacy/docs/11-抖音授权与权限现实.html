@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>抖音授权：域名怎么绕，以及比域名更前置的那个问题</title>
+<style>
+  :root{
+    --bg:#F7F5F1; --card:#FFFFFF; --card-2:#FBFAF7;
+    --ink:#1C1A17; --ink-2:#4A453E; --ink-3:#7A7268; --muted:#9C9489;
+    --line:#E4DFD6; --line-2:#EFEBE4;
+    --accent:#A6501E; --accent-soft:#F6EBE2;
+    --green:#2C6E52; --green-soft:#E8F1EC;
+    --amber:#9A6B14; --amber-soft:#F8F0DF;
+    --red:#A33A2C; --red-soft:#F8E9E6;
+    --f-sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    --f-mono:"SF Mono","JetBrains Mono",Consolas,monospace;
+    --f-serif:"Songti SC","Source Han Serif SC",Georgia,serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--f-sans);
+    font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 28px}
+
+  header{padding:76px 0 52px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--f-mono);font-size:11px;letter-spacing:.16em;
+    color:var(--accent);text-transform:uppercase;margin-bottom:20px}
+  h1{font-family:var(--f-serif);font-size:40px;font-weight:600;
+    line-height:1.26;letter-spacing:-.01em;margin-bottom:20px}
+  .dek{font-size:16px;color:var(--ink-2);max-width:66ch;line-height:1.8}
+  .stamp{margin-top:30px;font-family:var(--f-mono);font-size:11px;
+    color:var(--muted);letter-spacing:.06em}
+
+  section{padding:54px 0;border-bottom:1px solid var(--line)}
+  section:last-of-type{border-bottom:none}
+  .num{font-family:var(--f-mono);font-size:11px;color:var(--accent);
+    letter-spacing:.14em;margin-bottom:12px}
+  h2{font-family:var(--f-serif);font-size:26px;font-weight:600;
+    line-height:1.36;margin-bottom:14px;letter-spacing:-.005em}
+  h3{font-size:15px;font-weight:640;margin:30px 0 12px;
+    padding-left:11px;border-left:2px solid var(--accent)}
+  p{margin-bottom:14px;color:var(--ink-2)}
+  p.lead{font-size:15.5px;color:var(--ink);line-height:1.85}
+  strong{color:var(--ink);font-weight:640}
+  code{font-family:var(--f-mono);font-size:12.5px;background:var(--card-2);
+    padding:1px 5px;border-radius:3px;color:var(--accent);
+    border:1px solid var(--line-2)}
+  .hi{background:linear-gradient(transparent 62%,#F3DCC9 62%);font-weight:640;color:var(--ink)}
+
+  table{width:100%;border-collapse:collapse;margin:20px 0;font-size:13.5px;
+    background:var(--card);border:1px solid var(--line);border-radius:6px;
+    overflow:hidden}
+  th{text-align:left;padding:11px 14px;background:var(--card-2);
+    font-size:11.5px;font-weight:600;letter-spacing:.05em;
+    color:var(--ink-3);border-bottom:1px solid var(--line)}
+  td{padding:11px 14px;border-bottom:1px solid var(--line-2);
+    color:var(--ink-2);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td b{color:var(--ink)}
+  .mono{font-family:var(--f-mono);font-size:12px}
+
+  .tag{display:inline-block;font-family:var(--f-mono);font-size:10px;
+    padding:2px 7px;border-radius:3px;letter-spacing:.04em;white-space:nowrap}
+  .tag.ok{background:var(--green-soft);color:var(--green)}
+  .tag.warn{background:var(--amber-soft);color:var(--amber)}
+  .tag.no{background:var(--red-soft);color:var(--red)}
+  .tag.mute{background:var(--card-2);color:var(--muted);border:1px solid var(--line)}
+
+  .note{background:var(--card);border:1px solid var(--line);
+    border-left:2px solid var(--accent);border-radius:0 5px 5px 0;
+    padding:16px 20px;margin:20px 0}
+  .note p{font-size:13.5px;margin-bottom:8px;line-height:1.75}
+  .note p:last-child{margin-bottom:0}
+  .note.warn{border-left-color:var(--amber);background:var(--amber-soft)}
+  .note.warn p{color:#6B4A0E}
+  .note.bad{border-left-color:var(--red);background:var(--red-soft)}
+  .note.bad p{color:#7C2A1F}
+  .note .lbl{font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;
+    color:var(--accent);display:block;margin-bottom:6px}
+  .note.warn .lbl{color:var(--amber)}
+  .note.bad .lbl{color:var(--red)}
+
+  pre{background:#22201D;color:#DDD8D0;font-family:var(--f-mono);
+    font-size:11.5px;line-height:1.85;padding:18px 20px;border-radius:6px;
+    overflow-x:auto;margin:18px 0}
+  pre .g{color:#8FBF9F}
+  pre .y{color:#D9B36C}
+  pre .r{color:#D98B7A}
+  pre .c{color:#6E665C}
+
+  .ways{display:grid;gap:14px;margin:24px 0}
+  .way{background:var(--card);border:1px solid var(--line);border-radius:6px;
+    padding:18px 22px;position:relative}
+  .way.rec{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-soft) inset}
+  .way-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .way-h b{font-size:14.5px}
+  .way-h .mono{color:var(--muted);font-size:11px}
+  .way p{font-size:13.5px;margin-bottom:6px;line-height:1.72}
+  .way p:last-child{margin-bottom:0}
+  .way .pros{color:var(--green);font-size:12.5px}
+  .way .cons{color:var(--red);font-size:12.5px}
+
+  .verdict{background:var(--card);border:1px solid var(--line);
+    border-radius:6px;padding:22px 24px;margin:26px 0}
+  .verdict .k{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;
+    color:var(--muted);margin-bottom:8px}
+  .verdict .v{font-size:16px;font-weight:600;color:var(--ink);line-height:1.6}
+  .verdict .v em{font-style:normal;color:var(--accent)}
+
+  footer{padding:44px 0 64px;font-size:12.5px;color:var(--muted)}
+  footer p{margin-bottom:6px;font-size:12.5px;color:var(--muted)}
+
+  @media(max-width:720px){
+    h1{font-size:29px} h2{font-size:21px}
+    .wrap{padding:0 18px} header{padding:52px 0 36px} section{padding:40px 0}
+    pre{font-size:10.5px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Douyin Auth Without ICP</div>
+  <h1>域名能绕，但绕过去之后<br>会撞上另一道墙</h1>
+  <p class="dek">
+    你问的这一步有解——而且不需要备案域名，也不需要服务器。
+    但在动手之前必须知道一件事：<b>2025 年 2 月之后，移动应用和网站应用
+    已经申请不到评论权限了</b>。域名问题解决了，权限问题还在。
+  </p>
+  <div class="stamp">2026-11-12 · 25 项新测试通过 · 授权工具已可用</div>
+</header>
+
+<!-- 一 -->
+<section>
+  <div class="num">01 / 直接回答</div>
+  <h2><code>redirect_uri</code> 不是「回调服务器」，是「浏览器要跳去哪」</h2>
+  <p class="lead">
+    这是整件事的关键认知。OAuth 授权成功后，平台做的是让浏览器跳转到一个地址，
+    并把 <code>code</code> 拼在参数里。它<b>不要求那个地址现在能响应</b>。
+  </p>
+  <p>
+    所以就算那个域名打不开、404、甚至根本不存在，<span class="hi">浏览器地址栏里
+    已经写着 <code>?code=xxx</code> 了</span>。把它复制出来，本地换 token 就行。
+    整个过程不需要公网服务器，不需要域名能访问，也不需要备案。
+  </p>
+  <p>
+    唯一的前提是：那个 <code>redirect_uri</code> 能在开放平台后台<b>保存成功</b>。
+    这一步是否校验备案，不同应用类型不一样，下面会给判定方法。
+  </p>
+
+  <div class="note">
+    <span class="lbl">适用范围</span>
+    <p>
+      这个技巧对所有授权码模式的 OAuth 都成立（GitHub、Google、微信、抖音都一样）。
+      它的本质是把「接收回调」从机器改成人工。
+    </p>
+    <p>
+      代价是：<code>code</code> 只有 <b>10 分钟</b>有效期且<b>只能用一次</b>。
+      复制粘贴要快，粘错了得重新授权。
+    </p>
+  </div>
+</section>
+
+<!-- 二 -->
+<section>
+  <div class="num">02 / 三种拿 code 的方式</div>
+  <h2>从最省事到最完整</h2>
+
+  <div class="ways">
+    <div class="way rec">
+      <div class="way-h"><b>① 手动复制</b><span class="mono">paste</span>
+        <span class="tag ok">推荐先试这个</span></div>
+      <p>生成授权链接 → 浏览器打开扫码 → 授权后地址栏出现 code → 整条 URL 粘回终端。</p>
+      <p class="pros">不需要服务器、不需要域名能访问、不需要穿透。三分钟能验完。</p>
+      <p class="cons">每次重新授权都要手动复制一次（令牌 15 天，refresh 后可到 195 天，不算频繁）。</p>
+    </div>
+
+    <div class="way">
+      <div class="way-h"><b>② 本地回调 + 内网穿透</b><span class="mono">serve</span></div>
+      <p>本地起一个服务接 code，用 ngrok / cpolar 映射成 https 地址填进后台。</p>
+      <p class="pros">授权完成后自动换 token，不用复制。适合反复调试。</p>
+      <p class="cons">穿透域名通常也是未备案域名，后台未必接受；穿透服务可能限速。</p>
+    </div>
+
+    <div class="way">
+      <div class="way-h"><b>③ 小程序 ticket</b><span class="mono">mini</span></div>
+      <p>小程序里调 <code>tt.showDouyinOpenAuth</code> 拿到 ticket，直接把 ticket 当 code 换 token。</p>
+      <p class="pros">完全不存在 <code>redirect_uri</code>，所以完全不存在备案问题。</p>
+      <p class="cons">要先有小程序；而且评论权限能不能批，是另一回事（见第三节）。</p>
+    </div>
+  </div>
+
+  <h3>工具已经写好了</h3>
+  <pre><span class="c"># 1. 生成授权链接</span>
+python douyin_auth.py url --client-key tt1234567890 \
+    --redirect https://example.com/douyin/callback \
+    --scope user_info,item.comment
+
+<span class="c"># 2. 授权完，把地址栏整条 URL 丢进去（裸 code 也行）</span>
+python douyin_auth.py paste --client-key tt... --secret abc... \
+    --code "https://example.com/douyin/callback?code=ffab5ec2&state=s1"
+
+<span class="c"># 3. 看令牌还能用几天</span>
+python douyin_auth.py status</pre>
+
+  <p>实跑 <code>paste</code> 成功时会打印：</p>
+  <pre><span class="g">识别到授权码：ffab5ec26cd9…（24 字符）</span>
+
+成功。
+  open_id       b9b71865-fake-open-id
+  有效期        还剩 15.0 天
+  已保存到      token.json</pre>
+
+  <h3>粘贴格式不用挑</h3>
+  <table>
+    <thead><tr><th style="width:52%">你粘什么</th><th>都能识别</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">ffab5ec26cd958fd</td><td>裸授权码</td></tr>
+      <tr><td class="mono">https://x/cb?code=ffab&amp;state=s1</td><td>整条回调 URL</td></tr>
+      <tr><td class="mono">" https://x/cb?state=s1&amp;code=ffab "</td><td>带引号、参数顺序不同、前后有空格</td></tr>
+    </tbody>
+  </table>
+  <p>
+    这个细节值得单独做，因为实际复制的时候人会连引号、空格、完整 URL 一起粘过来。
+    工具要求用户「只粘 code 那一段」，就会有人粘错，然后报参数错误，
+    而错误信息里看不出是粘贴方式的问题。
+  </p>
+
+  <h3>错误码翻译成人话</h3>
+  <pre><span class="r">换取失败：[10007] authorization code expired</span>
+<span class="y">怎么办：授权码只有 10 分钟且只能用一次，重新生成授权链接再来</span></pre>
+  <p>
+    10007 是最常见的失败。如果没有这句提示，用户会以为是代码或配置坏了，
+    反复重试同一条链接——但 code 已经用掉了，重试必然失败。
+  </p>
+</section>
+
+<!-- 三 -->
+<section>
+  <div class="num">03 / 比域名更前置的那个问题</div>
+  <h2>评论权限，移动和网站应用已经申请不到了</h2>
+  <p class="lead">
+    这是这轮核实里最重要的发现，也是最坏的消息。它决定了「域名解决了」之后还能不能走。
+  </p>
+
+  <p>
+    抖音开放平台 2025 年发布过一条公告：<strong>《移动/网站应用部分能力权限下线/回收公告》</strong>。
+    原文两句：
+  </p>
+  <pre>"平台将于 <span class="y">2025年2月13日</span> 起停止接收移动、网站应用关于开通以下能力权限的申请，
+并于 <span class="y">2025年3月13日</span> 起，<span class="r">分批回收历史已开通的移动、网站应用的相应权限</span>"
+
+受影响列表里明确包含：
+  · 互动管理(企业号)   video.comment
+  · 管理视频评论       <span class="r">item.comment</span>
+  · 视频互动数据       <span class="r">data.external.item</span></pre>
+
+  <p>
+    公告的生效时间在一年半前，现在新建的移动应用、网站应用，
+    <strong>点「申请开通」时会发现入口已经不给新申请了</strong>。
+  </p>
+
+  <div class="note bad">
+    <span class="lbl">所以「第三步最难」这个判断要改</span>
+    <p>
+      OAuth 配置是<b>第四难</b>。第一难是「有没有应用可以申请」，第二难是「评论权限批不批」，
+      第三难是「企业资质」。域名排在第四。
+    </p>
+    <p>
+      先把域名搞定，然后在权限那一步卡住——这种情况最容易发生，
+      因为域名那一步看起来最吓人，实际上最便宜。
+    </p>
+  </div>
+
+  <div class="note warn">
+    <span class="lbl">这里有一处文档自相矛盾，必须说明</span>
+    <p>
+      「视频评论管理」能力详情页仍写着「<b>准入条件：暂无准入条件，任一应用均可申请</b>」，
+      并列出支持小程序、移动应用、网站应用三种类型。
+    </p>
+    <p>
+      但 2025-02 的公告说的是停止接收移动/网站应用的申请。两处优先信哪个？<b>以后台实际入口为准</b>。
+      控制台里「申请开通」按钮是否可点、点了之后是否报「该能力已停止申请」，一分钟能看出结果。
+      文档页可能是旧版没同步。
+    </p>
+  </div>
+
+  <h3>小程序这条路，有接口但标了「高级能力」</h3>
+  <p>小程序侧确实有一套独立的评论接口：</p>
+  <table>
+    <thead><tr><th style="width:34%">项目</th><th>小程序</th></tr></thead>
+    <tbody>
+      <tr><td>评论列表</td><td class="mono">GET /api/apps/v1/item/list_comment/</td></tr>
+      <tr><td>Scope</td><td class="mono">ma.item.comment</td></tr>
+      <tr><td>权限入口</td><td>控制台 → 小程序应用 → 能力-用户数据能力-抖音账号数据 → 视频评论数据</td></tr>
+      <tr><td>授权方式</td><td><code>tt.showDouyinOpenAuth</code> 返回 ticket，换 <code>/oauth/access_token/</code></td></tr>
+      <tr><td>是否要 redirect_uri</td><td><span class="tag ok">不需要</span></td></tr>
+      <tr><td>能力分级</td><td><span class="tag warn">高级能力</span></td></tr>
+      <tr><td>沙盒环境</td><td><span class="tag no">不支持</span></td></tr>
+    </tbody>
+  </table>
+
+  <p>但官方 FAQ 里还有一句相反的话：</p>
+  <pre>"企业小程序和个人小程序目前<span class="r">均不支持</span>获取粉丝数、评论数据相关数据信息。
+如需查看数据请在小程序控制台查看『数据中心』"</pre>
+  <p>
+    这句话说的是「数据统计」还是「评论内容列表」，从字面读不出来。
+    有些条目里 <code>item.comment</code> 又列在小程序能力下，和 <code>ma.item.comment</code> 不是同一个名字。
+  </p>
+
+  <div class="verdict">
+    <div class="k">关于小程序通道的诚实结论</div>
+    <div class="v">
+      接口文档存在、授权方式确实不需要域名，<em>但权限是否批得下来，只能在控制台点一次才知道</em>。
+      我不能把「文档里有」说成「你能批到」——这两件事在抖音开放平台上经常不是一回事。
+    </div>
+  </div>
+</section>
+
+<!-- 四 -->
+<section>
+  <div class="num">04 / 三条路现在什么状态</div>
+  <h2>一张表看清代价</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:20%">路</th>
+        <th style="width:20%">评论权限</th>
+        <th style="width:20%">域名要求</th>
+        <th style="width:20%">主体要求</th>
+        <th>现在能不能开跑</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>移动应用</b></td>
+        <td><span class="tag no">已停止申请</span></td>
+        <td>回调需 https 域名</td>
+        <td>个人可建应用</td>
+        <td>权限拿不到，跑不了真实评论</td>
+      </tr>
+      <tr>
+        <td><b>网站应用</b></td>
+        <td><span class="tag no">已停止申请</span></td>
+        <td>需备案域名</td>
+        <td>需备案主体</td>
+        <td>同上，且多一道备案</td>
+      </tr>
+      <tr>
+        <td><b>小程序</b></td>
+        <td><span class="tag warn">高级能力，待验证</span></td>
+        <td><span class="tag ok">不需要</span></td>
+        <td>个人可注册</td>
+        <td>要写小程序 + 权限审核，唯一可能走通的官方路</td>
+      </tr>
+      <tr>
+        <td><b>企业微信</b></td>
+        <td><span class="tag ok">官方支持</span></td>
+        <td><span class="tag ok">可用 IP</span></td>
+        <td>无需执照</td>
+        <td><span class="tag ok">已经能跑</span>（本地演示已验证）</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    这张表解释了一件事：<strong>为什么上一轮建议先做企业微信</strong>。
+    不是因为企业微信更简单，是因为它是四条路里唯一「现在就真的能跑」的。
+  </p>
+</section>
+
+<!-- 五 -->
+<section>
+  <div class="num">05 / 现在能做什么</div>
+  <h2>三件事，都不需要等审核</h2>
+
+  <h3>一、把授权流程先跑通（如果手上有应用）</h3>
+  <p>
+    创建应用不需要等权限。拿到 <code>client_key</code> 和 <code>client_secret</code> 之后，
+    用 <code>douyin_auth.py url</code> + <code>paste</code> 就能拿到真实的 access_token。
+  </p>
+  <p>
+    这一步能验证的东西不少：后台的 <code>redirect_uri</code> 到底能不能保存、
+    授权页能不能正常拉起、<code>scope</code> 批了哪些、token 能不能换出来。
+    <strong>这些都是权限之外的不确定性，先排掉。</strong>
+  </p>
+
+  <h3>二、用导出的评论做 M1a</h3>
+  <p>
+    没有接口也能拿到评论：<code>creator.douyin.com</code> → 互动管理 → 评论管理，
+    逐页复制。这是人工导出，不是自动化，但它能喂给标注工具。
+  </p>
+  <pre>python label.py
+<span class="c"># 来源选「自有账号」，粘贴评论，盲标 100 条，揭晓看一致率</span></pre>
+  <p>
+    这一步验证的是「判定逻辑对不对」，与接口无关。接口只是取数据的方式，
+    换成手动导出，判定、生成、闸门、分级放权全都照常跑。
+  </p>
+
+  <h3>三、把小程序那条路探一次底</h3>
+  <p>一分钟能知道结果，顺序是：</p>
+  <table>
+    <thead><tr><th style="width:8%">#</th><th style="width:42%">动作</th><th>看什么</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">1</td><td>open.douyin.com 注册（个人身份）</td><td>能不能创建「小程序」类型应用</td></tr>
+      <tr><td class="mono">2</td><td>控制台 → 小程序 → 能力-用户数据能力-抖音账号数据</td><td>「视频评论数据」的申请按钮是否可点</td></tr>
+      <tr><td class="mono">3</td><td>点「申请开通」，如实填写用途</td><td>是否有「该能力已停止申请」的提示</td></tr>
+      <tr><td class="mono">4</td><td>提交后等 2–3 个工作日</td><td>批 / 拒 / 要求补充材料</td></tr>
+    </tbody>
+  </table>
+  <p>
+    用途别写「营销获客」。写「统一查阅并回复自己账号下的评论、做客服答疑」——
+    审核方对「批量触达」这类描述会按营销工具处理，那个方向是收紧的。
+  </p>
+
+  <div class="note">
+    <span class="lbl">如果第 2 步的按钮是灰的</span>
+    <p>
+      那就意味着官方通道对你当前能创建的应用类型关闭了。此时有两条现实选择：
+      一是转企业微信，二是用人工导出评论 + 人工发回复的半自动方式。
+    </p>
+    <p>
+      <b>不建议走浏览器自动化</b>——不是道德判断，是成本判断：它依赖登录态、
+      随页面改版失效、随时可能触发风控，而你已经明确说过不要风控风险。
+      那类方案的实际维护成本远高于每天手动粘贴十条。
+    </p>
+  </div>
+</section>
+
+<!-- 六 -->
+<section>
+  <div class="num">06 / 这批代码的边界</div>
+  <h2>已经做完的，和还没验证的</h2>
+
+  <table>
+    <thead><tr><th style="width:34%">能力</th><th style="width:16%">状态</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>授权链接生成</td><td><span class="tag ok">已验证</span></td><td>参数完整、redirect_uri 正确编码</td></tr>
+      <tr><td>code 换 token</td><td><span class="tag ok">已验证</span></td><td>25 项测试覆盖成功/过期/参数错/网络错</td></tr>
+      <tr><td>粘贴格式兼容</td><td><span class="tag ok">已验证</span></td><td>裸码、整条 URL、带引号空格</td></tr>
+      <tr><td>本地回调服务</td><td><span class="tag ok">已验证</span></td><td>起服务、收 code、404 路径、超时</td></tr>
+      <tr><td>令牌落盘与状态</td><td><span class="tag ok">已验证</span></td><td>重启后能读回，损坏文件不崩</td></tr>
+      <tr><td>真实换 token</td><td><span class="tag warn">未验证</span></td><td>需要真实 client_key，我这里没有</td></tr>
+      <tr><td>后台能否保存未备案域名</td><td><span class="tag warn">未验证</span></td><td>只能在你的后台点一次</td></tr>
+      <tr><td>评论权限能不能批</td><td><span class="tag warn">未验证</span></td><td>只能提交后等审核</td></tr>
+      <tr><td>小程序接口适配</td><td><span class="tag mute">未开发</span></td><td>路径、header、item_id 转换都不同，等权限有结果再做</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    最后一项值得解释：小程序接口和现有代码<b>不是同一套</b>。评论列表路径是
+    <code>/api/apps/v1/item/list_comment/</code>，token 放在 <code>access-token</code> 请求头，
+    <code>item_id</code> 还得先用
+    <code>/api/apps/v1/convert_video_id/video_id_to_open_item_id/</code> 转成 open_item_id。
+    这些差异写起来不难，但没权限时写了也跑不通，所以等审核结果再动。
+  </p>
+</section>
+
+<footer>
+  <p>事实来源：抖音开放平台《移动/网站应用部分能力权限下线/回收公告》（2025）、
+    「视频评论管理」能力详情页、小程序评论列表接口文档、小程序能力常见问题 FAQ。</p>
+  <p>两处文档口径不一致的地方已在正文标出，以后台实际入口为准。</p>
+  <p>本文所有代码行为均有测试覆盖，命令行输出为实跑截取。</p>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>抖音接入手册 · 令牌、权限、清单</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=Work+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FAF7F2;
+  --paper-2:#F2EDE4;
+  --ink:#211E1A;
+  --ink-2:#3E3A33;
+  --muted:#7C7368;
+  --rule:#DCD4C7;
+  --orange:#D2601A;
+  --orange-soft:#F8E4D6;
+  --green:#24443A;
+  --green-soft:#DCE7E2;
+  --red:#A02A1E;
+  --red-soft:#F5DCD7;
+
+  --f-serif:"Fraunces","Songti SC","SimSun",serif;
+  --f-sans:"Work Sans","Source Han Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  --f-mono:"IBM Plex Mono","Consolas",monospace;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--paper);color:var(--ink);font-family:var(--f-sans);
+  font-size:15px;line-height:1.8;-webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+::selection{background:var(--orange);color:#fff}
+.wrap{max-width:920px;margin:0 auto;padding:0 26px}
+
+/* 顶栏 */
+.top{
+  position:sticky;top:0;z-index:60;background:rgba(250,247,242,.95);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--ink);
+}
+.top-in{
+  max-width:920px;margin:0 auto;padding:10px 26px;display:flex;align-items:center;gap:14px;
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+}
+.t-id{color:var(--orange);font-weight:500}
+.t-sep{width:1px;height:11px;background:var(--rule)}
+.t-name{color:var(--muted)}
+.t-r{margin-left:auto;color:var(--muted);white-space:nowrap}
+
+/* 头 */
+.hero{padding:50px 0 34px;border-bottom:2px solid var(--ink)}
+.eb{
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--orange);margin-bottom:18px;
+}
+h1{
+  font-family:var(--f-serif);font-weight:400;font-size:clamp(30px,5.4vw,52px);
+  line-height:1.1;letter-spacing:-.02em;color:var(--ink);max-width:20ch;
+}
+h1 em{font-style:italic;color:var(--orange)}
+.lead{
+  margin-top:20px;max-width:62ch;font-size:16px;line-height:1.78;color:var(--ink-2);
+  font-weight:300;
+}
+.lead b{font-weight:600;color:var(--ink);font-size:15px}
+
+/* 纠正块 */
+.correct{
+  margin-top:26px;border:1px solid var(--orange);background:var(--orange-soft);
+  padding:16px 18px;
+}
+.correct h3{
+  font-family:var(--f-sans);font-size:13.5px;font-weight:600;color:var(--orange);
+  margin-bottom:6px;
+}
+.correct p{font-size:13px;line-height:1.72;color:#6B3210;max-width:none}
+.correct p+p{margin-top:8px}
+
+/* 章节 */
+section{padding:44px 0;border-bottom:1px solid var(--rule)}
+.sh{display:flex;align-items:baseline;gap:12px;margin-bottom:20px}
+.sh-n{
+  font-family:var(--f-mono);font-size:10px;color:var(--orange);
+  border:1px solid var(--orange);padding:0 5px;line-height:1.7;
+}
+h2{
+  font-family:var(--f-serif);font-weight:400;font-size:clamp(21px,3.2vw,29px);
+  letter-spacing:-.015em;color:var(--ink);line-height:1.25;
+}
+h3{
+  font-family:var(--f-sans);font-size:14.5px;font-weight:600;color:var(--green);
+  margin:26px 0 10px;padding-left:11px;border-left:2px solid var(--green);
+}
+p{max-width:74ch;color:var(--ink-2)}
+p+p{margin-top:12px}
+p b{color:var(--ink);font-weight:600}
+code{
+  font-family:var(--f-mono);font-size:11.5px;background:var(--paper-2);
+  padding:1px 5px;color:var(--ink);
+}
+
+/* 时间轴 */
+.axis{border:1px solid var(--ink);background:#fff;padding:22px 20px;margin-top:16px}
+.axis-row{margin-bottom:22px}
+.axis-row:last-child{margin-bottom:0}
+.axis-lb{
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:9px;display:flex;justify-content:space-between;
+}
+.axis-lb b{color:var(--ink);letter-spacing:.02em}
+.bar{height:30px;display:flex;position:relative;border-radius:2px;overflow:hidden}
+.seg{height:100%;display:flex;align-items:center;justify-content:center;
+  font-family:var(--f-mono);font-size:9.5px;color:#fff;letter-spacing:.03em;white-space:nowrap}
+.seg-a{background:var(--green)}
+.seg-b{background:#3E6B5C}
+.seg-c{background:var(--orange)}
+.seg-d{background:var(--red)}
+.axis-tick{
+  display:flex;justify-content:space-between;margin-top:5px;
+  font-family:var(--f-mono);font-size:9px;color:var(--muted);
+}
+.axis-note{
+  margin-top:14px;padding-top:12px;border-top:1px dashed var(--rule);
+  font-size:12.5px;line-height:1.7;color:var(--ink-2);
+}
+.axis-note b{color:var(--red);font-weight:600}
+
+/* 清单 */
+.progress-wrap{
+  display:flex;align-items:center;gap:14px;margin:14px 0 18px;
+  padding:12px 15px;background:var(--green);color:#E8F0EC;
+}
+.progress-bar{flex:1;height:5px;background:rgba(255,255,255,.2);border-radius:3px;overflow:hidden}
+.progress-bar i{display:block;height:100%;background:#8FD0B4;width:0;
+  transition:width .4s var(--ease)}
+.progress-txt{font-family:var(--f-mono);font-size:11px;white-space:nowrap;letter-spacing:.04em}
+
+.step{
+  display:grid;grid-template-columns:26px 1fr;gap:13px;
+  padding:14px 0;border-bottom:1px solid var(--rule);align-items:start;
+  cursor:pointer;transition:background .15s var(--ease);
+}
+.step:hover{background:var(--paper-2)}
+.step:last-child{border-bottom:none}
+.box{
+  width:18px;height:18px;border:1.5px solid var(--rule);background:#fff;
+  margin-top:4px;display:grid;place-items:center;transition:all .15s var(--ease);
+  flex:none;
+}
+.box svg{opacity:0;transition:opacity .15s}
+.step.done .box{background:var(--green);border-color:var(--green)}
+.step.done .box svg{opacity:1}
+.step.done .st-t{color:var(--muted);text-decoration:line-through}
+.st-t{font-size:14px;font-weight:600;color:var(--ink);line-height:1.5;margin-bottom:3px}
+.st-d{font-size:12.5px;line-height:1.65;color:var(--muted)}
+.st-meta{
+  display:flex;gap:12px;margin-top:6px;flex-wrap:wrap;
+  font-family:var(--f-mono);font-size:9.5px;color:var(--muted);letter-spacing:.03em;
+}
+.st-meta span{padding:1px 6px;border:1px solid var(--rule);background:#fff}
+.st-fail{margin-top:6px;font-size:12px;line-height:1.6;color:var(--red)}
+.st-fail::before{content:"常见失败：";font-weight:600}
+
+/* 表格 */
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin-top:12px}
+.tbl th{
+  font-family:var(--f-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+  text-align:left;padding:8px 10px 8px 0;border-bottom:1.5px solid var(--ink);color:var(--ink);
+}
+.tbl td{padding:10px 10px 10px 0;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.62}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:var(--paper-2)}
+.mono{font-family:var(--f-mono);font-size:11.5px;color:var(--ink)}
+.badge{
+  display:inline-block;font-family:var(--f-mono);font-size:9.5px;padding:1px 6px;
+  letter-spacing:.03em;white-space:nowrap;
+}
+.b-ok{background:var(--green-soft);color:var(--green)}
+.b-auto{background:var(--orange-soft);color:var(--orange)}
+.b-stop{background:var(--red-soft);color:var(--red)}
+
+/* 代码 */
+.code{
+  background:#1C2B26;color:#CBD9D3;font-family:var(--f-mono);font-size:11.5px;
+  line-height:1.8;padding:15px 17px;overflow-x:auto;margin-top:12px;
+}
+.code .c{color:#5E7A70;font-style:italic}
+.code .s{color:#9BC9A6}
+.code .k{color:#8FC0CC}
+.code .n{color:#E3B57C}
+
+/* 提示 */
+.tip{
+  border-left:3px solid var(--green);background:var(--green-soft);
+  padding:13px 17px;margin:16px 0;font-size:13px;line-height:1.72;color:#173028;
+}
+.tip b{color:var(--green)}
+.warn{
+  border-left:3px solid var(--red);background:var(--red-soft);
+  padding:13px 17px;margin:16px 0;font-size:13px;line-height:1.72;color:#571610;
+}
+.warn b{color:var(--red)}
+
+/* 收尾 */
+.end{background:var(--ink);color:#C9C2B7;padding:32px 30px;margin-top:30px}
+.end h3{
+  font-family:var(--f-serif);font-size:19px;color:#FAF7F2;margin:0 0 14px;
+  font-weight:400;border-left:none;padding-left:0;
+}
+.end ol{list-style:none;counter-reset:e;display:grid;gap:12px}
+.end li{
+  counter-increment:e;padding-left:26px;position:relative;font-size:13px;
+  line-height:1.72;color:#A8A198;
+}
+.end li::before{
+  content:counter(e);position:absolute;left:0;top:2px;
+  font-family:var(--f-serif);font-size:14px;color:var(--orange);
+}
+.end li b{color:#FAF7F2;font-weight:600}
+
+footer{padding:24px 0 44px;font-family:var(--f-mono);font-size:9.5px;color:var(--muted);
+  letter-spacing:.03em;line-height:2}
+
+.reveal{opacity:0;transform:translateY(14px)}
+.reveal.in{opacity:1;transform:none;transition:opacity .3s var(--ease),transform .3s var(--ease)}
+@media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}}
+
+@media(max-width:720px){
+  .bar{height:auto;flex-direction:column}
+  .seg{padding:6px 0;min-height:26px}
+  .axis-tick{font-size:8px}
+  .end{padding:22px 18px}
+}
+@media(max-width:560px){
+  .wrap,.top-in{padding-left:16px;padding-right:16px}
+  body{font-size:14.5px}
+  .hero{padding:32px 0 24px}
+  section{padding:32px 0}
+  .t-r{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-in">
+    <span class="t-id">NEXUS / 05</span>
+    <span class="t-sep"></span>
+    <span class="t-name">抖音接入手册</span>
+    <span class="t-r">55 项测试通过</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eb reveal">TikTok Open Platform · Integration Playbook</div>
+    <h1 class="reveal">先做抖音是对的，<br>但它不是<em>最省事</em>的那条</h1>
+    <p class="lead reveal">
+      在评论回复这个动作上，抖音确实是四个平台里唯一有完整官方能力的：
+      能拉列表、能回复、能置顶。但它同时也是<b>门槛最高</b>的——
+      需要企业主体、应用转正、互动管理权限三道关。
+      这份手册是给"照着做"用的，不是给"看看"用的。
+    </p>
+
+    <div class="correct reveal">
+      <h3>先说清楚「最全」的准确含义</h3>
+      <p>
+        <b>能力最全 ≠ 最好上手。</b>抖音有官方接口，意味着稳定、有文档、能精确回复到某条评论下；
+        但也意味着你要先过一个审核链。QQ 的 OneBot 零门槛但非官方，小红书干脆没有接口。
+      </p>
+      <p>
+        所以真正的问题不是「抖音是不是最全」，而是<b>你的资质到哪一步了</b>。
+        资质没下来之前，代码可以照写、用假数据跑通全链路，等权限批了直接换 real transport。
+      </p>
+    </div>
+  </header>
+
+  <!-- ========== 01 令牌 ========== -->
+  <section>
+    <div class="sh reveal"><span class="sh-n">01</span><h2>令牌生命周期：第 16 天会发生什么</h2></div>
+
+    <p class="reveal">
+      这是最容易被忽略、后果最严重的一件事。<code>access_token</code> 只有 <b>15 天</b>,
+      不是很多文档里说的 2 小时（那是 client_token，用途不同）。
+      如果你没做自动刷新，第 16 天开始所有请求都会失败，而且表现是「回复莫名其妙不发了」。
+    </p>
+
+    <div class="axis reveal">
+      <div class="axis-row">
+        <div class="axis-lb"><span>只做刷新，不做续期</span><b>45 天后必须重新授权</b></div>
+        <div class="bar">
+          <div class="seg seg-a" style="flex:15">access_token 15d</div>
+          <div class="seg seg-b" style="flex:30">refresh_token 30d</div>
+          <div class="seg seg-d" style="flex:12">失效</div>
+        </div>
+        <div class="axis-tick"><span>0</span><span>15d 首次过期</span><span>45d</span></div>
+      </div>
+
+      <div class="axis-row">
+        <div class="axis-lb"><span>有 renew_refresh_token 权限</span><b>最长 195 天</b></div>
+        <div class="bar">
+          <div class="seg seg-a" style="flex:15">15d</div>
+          <div class="seg seg-b" style="flex:30">30d</div>
+          <div class="seg seg-c" style="flex:150">续期 5 次 × 30d</div>
+          <div class="seg seg-d" style="flex:10">失效</div>
+        </div>
+        <div class="axis-tick"><span>0</span><span>15d</span><span>45d</span><span>195d</span></div>
+      </div>
+
+      <div class="axis-note">
+        <b>不做任何处理：第 16 天断。</b>只做刷新不做续期：第 45 天断。
+        有续期权限：第 195 天断，之后必须让用户重新授权一次。
+        这个数字要提前知道，否则到了那天你会以为是自己代码坏了。
+      </div>
+    </div>
+
+    <p class="reveal" style="margin-top:18px">
+      代码里的处理是：`ensure_token()` 在每次请求前检查，留 1 小时余量
+      （本地算着没过期、请求路上过期，同样会失败）；刷新结果立刻落盘，
+      进程重启不用重新授权。
+    </p>
+
+    <div class="code reveal"><span class="c"># 令牌落盘：token.json，已在 .gitignore 里排除</span>
+<span class="s">{</span>
+  <span class="s">"access_token"</span>: <span class="s">"act.xxx"</span>,
+  <span class="s">"refresh_token"</span>: <span class="s">"rft.xxx"</span>,
+  <span class="s">"open_id"</span>: <span class="s">"xxx"</span>,
+  <span class="s">"expires_at"</span>: <span class="n">1794000000</span>
+<span class="s">}</span></div>
+
+    <div class="warn reveal">
+      <b>这个文件绝对不能提交。</b>泄露 access_token 等于把账号接口交出去，
+      泄露 refresh_token 更严重——它能把令牌续到 195 天。
+      仓库里的 <code>.gitignore</code> 已经排除了它，但如果你手动复制过，记得检查。
+    </div>
+  </section>
+
+  <!-- ========== 02 清单 ========== -->
+  <section>
+    <div class="sh reveal"><span class="sh-n">02</span><h2>接入清单：七步，可勾选</h2></div>
+
+    <p class="reveal">
+      点一下就勾上，进度会存在本地。这是给你照着操作用的，关掉页面再打开进度还在。
+    </p>
+
+    <div class="progress-wrap reveal">
+      <span class="progress-txt" id="ptxt">0 / 7</span>
+      <div class="progress-bar"><i id="pbar"></i></div>
+    </div>
+
+    <div id="steps" class="reveal">
+      <div class="step" data-k="s1">
+        <div class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="st-t">企业主体入驻抖音开放平台</div>
+          <div class="st-d">用营业执照完成主体认证，个体工商户和公司都可以。这一步决定后面所有权限的天花板。</div>
+          <div class="st-meta"><span>1–3 天</span><span>需营业执照</span></div>
+          <div class="st-fail">用个人身份注册，后面申请互动管理权限时会直接卡住</div>
+        </div>
+      </div>
+
+      <div class="step" data-k="s2">
+        <div class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="st-t">创建「网站应用」</div>
+          <div class="st-d">类型选网站应用，不要选小程序——小程序拿到的是 ma.* 系列权限，和评论接口不在一个体系。</div>
+          <div class="st-meta"><span>当天</span><span>需回调域名</span></div>
+          <div class="st-fail">回调地址填 localhost 或 IP，审核不通过，必须是可访问的域名</div>
+        </div>
+      </div>
+
+      <div class="step" data-k="s3">
+        <div class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="st-t">应用上线转正</div>
+          <div class="st-d">测试应用无法申请正式能力，必须转正。转正需要应用有可用的功能和基本的用户说明。</div>
+          <div class="st-meta"><span>3–7 个工作日</span></div>
+          <div class="st-fail">应用介绍写得太空，审核会要求补充功能说明和界面截图</div>
+        </div>
+      </div>
+
+      <div class="step" data-k="s4">
+        <div class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="st-t">申请「互动管理」权限</div>
+          <div class="st-d">scope 是 <code>video.comment</code>，在「能力管理 → 互动管理」里申请。要写清楚用途：统一查阅并回复自己账号下的评论。</div>
+          <div class="st-meta"><span>3–10 个工作日</span><span>需场景说明</span></div>
+          <div class="st-fail">用途写成「营销获客」「批量触达」，大概率被拒。写成「客服答疑」更容易过</div>
+        </div>
+      </div>
+
+      <div class="step" data-k="s5">
+        <div class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="st-t">配置 OAuth 并拿到 code</div>
+          <div class="st-d">用户在你的页面扫码授权，回调地址会带上 code。这个 code 只能用一次，且有效期很短。</div>
+          <div class="st-meta"><span>半天</span><span>client_key / secret</span></div>
+          <div class="st-fail">把 client_secret 放在前端，等于公开泄露，必须只在服务端使用</div>
+        </div>
+      </div>
+
+      <div class="step" data-k="s6">
+        <div class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="st-t">用 code 换 token 并落盘</div>
+          <div class="st-d">调用 <code>/oauth/access_token/</code> 换 access_token 与 refresh_token，写进 <code>token.json</code>。</div>
+          <div class="st-meta"><span>1 小时</span></div>
+          <div class="st-fail">只存在内存里，进程一重启就得重新授权</div>
+        </div>
+      </div>
+
+      <div class="step" data-k="s7">
+        <div class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg></div>
+        <div>
+          <div class="st-t">填 item_id，跑 dry_run</div>
+          <div class="st-d">把要监听的视频 id 填进 <code>DouyinAdapter(client, item_ids)</code>，保持 <code>allow_public_auto=False</code>，只看草稿不发。</div>
+          <div class="st-meta"><span>当天</span></div>
+          <div class="st-fail">直接开全自动，把错误的回复批量发出去</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip reveal">
+      <b>拿 item_id 的方式：</b>视频链接里 <code>/video/</code> 后面那一串数字就是。
+      也可以从创作者中心的视频管理页复制。目前需要手动填，没有做自动拉视频列表——
+      那要额外申请 <code>video.list.bind</code>，审核成本高于收益。
+    </div>
+  </section>
+
+  <!-- ========== 03 错误码 ========== -->
+  <section>
+    <div class="sh reveal"><span class="sh-n">03</span><h2>错误码：哪些能自愈，哪些必须找人</h2></div>
+
+    <p class="reveal">
+      抖音的错误码分两类，混在一起处理会导致两种坏结果：
+      能自愈的当成致命错误（白白停摆），或者必须人工的当成可重试（死循环打接口）。
+    </p>
+
+    <table class="tbl reveal">
+      <thead>
+        <tr><th style="width:22%">错误码</th><th style="width:26%">含义</th><th style="width:20%">处理</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">0</td>
+          <td>成功</td>
+          <td><span class="badge b-ok">正常</span></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td class="mono">10008 / 2190008</td>
+          <td>access_token 过期</td>
+          <td><span class="badge b-auto">自动刷新</span></td>
+          <td>两个码平台都在用，必须都判。刷新后重试一次，只重试一次</td>
+        </tr>
+        <tr>
+          <td class="mono">10010</td>
+          <td>refresh_token 过期</td>
+          <td><span class="badge b-stop">需重新授权</span></td>
+          <td>刷新也救不回来。代码里会触发 on_reauth_needed 回调，通知你去重新扫码</td>
+        </tr>
+        <tr>
+          <td class="mono">其他业务码</td>
+          <td>权限不足 / 参数错误 / 频控</td>
+          <td><span class="badge b-stop">记录并跳过</span></td>
+          <td>看返回的 description 定位。不要盲目重试，先读错误信息</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="reveal" style="margin-top:16px">
+      代码里 <code>DouyinError.recoverable</code> 这个属性就是干这个用的：
+      <code>True</code> 表示刷新能救，<code>False</code> 表示必须人工介入。
+      上层据此决定是重试还是告警，不用在每个调用点重复判断错误码。
+    </p>
+  </section>
+
+  <!-- ========== 04 三件事 ========== -->
+  <section>
+    <div class="sh reveal"><span class="sh-n">04</span><h2>除了令牌，还有三件必须做</h2></div>
+
+    <h3 class="reveal">去重</h3>
+    <p class="reveal">
+      同一条评论会被反复拉到——除非你记住哪些已经处理过。
+      不做去重的后果是同一个用户收到三条一样的回复，这比不回复更像机器人。
+      代码里用 comment_id 落盘去重，默认保留 30 天。
+    </p>
+
+    <h3 class="reveal">限流</h3>
+    <p class="reveal">
+      接口有 QPS 限制。默认最小间隔 1 秒，看起来保守，但评论拉取本来就是低频操作——
+      真正需要控制的是「别在几秒内连打十几次」。被打频控的代价是整个账号的接口调用受影响。
+    </p>
+
+    <h3 class="reveal">翻页上限</h3>
+    <p class="reveal">
+      <code>max_pages</code> 默认 3。如果不限制，第一次接入时会把历史评论全部拉下来，
+      然后一次性生成几百条草稿——你的待确认队列会被冲垮，而且很容易触发频控。
+    </p>
+
+    <div class="code reveal"><span class="c"># 参数都在构造函数里，按实际情况调</span>
+adapter = DouyinAdapter(
+    client,
+    item_ids=[<span class="s">"7300000000000000000"</span>],
+    seen=SeenStore(<span class="s">"douyin_seen.jsonl"</span>),   <span class="c"># 去重账本</span>
+    page_size=<span class="n">20</span>,                          <span class="c"># 每页条数</span>
+    max_pages=<span class="n">3</span>,                           <span class="c"># 每轮最多翻几页</span>
+)
+
+client = DouyinClient(
+    client_key=..., client_secret=..., open_id=...,
+    token_store=TokenStore(<span class="s">"token.json"</span>),
+    min_interval=<span class="n">1.0</span>,                        <span class="c"># 最小请求间隔（秒）</span>
+)</div>
+  </section>
+
+  <!-- ========== 收尾 ========== -->
+  <section style="border-bottom:none">
+    <div class="end reveal">
+      <h3>三句话</h3>
+      <ol>
+        <li><b>抖音是「官方能力最全」，不是「最省事」。</b>
+          评论列表、回复、置顶都有，但要走完企业主体、应用转正、互动管理三道审核。
+          资质没下来也能开发——用假 transport 跑通全链路，批了直接换真接口。</li>
+        <li><b>令牌是这条链路上最容易断的地方。</b>
+          access_token 15 天、refresh_token 30 天、有续期权最长 195 天。
+          不做刷新第 16 天断，只刷新不续期第 45 天断。这个日期要提前知道。</li>
+        <li><b>去重、限流、翻页上限看着是小事，不做就跑不下去。</b>
+          它们防的不是平台，是你自己：重复回复、被频控、队列被历史评论冲垮。</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    <div>技术档案 05 · 抖音接入手册 · 配套代码 app/gateway/douyin.py</div>
+    <div>已跑通：python douyin.py（六项自检）· python -m unittest test_douyin（20 项）· python -m unittest test_gateway test_douyin（55 项）</div>
+    <div>令牌有效期为抖音开放平台公开文档口径，规则可能调整，接入前以最新文档为准。</div>
+  </footer>
+
+</div>
+
+<script>
+// 勾选清单，进度存 localStorage
+(function(){
+  var KEY = 'nexus_douyin_steps';
+  var steps = Array.prototype.slice.call(document.querySelectorAll('.step'));
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch(e) { saved = {}; }
+
+  function paint(){
+    var done = 0;
+    steps.forEach(function(s){
+      var on = !!saved[s.dataset.k];
+      s.classList.toggle('done', on);
+      if (on) done++;
+    });
+    var pct = steps.length ? Math.round(done / steps.length * 100) : 0;
+    var bar = document.getElementById('pbar');
+    var txt = document.getElementById('ptxt');
+    if (bar) bar.style.width = pct + '%';
+    if (txt) txt.textContent = done + ' / ' + steps.length;
+  }
+
+  steps.forEach(function(s){
+    s.addEventListener('click', function(){
+      var k = s.dataset.k;
+      saved[k] = !saved[k];
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch(e) {}
+      paint();
+    });
+  });
+
+  paint();
+})();
+
+// 入场
+(function(){
+  var els = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    els.forEach(function(el){ el.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if (!e.isIntersecting) return;
+      var p = e.target.parentElement;
+      var sibs = p ? Array.prototype.filter.call(p.children, function(c){
+        return c.classList && c.classList.contains('reveal');
+      }) : [];
+      var i = sibs.indexOf(e.target);
+      setTimeout(function(){ e.target.classList.add('in'); }, i > 0 ? Math.min(i,3) * 80 : 0);
+      io.unobserve(e.target);
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -6% 0px' });
+  els.forEach(function(el){ io.observe(el); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>阶段规划与无审核运行方案</title>
+<style>
+  :root{
+    --paper:#FBFAF7; --card:#FFFFFF; --card-2:#F5F3EE;
+    --ink:#1C1B18; --ink-2:#3D3B35; --ink-soft:#6B675E; --muted:#96918A;
+    --line:#E5E1D8; --line-2:#EFECE4;
+    --red:#B23B2E; --red-bg:#FBF0ED;
+    --amber:#9A6A12; --amber-bg:#FBF4E4;
+    --green:#2E6B4F; --green-bg:#EDF5F0;
+    --blue:#2F5D8C; --blue-bg:#EDF2F8;
+    --f-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --f-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--paper);color:var(--ink);font-family:var(--f-sans);
+    font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1000px;margin:0 auto;padding:0 32px 120px}
+
+  .top{
+    display:flex;justify-content:space-between;align-items:baseline;
+    padding:26px 0 18px;border-bottom:1px solid var(--line);
+    font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;
+    color:var(--muted);text-transform:uppercase;
+  }
+  .top b{color:var(--ink);font-weight:600}
+
+  .hero{padding:60px 0 44px;border-bottom:1px solid var(--line)}
+  .kicker{
+    font-family:var(--f-mono);font-size:10.5px;letter-spacing:.16em;
+    color:var(--red);text-transform:uppercase;margin-bottom:20px;
+  }
+  h1{
+    font-size:42px;line-height:1.2;font-weight:650;letter-spacing:-.02em;
+    max-width:22ch;margin-bottom:24px;
+  }
+  .lede{font-size:16.5px;line-height:1.85;color:var(--ink-2);max-width:64ch}
+  .lede b{color:var(--ink);font-weight:620}
+
+  section{padding:60px 0 0}
+  .sec-h{
+    display:flex;align-items:baseline;gap:14px;
+    margin-bottom:10px;padding-bottom:14px;border-bottom:1px solid var(--line);
+  }
+  .sec-n{
+    font-family:var(--f-mono);font-size:11px;color:var(--muted);
+    letter-spacing:.1em;flex-shrink:0;
+  }
+  h2{font-size:22px;font-weight:640;letter-spacing:-.01em;line-height:1.4}
+  .sec-sub{font-size:14px;color:var(--ink-soft);margin:16px 0 26px;max-width:68ch}
+  h3{font-size:15.5px;font-weight:640;margin:32px 0 12px}
+
+  p{margin-bottom:14px;color:var(--ink-2);max-width:68ch}
+  p b{color:var(--ink);font-weight:620}
+  code{
+    font-family:var(--f-mono);font-size:12.5px;background:var(--card-2);
+    padding:1.5px 5px;border-radius:3px;color:var(--ink);
+  }
+
+  /* 三真一假 */
+  .truth{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+    background:var(--line);border:1px solid var(--line);margin:28px 0;
+  }
+  .tr{background:var(--card);padding:22px 20px}
+  .tr .lbl{
+    font-family:var(--f-mono);font-size:9.5px;letter-spacing:.1em;
+    text-transform:uppercase;margin-bottom:10px;color:var(--green);
+  }
+  .tr.fake .lbl{color:var(--red)}
+  .tr b{display:block;font-size:14px;margin-bottom:6px;font-weight:640}
+  .tr p{font-size:12.5px;line-height:1.65;color:var(--ink-soft);margin:0}
+
+  /* 路径表 */
+  table{width:100%;border-collapse:collapse;margin:10px 0 6px;font-size:13.5px}
+  th{
+    text-align:left;font-family:var(--f-mono);font-size:10px;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    font-weight:500;padding:0 12px 10px 0;border-bottom:1px solid var(--line);
+  }
+  td{
+    padding:14px 12px 14px 0;border-bottom:1px solid var(--line-2);
+    vertical-align:top;line-height:1.6;
+  }
+  tr:last-child td{border-bottom:none}
+  td:first-child{width:26px;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+  .nm{font-weight:620;color:var(--ink);display:block;margin-bottom:3px}
+  .de{color:var(--ink-soft);font-size:12.5px}
+  .tag{
+    display:inline-block;font-family:var(--f-mono);font-size:9.5px;
+    letter-spacing:.06em;padding:2px 7px;border-radius:2px;
+    white-space:nowrap;text-transform:uppercase;
+  }
+  .tag.rec{background:var(--green-bg);color:var(--green)}
+  .tag.ok{background:var(--blue-bg);color:var(--blue)}
+  .tag.no{background:var(--red-bg);color:var(--red)}
+  .tag.wait{background:var(--amber-bg);color:var(--amber)}
+
+  /* 命令块 */
+  .cmd{
+    background:#232220;color:#E8E5DE;border-radius:4px;padding:16px 18px;
+    font-family:var(--f-mono);font-size:12.5px;line-height:1.9;
+    overflow-x:auto;margin:16px 0 20px;
+  }
+  .cmd .c{color:#8A8578}
+  .cmd .g{color:#8FC7A8}
+
+  /* 阶段时间轴 */
+  .phase{
+    display:grid;grid-template-columns:88px 1fr;gap:24px;
+    padding:24px 0;border-bottom:1px solid var(--line-2);
+  }
+  .phase:last-child{border-bottom:none}
+  .ph-l{
+    font-family:var(--f-mono);font-size:11px;color:var(--muted);
+    letter-spacing:.08em;padding-top:3px;
+  }
+  .ph-l b{
+    display:block;font-size:19px;color:var(--ink);letter-spacing:-.01em;
+    margin-bottom:4px;font-weight:600;
+  }
+  .ph-r h3{margin:0 0 8px;font-size:15.5px}
+  .ph-r p{font-size:13.5px;color:var(--ink-2);margin-bottom:10px;max-width:62ch}
+  .ph-meta{
+    display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;
+  }
+  .chip{
+    font-family:var(--f-mono);font-size:9.5px;padding:3px 8px;
+    border:1px solid var(--line);color:var(--ink-soft);border-radius:2px;
+    letter-spacing:.04em;
+  }
+  .chip.now{border-color:var(--green);color:var(--green);background:var(--green-bg)}
+  .chip.gate{border-color:var(--amber);color:var(--amber);background:var(--amber-bg)}
+
+  .accept{
+    background:var(--card-2);border-left:2px solid var(--green);
+    padding:13px 16px;margin-top:12px;font-size:13px;line-height:1.7;
+    color:var(--ink-2);
+  }
+  .accept b{color:var(--ink);font-size:11px;font-family:var(--f-mono);
+    letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:4px}
+
+  .note{
+    background:var(--card-2);border-left:2px solid var(--red);
+    padding:16px 18px;margin:24px 0;font-size:13.5px;line-height:1.75;
+    color:var(--ink-2);
+  }
+  .note b{color:var(--ink)}
+  .note.green{border-left-color:var(--green)}
+  .note.amber{border-left-color:var(--amber)}
+
+  footer{
+    margin-top:70px;padding-top:22px;border-top:1px solid var(--line);
+    font-family:var(--f-mono);font-size:10.5px;color:var(--muted);
+    letter-spacing:.05em;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+  }
+
+  @media(max-width:780px){
+    .wrap{padding:0 20px 80px}
+    h1{font-size:31px}
+    .truth{grid-template-columns:1fr}
+    .phase{grid-template-columns:1fr;gap:8px}
+    td:nth-child(3),th:nth-child(3){display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <span>自动回复 &amp; 获客 · <b>阶段规划</b></span>
+    <span>2026-11-11</span>
+  </div>
+
+  <div class="hero">
+    <div class="kicker">Roadmap / 无审核前置运行</div>
+    <h1>把四件事做真，只剩一件事假</h1>
+    <p class="lede">
+      没有经过平台审核，就不可能有「往抖音评论区发消息」的权限——这是规则问题，不是技术问题。
+      但一个系统要能演示、能验证、能说服人，并不需要那最后一步。
+      <b>把数据、判定、生成、投递四段都做成真的，只把终点换掉</b>，
+      它就是一个真在运行的系统，而不是一段录像。
+    </p>
+  </div>
+
+  <!-- 01 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">01</span>
+      <h2>哪一段可以真，哪一段必须假</h2>
+    </div>
+    <p class="sec-sub">
+      演示的可信度取决于「假的那一段有多小」。现在的做法是把假的压到只剩一个动作。
+    </p>
+
+    <div class="truth">
+      <div class="tr">
+        <div class="lbl">Real</div>
+        <b>数据</b>
+        <p>评论快照来自真实评论导出。字段结构就是接口返回的结构，不是编的。</p>
+      </div>
+      <div class="tr">
+        <div class="lbl">Real</div>
+        <b>判定与生成</b>
+        <p>风控、激活度打分、语料匹配、话术风险分级，全部原样跑，一行没改。</p>
+      </div>
+      <div class="tr">
+        <div class="lbl">Real</div>
+        <b>投递与到达</b>
+        <p>消息真的发出去，真的到达。发到你的企微群 / QQ 群 / 本地文件。</p>
+      </div>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-soft);margin-top:-8px">
+      唯一假的是<b>终点</b>：本该发到抖音评论区的那条回复，发到了你自己能收到的地方。
+    </p>
+  </section>
+
+  <!-- 02 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">02</span>
+      <h2>四条路径，按推荐度排</h2>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th></th><th>路径</th><th>数据 → 终点</th><th>风险</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>A</td>
+          <td><span class="nm">回放 + 本地文件</span><span class="de">零配置，<code>python demo_run.py</code> 直接跑。写完就能在终端看到全部结局。</span></td>
+          <td class="de">评论快照 → JSONL</td>
+          <td><span class="tag rec">无</span></td>
+        </tr>
+        <tr>
+          <td>B</td>
+          <td><span class="nm">回放 + 群机器人</span><span class="de">建个群、加个机器人、拿一个 URL，三分钟。手机能收到消息。</span></td>
+          <td class="de">评论快照 → 企微/钉钉/飞书群</td>
+          <td><span class="tag rec">无</span></td>
+        </tr>
+        <tr>
+          <td>C</td>
+          <td><span class="nm">回放 + QQ 群</span><span class="de">起一个 NapCat，用小号把消息发到自己的 QQ 群。展示效果最接近真实聊天。</span></td>
+          <td class="de">评论快照 → QQ 群</td>
+          <td><span class="tag ok">低</span></td>
+        </tr>
+        <tr>
+          <td>D</td>
+          <td><span class="nm">公开接口读 + 群机器人</span><span class="de">直接抓网页版公开评论。数据最新，但要绕过请求签名。</span></td>
+          <td class="de">网页公开接口 → 群</td>
+          <td><span class="tag no">中</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="margin-top:18px">
+      <b>A 和 B 已经能用了。</b>「回放」不等于「假数据」——快照里的每一条都是真实评论，
+      只是取了某一个时间点的切片。判定和生成对这份切片的反应，与对实时数据的反应是一样的。
+    </p>
+
+    <h3>为什么把 D 排在最后</h3>
+    <p>
+      网页版评论接口靠请求签名（<code>X-Bogus</code> / <code>a_bogus</code>）鉴权，
+      签名算法随版本变化。绕它的代价是：随时失效、需要维护登录态、触发风控验证、
+      以及一个更根本的问题——<b>它没有获得许可</b>。
+    </p>
+    <p>
+      只读自己的公开评论，性质比写操作轻得多，用于自用观察是可以理解的。
+      但把它当作产品的地基，等于把稳定性押在一个随时会变、且明确不欢迎你的接口上。
+      这一条写在这里是为了说清楚边界，不是推荐路径。
+    </p>
+
+    <div class="note green">
+      <b>现在就能跑的三条命令。</b>
+      不联网、不需要任何账号、不需要审核。
+    </div>
+
+    <div class="cmd">
+<span class="c"># 1. 回放完整链路，本地文件接收</span>
+python demo_run.py --reasons
+
+<span class="c"># 2. 投到企业微信群（把 URL 换成你自己的机器人地址）</span>
+python demo_run.py --webhook https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx
+
+<span class="c"># 3. 投到飞书</span>
+python demo_run.py --webhook https://open.feishu.cn/open-apis/bot/v2/hook/xxx --style feishu
+    </div>
+
+    <p style="font-size:13px;color:var(--ink-soft)">
+      实测输出：11 条评论 → 6 条投递成功、2 条拦截、3 条沉默、0 条无草稿。
+      每一条都打印判定依据，能直接指着屏幕解释「为什么这条回、那条不回」。
+    </p>
+  </section>
+
+  <!-- 03 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">03</span>
+      <h2>六个阶段，每个都是能独立验收的小闭环</h2>
+    </div>
+    <p class="sec-sub">
+      划分原则不是「按功能」，是「按能不能单独跑通并验收」。
+      每个阶段结束时，你手上应该有一个能演示、能测、能判断好不好的东西，
+      而不是一堆写了一半的模块。
+    </p>
+
+    <div class="phase">
+      <div class="ph-l"><b>M0</b>演示闭环</div>
+      <div class="ph-r">
+        <h3>把整条链路跑到「手机能收到」</h3>
+        <p>
+          回放真实评论 → 判定 → 生成 → 投递到群机器人。这一阶段不碰任何平台接口，
+          目的是先把「产品该长什么样」定下来，而不是先解决接入。
+        </p>
+        <div class="accept"><b>验收</b>
+          11 条评论跑完，四类结局齐全；群机器人收到 6 条消息；屏幕上的判定理由能逐条解释。
+        </div>
+        <div class="ph-meta">
+          <span class="chip now">已完成</span>
+          <span class="chip">无外部依赖</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-l"><b>M1</b>判定校准</div>
+      <div class="ph-r">
+        <h3>用真实评论量出「该回 / 不该回」的准确率</h3>
+        <p>
+          从自己账号导出 100 条真实评论（手工导出即可，不需要接口），
+          人工标一遍「这条我该不该回」，跑判定，算一致率。
+          这一步产出的不是功能，是一个数字——它决定后面要不要继续投。
+        </p>
+        <div class="accept"><b>验收</b>
+          100 条样本上，判定与人工标注一致率 ≥ 80%。
+          达不到就调语料和权重，调到达标为止，不要往下走。
+        </div>
+        <div class="ph-meta">
+          <span class="chip">需真实评论</span>
+          <span class="chip gate">门槛：一致率 80%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-l"><b>M2</b>生成质量</div>
+      <div class="ph-r">
+        <h3>让草稿达到「愿意直接发」的水平</h3>
+        <p>
+          接真实模型、补多轮上下文、做话术去重。判定对了但话不像人说，
+          前面所有工作都白做。这一阶段的主要工作不是写代码，是养语料。
+        </p>
+        <div class="accept"><b>验收</b>
+          随便抽 20 条草稿，其中至少 12 条你会原样发出去（不改措辞）。
+          达不到就继续补语料，不要开自动。
+        </div>
+        <div class="ph-meta">
+          <span class="chip">需模型 API</span>
+          <span class="chip gate">门槛：采纳率 60%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-l"><b>M3</b>真实接入</div>
+      <div class="ph-r">
+        <h3>换上真接口，先只读一周</h3>
+        <p>
+          补 OAuth 落地页、回调域名、作品自动发现。接口换真之后，
+          第一周只拉评论、只出草稿、不发送。这一步用来暴露「假数据永远暴露不了的问题」：
+          翻页、限流、重复推送、二级评论。
+        </p>
+        <div class="accept"><b>验收</b>
+          连续 7 天无人工干预，不漏评论、不重复处理、不自回自答；
+          失败时有告警，不是安静停摆。
+        </div>
+        <div class="ph-meta">
+          <span class="chip">需平台审核</span>
+          <span class="chip gate">门槛：7 天稳定</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-l"><b>M4</b>分级放权</div>
+      <div class="ph-r">
+        <h3>让系统自己挣发送权</h3>
+        <p>
+          M1 到 M3 都过了，才轮到打开自动发送。从低风险话术开始，
+          每小时上限 5 条，每一次人工驳回都扣额度。价格、承诺、售后永远人工。
+        </p>
+        <div class="accept"><b>验收</b>
+          自动发送占比稳步上升，同时驳回率不上升。
+          驳回率一旦抬头，立刻退回全人工。
+        </div>
+        <div class="ph-meta">
+          <span class="chip gate">前置：M1–M3 全部达标</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-l"><b>M5</b>规模化</div>
+      <div class="ph-r">
+        <h3>第二个账号、第二个平台</h3>
+        <p>
+          多账号隔离、私信能力、数据看板、审计留痕。
+          判据很简单：接第二个账号时，核心代码改了几行。改得越多，说明前面的抽象没做对。
+        </p>
+        <div class="accept"><b>验收</b>
+          新增一个账号只改配置，不改 <code>gateway.py</code>。
+        </div>
+        <div class="ph-meta">
+          <span class="chip">需企业号（私信）</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">04</span>
+      <h2>顺序不能换的原因</h2>
+    </div>
+
+    <p>
+      这条路线有一个明确的先后逻辑：<b>先证明判断对，再证明话说得好，最后才给发送权。</b>
+      反过来做——先接接口、先开自动——会出现一种很难排查的状态：
+      系统每天在发消息，但没人知道其中多少条是错的，因为没有人再逐条看了。
+    </p>
+
+    <div class="note amber">
+      <b>M1 和 M2 是整条路线里最容易被跳过、也最不该跳过的两步。</b>
+      它们没有「接上了」的快感，产出物只是两个数字（一致率 80%、采纳率 60%）。
+      但正是这两个数字决定了后面要不要继续投人力和钱。
+      跳过它们直接进 M3，等于用一个还没校准的系统去消耗真实用户。
+    </div>
+
+    <p>
+      M0 之所以放在最前面，是因为它最便宜：不需要审核、不需要模型、不需要服务器。
+      一个下午就能看到完整效果，也就能最早发现「这个产品形态是不是我想要的」。
+    </p>
+  </section>
+
+  <!-- 05 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">05</span>
+      <h2>「尽可能回复」这条语义落在哪</h2>
+    </div>
+    <p class="sec-sub">
+      需求从「被 @ 就自动回」改成「评论区提到我的人尽量回」，这不只是措辞变化，
+      判定层的实现跟着变了。
+    </p>
+
+    <p>
+      原来的写法是被提及时直接返回满分，等于强制回复。那意味着「@我 6」也会发出去——
+      在公开评论区，这比不回更像机器人。
+    </p>
+    <p>
+      现在改成高权重加分（+0.65）并豁免两项扣分（未被点名、刚回复过），
+      结果是被点名且说了事的一律回，被点名但没内容的不回：
+    </p>
+
+    <table>
+      <thead><tr><th></th><th>评论</th><th>分数</th><th>结局</th></tr></thead>
+      <tbody>
+        <tr><td></td><td>@我 这个多少钱</td><td class="de">1.00</td><td><span class="tag rec">回复</span></td></tr>
+        <tr><td></td><td>@我 承重多少</td><td class="de">1.00</td><td><span class="tag rec">回复</span></td></tr>
+        <tr><td></td><td>@我 求链接</td><td class="de">1.00</td><td><span class="tag rec">回复</span></td></tr>
+        <tr><td></td><td>@我 能便宜点吗</td><td class="de">1.00</td><td><span class="tag no">拦截（议价）</span></td></tr>
+        <tr><td></td><td>@我 好看</td><td class="de">0.65</td><td><span class="tag rec">回复</span></td></tr>
+        <tr><td></td><td>@我 贵</td><td class="de">0.45</td><td><span class="tag wait">观望</span></td></tr>
+        <tr><td></td><td>@我 6 ／ @我 嗯</td><td class="de">0.00</td><td><span class="tag wait">沉默</span></td></tr>
+      </tbody>
+    </table>
+
+    <p style="margin-top:16px">
+      注意第四行：被点名要报价，判定说「回」，但风控层先拦下来。
+      <b>两个层管的是不同的事</b>——判定管「该不该开口」，风控管「能不能说这句」。
+      合并成一层，就会出现「因为怕报价，所以连问价都不回」。
+    </p>
+    <p>
+      第六行是「尽量」这个词的全部含义：一个字的「贵」能跨过起始分但不够成一句话，
+      于是停在观望而不是硬凑一句。第七行的「6」「嗯」连观望都不用，直接沉默。
+    </p>
+
+    <h3>顺带修掉的一个缺陷</h3>
+    <p>
+      <code>necessity.py</code> 里有一处用了 <code>_lcs_len</code> 却没导入，
+      只要传入「最近几条消息」的上下文就会 <code>NameError</code>。
+      现有调用方都没传这个参数，所以它一直没暴露——这类问题在接入真实数据、
+      开始用上下文的第一个星期就会出现。
+    </p>
+  </section>
+
+  <footer>
+    <span>docs/07 · 阶段规划与无审核运行</span>
+    <span>130 项测试通过 · 回放 11 条 → 6 投递 / 2 拦截 / 3 沉默</span>
+  </footer>
+
+</div>
+<script>
+(function () {
+  var items = document.querySelectorAll('.phase, .tr, tbody tr');
+  if (!('IntersectionObserver' in window)) return;
+  items.forEach(function (el) {
+    el.style.opacity = 0;
+    el.style.transform = 'translateY(8px)';
+    el.style.transition = 'opacity .4s ease, transform .4s ease';
+  });
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e, i) {
+      if (!e.isIntersecting) return;
+      var el = e.target;
+      setTimeout(function () {
+        el.style.opacity = 1;
+        el.style.transform = 'none';
+      }, i * 40);
+      io.unobserve(el);
+    });
+  }, { threshold: 0.08 });
+  items.forEach(function (el) { io.observe(el); });
+})();
+</script>
+</body>
+</html>

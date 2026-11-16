@@ -1,0 +1,58 @@
+{
+  "_README": "选择器按顺序尝试，任一命中即停。className/text 是通用策略，加 viewId 可提升准确度与速度。所有值必须用真机 dump 后校准，下面的 className 策略在多数 App 上可用，但不保证。",
+
+  "com.tencent.mobileqq": {
+    "messageList": [
+      { "by": "className", "value": "androidx.recyclerview.widget.RecyclerView" }
+    ],
+    "message": [
+      { "by": "className", "value": "android.widget.TextView" }
+    ],
+    "input": [
+      { "by": "className", "value": "android.widget.EditText", "pick": "last" }
+    ],
+    "send": [
+      { "by": "text", "value": "发送" },
+      { "by": "contentDesc", "value": "发送" }
+    ]
+  },
+
+  "com.tencent.mm": {
+    "messageList": [
+      { "by": "className", "value": "androidx.recyclerview.widget.RecyclerView" }
+    ],
+    "message": [
+      { "by": "className", "value": "android.widget.TextView" }
+    ],
+    "input": [
+      { "by": "className", "value": "android.widget.EditText", "pick": "last" }
+    ],
+    "send": [
+      { "by": "text", "value": "发送" },
+      { "by": "contentDesc", "value": "发送" }
+    ]
+  },
+
+  "_template": {
+    "_说明": "新接一个 App 时复制这段，把 key 换成目标包名，然后按下面的步骤校准。",
+    "_步骤": [
+      "1. 手机开启开发者选项 → USB 调试",
+      "2. adb shell uiautomator dump /sdcard/ui.xml && adb pull /sdcard/ui.xml",
+      "3. 在 ui.xml 里搜索 EditText，看它的 resource-id，填进 input 的 viewId",
+      "4. 搜索发送按钮的 text 或 content-desc，填进 send",
+      "5. 找到消息列表容器的 class 或 resource-id，填进 messageList"
+    ],
+    "messageList": [
+      { "by": "className", "value": "androidx.recyclerview.widget.RecyclerView" }
+    ],
+    "message": [
+      { "by": "className", "value": "android.widget.TextView" }
+    ],
+    "input": [
+      { "by": "className", "value": "android.widget.EditText", "pick": "last" }
+    ],
+    "send": [
+      { "by": "text", "value": "发送" }
+    ]
+  }
+}

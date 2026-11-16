@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS 本地控制台 · 假数据模式</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F1F2F0;
+  --card:#FFFFFF;
+  --card-2:#F7F8F6;
+  --ink:#14171A;
+  --ink-2:#333B3F;
+  --muted:#6E7679;
+  --line:#DBDFDB;
+  --line-2:#E8EBE7;
+
+  --ok:#17795E;      --ok-bg:#DDEEE6;
+  --wait:#B4690E;    --wait-bg:#F7E9D3;
+  --stop:#A3291C;    --stop-bg:#F6DCD8;
+  --quiet:#6E7679;   --quiet-bg:#E9EBE8;
+  --accent:#1C5C8A;
+
+  --f-sans:"Public Sans","Source Han Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  --f-mono:"JetBrains Mono","Consolas",monospace;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--f-sans);
+  font-size:14px;line-height:1.65;-webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+
+/* ---------- 顶栏 ---------- */
+.top{
+  position:sticky;top:0;z-index:40;background:rgba(241,242,240,.96);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--ink);
+}
+.top-in{
+  max-width:1280px;margin:0 auto;padding:12px 22px;
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+}
+.brand{display:flex;align-items:baseline;gap:9px}
+.brand b{font-size:15px;letter-spacing:-.01em}
+.brand span{
+  font-family:var(--f-mono);font-size:9.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);
+}
+.meta{
+  display:flex;gap:14px;flex-wrap:wrap;
+  font-family:var(--f-mono);font-size:10.5px;color:var(--muted);
+}
+.meta b{color:var(--ink);font-weight:500}
+.meta .dot{width:5px;height:5px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:middle}
+.acts{margin-left:auto;display:flex;gap:8px;align-items:center}
+.btn{
+  font-size:12px;font-weight:500;padding:7px 14px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink-2);border-radius:5px;
+  transition:all .14s var(--ease);white-space:nowrap;
+}
+.btn:hover{border-color:var(--ink);color:var(--ink)}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.primary:hover{background:#000}
+.btn.ghost{background:transparent}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.sm{padding:4px 10px;font-size:11px}
+.auto{
+  display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);
+  font-family:var(--f-mono);user-select:none;cursor:pointer;
+}
+.auto input{accent-color:var(--ink);cursor:pointer}
+
+/* ---------- 布局 ---------- */
+.main{
+  max-width:1280px;margin:0 auto;padding:20px 22px 60px;
+  display:grid;grid-template-columns:minmax(0,1fr) 336px;gap:20px;align-items:start;
+}
+
+/* ---------- 消息流 ---------- */
+.stream-h{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.stream-h h2{font-size:14px;font-weight:600;letter-spacing:-.01em}
+.stream-h span{font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+
+.card{
+  background:var(--card);border:1px solid var(--line);border-left:3px solid var(--quiet);
+  padding:13px 15px;margin-bottom:9px;transition:box-shadow .16s var(--ease);
+}
+.card:hover{box-shadow:0 2px 10px -4px rgba(20,23,26,.14)}
+.card.f-pending{border-left-color:var(--wait)}
+.card.f-blocked{border-left-color:var(--stop)}
+.card.f-sent{border-left-color:var(--ok)}
+.card.f-silent,.card.f-no_draft{border-left-color:var(--quiet)}
+
+.c-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.av{
+  width:26px;height:26px;border-radius:6px;background:var(--ink);color:#fff;
+  display:grid;place-items:center;font-size:11px;font-weight:600;flex:none;
+}
+.who{min-width:0}
+.who b{font-size:12.5px;font-weight:600;display:block;line-height:1.3}
+.who span{font-family:var(--f-mono);font-size:9.5px;color:var(--muted)}
+.badge{
+  margin-left:auto;font-family:var(--f-mono);font-size:9.5px;font-weight:500;
+  padding:2px 8px;border-radius:3px;letter-spacing:.03em;white-space:nowrap;flex:none;
+}
+.b-pending{background:var(--wait-bg);color:var(--wait)}
+.b-blocked{background:var(--stop-bg);color:var(--stop)}
+.b-sent{background:var(--ok-bg);color:var(--ok)}
+.b-silent,.b-no_draft{background:var(--quiet-bg);color:var(--quiet)}
+
+.say{
+  font-size:13.5px;color:var(--ink);line-height:1.6;padding:7px 10px;
+  background:var(--card-2);border-radius:4px;margin-bottom:8px;
+}
+.draft{
+  font-size:13px;line-height:1.62;color:var(--ink-2);padding:8px 10px;
+  border-left:2px solid var(--ok);background:#F4FAF7;
+}
+.draft .lb{
+  font-family:var(--f-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ok);display:block;margin-bottom:3px;
+}
+.block-reason{
+  font-size:12.5px;color:var(--stop);padding:7px 10px;background:var(--stop-bg);
+  line-height:1.55;
+}
+.silent-reason{
+  font-family:var(--f-mono);font-size:10.5px;color:var(--muted);
+  padding:5px 0 0;line-height:1.5;
+}
+
+.why{
+  margin-top:9px;padding-top:8px;border-top:1px dashed var(--line-2);
+  display:none;
+}
+.card.open .why{display:block}
+.why-row{
+  display:flex;gap:8px;align-items:baseline;font-size:11.5px;
+  padding:2px 0;line-height:1.55;
+}
+.why-row .k{
+  font-family:var(--f-mono);font-size:9.5px;color:var(--muted);
+  min-width:52px;flex:none;letter-spacing:.03em;
+}
+.why-row .v{color:var(--ink-2)}
+.why-row code{
+  font-family:var(--f-mono);font-size:10.5px;background:var(--card-2);
+  padding:0 4px;border-radius:2px;color:var(--ink);
+}
+.reasons{list-style:none;margin:4px 0 0 60px}
+.reasons li{
+  font-size:11px;color:var(--muted);line-height:1.65;
+  font-family:var(--f-mono);padding-left:9px;position:relative;
+}
+.reasons li::before{content:"·";position:absolute;left:0;color:var(--wait)}
+.more{
+  font-family:var(--f-mono);font-size:9.5px;color:var(--accent);
+  margin-top:6px;display:inline-block;letter-spacing:.03em;
+}
+.more:hover{text-decoration:underline}
+
+/* ---------- 右栏 ---------- */
+.side{display:grid;gap:14px;position:sticky;top:74px}
+.panel{background:var(--card);border:1px solid var(--line)}
+.panel-h{
+  display:flex;align-items:center;gap:8px;padding:10px 14px;
+  border-bottom:1px solid var(--line-2);
+}
+.panel-h h3{font-size:12.5px;font-weight:600;letter-spacing:-.005em}
+.panel-h .n{
+  font-family:var(--f-mono);font-size:10px;color:var(--muted);
+  background:var(--card-2);padding:1px 6px;border-radius:3px;
+}
+.panel-h .r{margin-left:auto}
+
+/* ---------- 队列项 ---------- */
+.qitem{padding:11px 14px;border-bottom:1px solid var(--line-2)}
+.qitem:last-child{border-bottom:none}
+.q-who{
+  display:flex;align-items:baseline;gap:7px;margin-bottom:5px;
+}
+.q-who b{font-size:12.5px;font-weight:600;color:var(--ink)}
+.q-who span{font-family:var(--f-mono);font-size:9px;color:var(--muted)}
+.q-in{
+  font-size:12.5px;line-height:1.55;color:var(--ink);padding:6px 9px;
+  background:var(--card-2);border-radius:4px;margin-bottom:6px;
+  border-left:2px solid var(--line);
+}
+.q-draft{
+  font-size:12px;line-height:1.55;color:var(--ink-2);padding:7px 9px;
+  background:#F4FAF7;border-radius:4px;margin-bottom:8px;
+  border-left:2px solid var(--ok);
+}
+.q-draft em{
+  font-family:var(--f-mono);font-size:9px;color:var(--ok);
+  display:block;font-style:normal;margin-bottom:2px;letter-spacing:.05em;
+}
+.q-acts{display:flex;gap:6px}
+.q-acts button{flex:1}
+.empty{
+  padding:22px 14px;text-align:center;font-size:12px;color:var(--muted);line-height:1.7;
+}
+
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line-2)}
+.stat{background:var(--card);padding:11px 14px}
+.stat b{
+  font-family:var(--f-mono);font-size:19px;font-weight:500;display:block;line-height:1.1;
+}
+.stat span{font-size:10.5px;color:var(--muted);display:block;margin-top:2px}
+.stat.s-wait b{color:var(--wait)}
+.stat.s-stop b{color:var(--stop)}
+.stat.s-ok b{color:var(--ok)}
+
+.posted-item{
+  padding:9px 14px;border-bottom:1px solid var(--line-2);
+  font-size:11.5px;line-height:1.55;
+}
+.posted-item:last-child{border-bottom:none}
+.posted-item .t{
+  font-family:var(--f-mono);font-size:9.5px;color:var(--muted);
+  display:block;margin-bottom:2px;
+}
+
+/* ---------- 底部提示 ---------- */
+.toast{
+  position:fixed;left:50%;bottom:26px;transform:translate(-50%,10px);
+  background:var(--ink);color:#fff;padding:9px 18px;border-radius:6px;
+  font-size:12px;opacity:0;pointer-events:none;transition:all .2s var(--ease);
+  z-index:90;box-shadow:0 8px 24px -8px rgba(0,0,0,.4);
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+.hint{
+  max-width:1280px;margin:0 auto;padding:0 22px 30px;
+  font-family:var(--f-mono);font-size:10px;color:var(--muted);line-height:1.9;
+}
+.hint b{color:var(--ink)}
+
+@media(max-width:1000px){
+  .main{grid-template-columns:1fr}
+  .side{position:static;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+}
+@media(max-width:600px){
+  .top-in,.main{padding-left:14px;padding-right:14px}
+  .meta{width:100%;order:3}
+  .acts{width:100%;justify-content:flex-end}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-in">
+    <div class="brand">
+      <b>NEXUS 控制台</b>
+      <span>fake data · no network</span>
+    </div>
+    <div class="meta" id="meta">
+      <span><span class="dot" style="background:#6E7679"></span>加载中</span>
+    </div>
+    <div class="acts">
+      <label class="auto"><input type="checkbox" id="apToggle">分级放权</label>
+      <label class="auto"><input type="checkbox" id="autoRef" checked>自动刷新</label>
+      <button class="btn ghost" id="btnReset">重置</button>
+      <button class="btn primary" id="btnRun">跑一轮</button>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <section>
+    <div class="stream-h">
+      <h2>消息流</h2>
+      <span id="streamCount">—</span>
+    </div>
+    <div id="cards">
+      <div class="empty" style="background:#fff;border:1px solid var(--line)">
+        还没有数据。点右上角「跑一轮」开始。
+      </div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="panel">
+      <div class="panel-h">
+        <h3>待确认</h3>
+        <span class="n" id="pendCount">0</span>
+        <span class="r"><button class="btn sm" id="btnAll">全部发送</button></span>
+      </div>
+      <div id="queue">
+        <div class="empty">队列是空的</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><h3>本轮统计</h3></div>
+      <div class="stat-grid">
+        <div class="stat"><b id="stTotal">0</b><span>处理总数</span></div>
+        <div class="stat s-wait"><b id="stPending">0</b><span>待确认</span></div>
+        <div class="stat"><b id="stSilent">0</b><span>沉默</span></div>
+        <div class="stat s-stop"><b id="stBlocked">0</b><span>拦截</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">
+        <h3>已发出</h3>
+        <span class="n" id="postCount">0</span>
+      </div>
+      <div id="posted">
+        <div class="empty">还没有发送任何回复</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="hint">
+  这些数据全部是模拟的，<b>不会对外发出任何消息</b>。
+  反复点「跑一轮」可以观察去重：第二轮只会新增未处理过的评论。
+  改动 <b>persona.json</b> 后点「重置」即可生效。
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const openSet = new Set();     // 记住哪些卡片是展开的，刷新时不丢状态
+
+function toast(msg){
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 1700);
+}
+
+async function api(path, body){
+  const opt = body === undefined ? {} : {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  };
+  const r = await fetch(path, opt);
+  return r.json();
+}
+
+/* ---------- 渲染 ---------- */
+const LABEL = {pending:'待确认', blocked:'拦截', silent:'沉默', sent:'已发出', no_draft:'无草稿'};
+
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function renderTrace(t, i){
+  const key = `${t.channel}|${t.sender}|${t.text}|${i}`;
+  const isOpen = openSet.has(key);
+  const fin = t.final || 'silent';
+
+  let body = '';
+  if (fin === 'blocked') {
+    body = `<div class="block-reason">${esc(t.guard_reason || '命中边界规则')}</div>`;
+  } else if (fin === 'silent') {
+    body = `<div class="silent-reason">判定为不回复 · ${esc((t.necessity_reasons || [])[0] || '')}</div>`;
+  } else if (fin === 'no_draft') {
+    body = `<div class="silent-reason">引擎给不出合适草稿，已转人工</div>`;
+  } else if (t.draft) {
+    body = `<div class="draft"><span class="lb">草稿</span>${esc(t.draft)}</div>`;
+  }
+
+  const reasons = (t.necessity_reasons || [])
+    .map(r => `<li>${esc(r)}</li>`).join('');
+
+  return `
+  <div class="card f-${fin} ${isOpen ? 'open' : ''}" data-key="${esc(key)}">
+    <div class="c-top">
+      <div class="av">${esc((t.sender || '?').slice(0,1))}</div>
+      <div class="who">
+        <b>${esc(t.sender)}</b>
+        <span>${esc(t.channel)} · ${esc(t.surface)}${t.thread ? ' · ' + esc(t.thread) : ''}</span>
+      </div>
+      <span class="badge b-${fin}">${LABEL[fin] || fin}</span>
+    </div>
+    <div class="say">${esc(t.text)}</div>
+    ${body}
+    <a class="more" data-toggle="${esc(key)}">为什么这样处理 ›</a>
+    <div class="why">
+      <div class="why-row"><span class="k">风控闸门</span><span class="v">
+        <code>${esc(t.guard || '—')}</code> ${esc(t.guard_reason || '')}</span></div>
+      <div class="why-row"><span class="k">激活度</span><span class="v">
+        <code>${t.necessity == null ? '未启用' : t.necessity}</code>
+        ${t.necessity_action ? '→ ' + esc(t.necessity_action) : ''}</span></div>
+      ${reasons ? `<ul class="reasons">${reasons}</ul>` : ''}
+    </div>
+  </div>`;
+}
+
+function render(s){
+  // 顶栏
+  const tk = s.token;
+  const ap = s.autopilot || {on:false, credit:{score:0}, unlock_after:10, would_auto:0};
+  const unlocked = ap.credit.score >= ap.unlock_after;
+  const apColor = !ap.on ? '#6E7679' : (unlocked ? '#17795E' : '#B4690E');
+  const apState = ap.on ? (unlocked ? '已解锁' : '攒额度中') : '关';
+  $('apToggle').checked = !!ap.on;
+
+  $('meta').innerHTML = `
+    <span><span class="dot" style="background:${tk.refresh_count ? '#17795E' : '#B4690E'}"></span>
+      令牌 ${esc(tk.state)}${tk.refresh_count ? ' ×' + tk.refresh_count : ''}</span>
+    <span><span class="dot" style="background:${apColor}"></span>
+      分级放权 <b>${apState}</b> · 额度 <b>${ap.credit.score}</b>/${ap.unlock_after}
+      ${ap.credit.rejections ? `（驳回 ${ap.credit.rejections}）` : ''}</span>
+    <span>人设 <b>${esc(s.persona.name)}</b></span>
+    <span>已去重 <b>${s.seen}</b> 条</span>
+    <span>已跑 <b>${s.rounds}</b> 轮</span>`;
+
+  // 消息流
+  const cards = $('cards');
+  if (!s.traces.length) {
+    cards.innerHTML = `<div class="empty" style="background:#fff;border:1px solid var(--line)">
+      还没有数据。点右上角「跑一轮」开始。</div>`;
+  } else {
+    cards.innerHTML = s.traces.map(renderTrace).join('');
+  }
+  $('streamCount').textContent = s.traces.length ? `${s.traces.length} 条` : '—';
+
+  // 待确认队列
+  $('pendCount').textContent = s.pending.length;
+  $('btnAll').disabled = !s.pending.length;
+  const q = $('queue');
+  if (!s.pending.length) {
+    q.innerHTML = '<div class="empty">队列是空的</div>';
+  } else {
+    q.innerHTML = s.pending.map(p => `
+      <div class="qitem">
+        <div class="q-who"><b>${esc(p.sender)}</b><span>${esc(p.thread || '')}</span></div>
+        <div class="q-in">${esc(p.incoming || p.reason)}</div>
+        <div class="q-draft"><em>草稿</em>${esc(p.text || '（无内容，需人工撰写）')}</div>
+        <div class="q-acts">
+          <button class="btn sm" data-reject="${p.index}">驳回</button>
+          <button class="btn sm primary" data-approve="${p.index}">发送</button>
+        </div>
+      </div>`).join('');
+  }
+
+  // 统计
+  $('stTotal').textContent = s.stats.total;
+  $('stPending').textContent = s.stats.pending;
+  $('stSilent').textContent = s.stats.silent;
+  $('stBlocked').textContent = s.stats.blocked;
+
+  // 已发出
+  $('postCount').textContent = s.posted.length;
+  const po = $('posted');
+  if (!s.posted.length) {
+    po.innerHTML = '<div class="empty">还没有发送任何回复</div>';
+  } else {
+    po.innerHTML = s.posted.map(p => `
+      <div class="posted-item">
+        <span class="t">${esc(p.at)} · ${esc(p.comment_id)}</span>
+        ${esc(p.content)}
+      </div>`).join('');
+  }
+}
+
+async function refresh(){
+  try {
+    const s = await api('/api/state');
+    render(s);
+  } catch (e) {
+    toast('无法连接控制台服务');
+  }
+}
+
+/* ---------- 事件 ---------- */
+$('btnRun').addEventListener('click', async () => {
+  $('btnRun').disabled = true;
+  try {
+    const r = await api('/api/run', {});
+    toast(`本轮处理 ${r.processed} 条，新增轨迹 ${r.new_traces} 条`);
+    await refresh();
+  } finally {
+    $('btnRun').disabled = false;
+  }
+});
+
+$('apToggle').addEventListener('change', async (e) => {
+  await api('/api/autopilot', {on: e.target.checked});
+  toast(e.target.checked
+    ? '分级放权已开启：额度够了才会自动发'
+    : '已关闭，全部走人工确认');
+  await refresh();
+});
+
+$('btnReset').addEventListener('click', async () => {
+  await api('/api/reset', {});
+  openSet.clear();
+  toast('已重置');
+  await refresh();
+});
+
+$('btnAll').addEventListener('click', async () => {
+  const r = await api('/api/approve_all', {});
+  toast(`已发送 ${r.count} 条`);
+  await refresh();
+});
+
+document.addEventListener('click', async (e) => {
+  const ap = e.target.closest('[data-approve]');
+  if (ap) {
+    const ok = await api('/api/approve', {index: Number(ap.dataset.approve)});
+    toast(ok.ok ? '已发送' : '发送失败');
+    await refresh();
+    return;
+  }
+  const rj = e.target.closest('[data-reject]');
+  if (rj) {
+    const ok = await api('/api/reject', {index: Number(rj.dataset.reject)});
+    toast(ok.ok ? '已驳回' : '驳回失败');
+    await refresh();
+    return;
+  }
+  const tg = e.target.closest('[data-toggle]');
+  if (tg) {
+    const key = tg.dataset.toggle;
+    const card = tg.closest('.card');
+    card.classList.toggle('open');
+    if (card.classList.contains('open')) openSet.add(key);
+    else openSet.delete(key);
+  }
+});
+
+// 自动刷新：3 秒一次，操作时不会打断展开状态
+setInterval(() => {
+  if ($('autoRef').checked) refresh();
+}, 3000);
+
+refresh();
+</script>
+</body>
+</html>

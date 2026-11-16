@@ -18,6 +18,9 @@ object NodeDumper {
 
     fun dump(root: AccessibilityNodeInfo): String {
         val sb = StringBuilder(8 * 1024)
+        // 第一行输出包名：抓一次就能同时拿到「这是哪个 App」和「界面长什么样」，
+        // 省掉让用户再去系统设置里翻包名这一步，也避免包名抄错一个字符。
+        sb.append("# pkg=").append(root.packageName ?: "?").append('\n')
         val counter = intArrayOf(0)
         appendNode(root, 0, sb, counter)
         if (counter[0] >= MAX_NODES) {

@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# CI 里的 run: | 是 bash 脚本。这些文件一旦带 CRLF，
+# Linux runner 上会报 $'\r': command not found，而且报错位置和真正原因完全对不上。
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf

@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>人设配置层 · 判定与商品解耦</title>
+<style>
+  :root{
+    --paper:#FBFAF7; --card:#FFFFFF; --card-2:#F5F3EE;
+    --ink:#1C1B18; --ink-2:#3D3B35; --ink-soft:#6B675E; --muted:#96918A;
+    --line:#E5E1D8; --line-2:#EFECE4;
+    --red:#B23B2E; --red-bg:#FBF0ED;
+    --amber:#9A6A12; --amber-bg:#FBF4E4;
+    --green:#2E6B4F; --green-bg:#EDF5F0;
+    --blue:#2F5D8C; --blue-bg:#EDF2F8;
+    --f-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    --f-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--f-sans);
+    font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 32px 120px}
+
+  .top{display:flex;justify-content:space-between;align-items:baseline;
+    padding:26px 0 18px;border-bottom:1px solid var(--line);
+    font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;
+    color:var(--muted);text-transform:uppercase}
+  .top b{color:var(--ink);font-weight:600}
+
+  .hero{padding:60px 0 44px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.16em;
+    color:var(--red);text-transform:uppercase;margin-bottom:20px}
+  h1{font-size:42px;line-height:1.2;font-weight:650;letter-spacing:-.02em;
+    max-width:22ch;margin-bottom:24px}
+  .lede{font-size:16.5px;line-height:1.85;color:var(--ink-2);max-width:64ch}
+  .lede b{color:var(--ink);font-weight:620}
+
+  section{padding:58px 0 0}
+  .sec-h{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;
+    padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .sec-n{font-family:var(--f-mono);font-size:11px;color:var(--muted);
+    letter-spacing:.1em;flex-shrink:0}
+  h2{font-size:22px;font-weight:640;letter-spacing:-.01em;line-height:1.4}
+  .sec-sub{font-size:14px;color:var(--ink-soft);margin:16px 0 26px;max-width:68ch}
+  h3{font-size:15.5px;font-weight:640;margin:30px 0 12px}
+
+  p{margin-bottom:14px;color:var(--ink-2);max-width:68ch}
+  p b{color:var(--ink);font-weight:620}
+  code{font-family:var(--f-mono);font-size:12.5px;background:var(--card-2);
+    padding:1.5px 5px;border-radius:3px;color:var(--ink)}
+
+  /* 分层 */
+  .layers{border:1px solid var(--line);margin:26px 0}
+  .layer{display:grid;grid-template-columns:150px 1fr;border-bottom:1px solid var(--line)}
+  .layer:last-child{border-bottom:none}
+  .layer .k{background:var(--card-2);padding:20px;font-size:12.5px;
+    color:var(--ink-soft);line-height:1.6}
+  .layer .k b{display:block;font-family:var(--f-mono);font-size:10px;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--ink);
+    margin-bottom:6px;font-weight:600}
+  .layer .v{background:var(--card);padding:20px;font-size:13.5px;line-height:1.7}
+  .layer .v em{font-style:normal;font-family:var(--f-mono);font-size:11px;
+    color:var(--muted);display:block;margin-top:6px}
+
+  table{width:100%;border-collapse:collapse;margin:8px 0 20px;font-size:13.5px}
+  th{text-align:left;font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--muted);font-weight:500;
+    padding:0 12px 10px 0;border-bottom:1px solid var(--line)}
+  td{padding:12px 12px 12px 0;border-bottom:1px solid var(--line-2);
+    vertical-align:top;line-height:1.6}
+  tr:last-child td{border-bottom:none}
+  .mono{font-family:var(--f-mono);font-size:12px}
+  .w{font-family:var(--f-mono);font-size:13px;font-weight:600}
+
+  .tag{display:inline-block;font-family:var(--f-mono);font-size:9.5px;
+    letter-spacing:.06em;padding:2px 7px;border-radius:2px;
+    white-space:nowrap;text-transform:uppercase}
+  .tag.p{background:var(--green-bg);color:var(--green)}
+  .tag.c{background:var(--blue-bg);color:var(--blue)}
+  .tag.s{background:var(--amber-bg);color:var(--amber)}
+  .tag.n{background:var(--card-2);color:var(--muted)}
+  .tag.no{background:var(--red-bg);color:var(--red)}
+
+  /* 对照 */
+  .cmp{width:100%;border-collapse:collapse;margin:10px 0 8px;font-size:13px}
+  .cmp th{font-family:var(--f-mono);font-size:9.5px;letter-spacing:.06em;
+    color:var(--muted);font-weight:500;text-align:left;
+    padding:0 10px 9px 0;border-bottom:1px solid var(--line)}
+  .cmp td{padding:11px 10px 11px 0;border-bottom:1px solid var(--line-2);
+    vertical-align:top;line-height:1.55}
+  .cmp tr:last-child td{border-bottom:none}
+  .cmp .q{font-weight:600;color:var(--ink);width:22%}
+  .cmp .same{color:var(--muted)}
+  .cmp .diff{color:var(--ink)}
+  .badge{font-family:var(--f-mono);font-size:9px;padding:1px 5px;
+    border-radius:2px;margin-left:6px}
+  .badge.d{background:var(--red-bg);color:var(--red)}
+
+  .cmd{background:#232220;color:#E8E5DE;border-radius:4px;padding:15px 18px;
+    font-family:var(--f-mono);font-size:12.5px;line-height:1.95;
+    overflow-x:auto;margin:16px 0 20px}
+  .cmd .c{color:#8A8578}
+  .cmd .g{color:#8FC7A8}
+
+  .note{background:var(--card-2);border-left:2px solid var(--red);
+    padding:16px 18px;margin:22px 0;font-size:13.5px;line-height:1.75;color:var(--ink-2)}
+  .note b{color:var(--ink)}
+  .note.green{border-left-color:var(--green)}
+  .note.amber{border-left-color:var(--amber)}
+
+  ul.plain{list-style:none;margin:12px 0 18px}
+  ul.plain li{position:relative;padding-left:18px;margin-bottom:10px;
+    font-size:13.5px;line-height:1.7;color:var(--ink-2)}
+  ul.plain li::before{content:"";position:absolute;left:0;top:.72em;
+    width:6px;height:1px;background:var(--muted)}
+  ul.plain b{color:var(--ink)}
+
+  footer{margin-top:68px;padding-top:22px;border-top:1px solid var(--line);
+    font-family:var(--f-mono);font-size:10.5px;color:var(--muted);
+    letter-spacing:.05em;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+
+  @media(max-width:780px){
+    .wrap{padding:0 20px 80px}
+    h1{font-size:31px}
+    .layer{grid-template-columns:1fr}
+    .cmp .q{width:auto}
+    td:nth-child(3),th:nth-child(3){display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <span>自动回复 &amp; 获客 · <b>人设配置层</b></span>
+    <span>2026-11-11</span>
+  </div>
+
+  <div class="hero">
+    <div class="kicker">Decoupling / 判定与商品解耦</div>
+    <h1>把「我卖什么」从判定逻辑里拆出去</h1>
+    <p class="lede">
+      现在的判定写得像「卖木工桌的判定」：代码里写着「求链接」「在哪买」这些词。
+      换商品还能凑合，换赛道就完全失效——做内容的账号被问「求链接」，
+      系统还以为来了笔生意。<b>问题不在配置不够多，在逻辑和素材揉在一起了。</b>
+      拆开之后，换商品只改素材，换赛道只改一个词表，代码一行不动。
+    </p>
+  </div>
+
+  <!-- 01 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">01</span>
+      <h2>原来错在哪</h2>
+    </div>
+
+    <p>
+      <code>necessity.py</code> 里有一行常量：
+      <code>COMMENT_INTENT = ("求链接", "在哪买", "价格", ...)</code>。
+      看起来只是个词表，实际上它把三件事锁死了：
+    </p>
+
+    <ul class="plain">
+      <li><b>赛道锁死。</b>这组词只对「卖东西」有意义。做内容的账号收到「求链接」，
+          正确的反应是不接（我没有链接），系统却给了最高加分。</li>
+      <li><b>商品锁死。</b>卖课的人说「怎么报名」，卖课的人说「多少钱」——
+          词表里没有就识别不到，等于换商品要改代码。</li>
+      <li><b>阈值锁死。</b>购买意图 0.50 不够单独过阈值，必须配合语料命中。
+          结果是一个还没养语料的新账号，遇到最强的购买信号也回不了。</li>
+    </ul>
+
+    <p>
+      更深一层的问题是：<b>「什么样的评论值得回」这件事，本来跟卖什么没关系。</b>
+      它是五个通用意图——想买、想问细节、要售后、纯社交、来骂人。
+      至于「想买」在你的行业里怎么说，那才是每个账号自己的事。
+    </p>
+  </section>
+
+  <!-- 02 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">02</span>
+      <h2>拆成两层</h2>
+    </div>
+    <p class="sec-sub">
+      左边这一层永远不变，右边这一层每个账号一份。判定只读左边的标签，
+      词表由右边提供——它不知道也不关心你卖的是桌子还是课。
+    </p>
+
+    <div class="layers">
+      <div class="layer">
+        <div class="k"><b>意图层</b>跨行业固定<br>写在代码里</div>
+        <div class="v">
+          purchase 想买 · inquiry 问细节 · after_sales 要售后 · social 社交 · negative 骂人
+          <em>五个标签，五年内大概不会变</em>
+        </div>
+      </div>
+      <div class="layer">
+        <div class="k"><b>素材层</b>每个账号一份<br>写在 JSON 里</div>
+        <div class="v">
+          词表（你这个行业怎么表达「想买」）+ 答案库 + 风格样本 + 边界词 + 兜底策略
+          <em>换商品改这里，换赛道也改这里</em>
+        </div>
+      </div>
+    </div>
+
+    <p>
+      代价是配置多了一个 <code>profile</code> 段落。收益是代码里再也找不到
+      「求链接」这三个字——判定逻辑对任何行业都成立。
+    </p>
+  </section>
+
+  <!-- 03 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">03</span>
+      <h2>四种形态，对应四种默认行为</h2>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>offering</th><th>适用</th><th>purchase 词表</th><th>兜底</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="tag p">product</span></td>
+          <td>卖实物或虚拟商品</td>
+          <td class="mono">有，识别购买意向</td>
+          <td>转人工</td>
+        </tr>
+        <tr>
+          <td><span class="tag c">content</span></td>
+          <td>做内容，不卖东西</td>
+          <td class="mono">空，不把评论当商机</td>
+          <td>转人工</td>
+        </tr>
+        <tr>
+          <td><span class="tag s">service</span></td>
+          <td>卖时间、卖方案</td>
+          <td class="mono">有，但问的是「怎么约」</td>
+          <td>转人工</td>
+        </tr>
+        <tr>
+          <td><span class="tag n">none</span></td>
+          <td>个人号，纯互动</td>
+          <td class="mono">空</td>
+          <td>沉默</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      <code>offering</code> 不只是个标签，<code>validate</code> 会用它检查矛盾配置：
+      标了 <code>content</code> 却配了购买词表，说明你一边说不卖一边在抓商机，
+      会把每句「求链接」都误判成意向——这比漏判更糟，因为回复内容会答非所问。
+    </p>
+
+    <div class="note amber">
+      <b>兜底策略是这次唯一新增的「行为」字段。</b>
+      原来答不上来时总是进队列，现在可以选：转人工、沉默、或发一句固定话术。
+      个人号被问到不懂的东西，硬回一句模板反而暴露是机器，沉默更自然。
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">04</span>
+      <h2>怎么验证它真的通用了</h2>
+    </div>
+    <p class="sec-sub">
+      「通用」这个词很容易自说自话。唯一能证明的方式是：
+      同一批评论，两份配置，看结果差多少。差得越少，说明配置层越像装饰。
+    </p>
+
+    <div class="cmd">
+<span class="c"># 用电商人设和内容号人设，跑同一批 11 条评论</span>
+python persona_cli.py diff --a persona.json --b personas/creator.json
+    </div>
+
+    <table class="cmp">
+      <thead>
+        <tr><th>评论</th><th>电商（小陆）</th><th>内容号（阿木）</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="q">求链接</td>
+          <td class="diff">回复 0.90<span class="badge d">差异</span></td>
+          <td class="diff">沉默 0.00</td>
+        </tr>
+        <tr>
+          <td class="q">承重多少</td>
+          <td class="diff">回复 0.90<span class="badge d">差异</span></td>
+          <td class="diff">无稿 0.60</td>
+        </tr>
+        <tr>
+          <td class="q">质量怎么样啊</td>
+          <td class="diff">回复 0.70<span class="badge d">差异</span></td>
+          <td class="diff">沉默 0.35</td>
+        </tr>
+        <tr>
+          <td class="q">6 / 嗯嗯</td>
+          <td class="same">沉默</td>
+          <td class="same">沉默</td>
+        </tr>
+        <tr>
+          <td class="q">这个好看</td>
+          <td class="same">沉默 0.15</td>
+          <td class="same">沉默 0.15</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="font-size:13px;color:var(--ink-soft);margin-top:6px">
+      11 条里 6 条结果不同。后两行相同也是对的——「6」「嗯嗯」两边都该沉默，
+      这恰好说明判定不是随机变的。
+    </p>
+
+    <h3>同一个问题，两种回答</h3>
+    <p>
+      「这个多少钱」在两边都被判定为需要回复（它被 @ 了）。但生成的结果完全不同：
+    </p>
+
+    <table class="cmp">
+      <thead><tr><th style="width:22%">配置</th><th>生成结果</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="q">电商</td>
+          <td>价格我私信你说，评论区不太方便聊这个。</td>
+        </tr>
+        <tr>
+          <td class="q">内容号</td>
+          <td>我这边不卖东西哈，纯拍着玩。问的人多了我再考虑做一批。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note green">
+      <b>这两句话来自同一份代码、同一个引擎。</b>
+      差别只在于加载了哪份人设配置。这就是「先设人设，再由人设反推回复」的实际形态——
+      不是让模型猜你是干什么的，是把「你是干什么的」写成可执行的结构。
+    </div>
+  </section>
+
+  <!-- 05 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">05</span>
+      <h2>换商品、换赛道的实际操作</h2>
+    </div>
+
+    <h3>换商品（同一赛道）</h3>
+    <p>
+      改两个地方，判定代码不动：
+    </p>
+    <ul class="plain">
+      <li><b><code>knowledge</code></b> —— 新商品的参数、发货、售后</li>
+      <li><b><code>few_shot</code></b> —— 新商品该怎么答。这一栏决定像不像人</li>
+    </ul>
+    <p>
+      <code>profile.intents</code> 里的购买词表通常不用改——「求链接」「多少钱」
+      换成卖任何实物都成立。
+    </p>
+
+    <h3>换赛道</h3>
+    <p>
+      改 <code>profile</code>：把 <code>offering</code> 换成对应形态，
+      清空或替换 <code>purchase</code> 词表，调整 <code>inquiry</code> 的词。
+      代码依然不动。
+    </p>
+
+    <h3>新建一份</h3>
+    <div class="cmd">
+python persona_cli.py new --template creator --name 阿木 --role "做木工视频" \
+    --out personas/amu.json
+python persona_cli.py validate personas/amu.json
+    </div>
+    <p>
+      模板只给结构，不给成品话术。生成出来能跑判定，但给不出草稿——
+      答案库和语料必须自己填，那部分没法通用。
+    </p>
+  </section>
+
+  <!-- 06 -->
+  <section>
+    <div class="sec-h">
+      <span class="sec-n">06</span>
+      <h2>哪些东西仍然不能复用</h2>
+    </div>
+    <p class="sec-sub">
+      说清楚边界，免得配置层被当成万能药。
+    </p>
+
+    <table>
+      <thead><tr><th style="width:130px">东西</th><th>能不能复用</th><th>原因</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono">判定逻辑</td>
+          <td><span class="tag p">能</span></td>
+          <td>「什么样的评论值得回」跟行业无关，这是这次拆出来的东西</td>
+        </tr>
+        <tr>
+          <td class="mono">购买词表</td>
+          <td><span class="tag p">大致能</span></td>
+          <td>实物电商通用；换成「怎么报名」「怎么约」要改</td>
+        </tr>
+        <tr>
+          <td class="mono">语料 few_shot</td>
+          <td><span class="tag no">不能</span></td>
+          <td>每个账号的说话方式不同，它决定回复像不像人</td>
+        </tr>
+        <tr>
+          <td class="mono">知识库</td>
+          <td><span class="tag no">不能</span></td>
+          <td>产品参数、服务流程，天然是账号特定的</td>
+        </tr>
+        <tr>
+          <td class="mono">阈值</td>
+          <td><span class="tag s">能沿用，要复测</span></td>
+          <td>跨行业可以先用默认值，但一致率必须重新测一遍</td>
+        </tr>
+        <tr>
+          <td class="mono">平台差异</td>
+          <td><span class="tag s">部分</span></td>
+          <td>抖音和 B 站评论语态不同，逻辑可迁移，分布不代表一样</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      能复用的那块是最大的——判定逻辑。剩下不能复用的，本质上都是「这个账号是谁」，
+      那本来也不可能由代码提供。
+    </p>
+
+    <div class="note">
+      <b>一个反直觉的结论：配置层做得越好，越显得语料重要。</b>
+      因为判定已经不用管了，剩下的质量差异全部落在「你填的这 20 句示范」上。
+      这也是为什么 M2 的门槛是「20 条草稿里 12 条能原样发出去」，
+      而不是「判定准确率」——后者是个位数百分比的提升，前者是能不能用的差别。
+    </div>
+  </section>
+
+  <footer>
+    <span>docs/08 · 人设配置层</span>
+    <span>184 项测试通过 · 跨配置对比 11 条中 6 条结果不同</span>
+  </footer>
+
+</div>
+<script>
+(function () {
+  var items = document.querySelectorAll('.layer, tbody tr, .note');
+  if (!('IntersectionObserver' in window)) return;
+  items.forEach(function (el) {
+    el.style.opacity = 0;
+    el.style.transform = 'translateY(7px)';
+    el.style.transition = 'opacity .38s ease, transform .38s ease';
+  });
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e, i) {
+      if (!e.isIntersecting) return;
+      var el = e.target;
+      setTimeout(function () {
+        el.style.opacity = 1;
+        el.style.transform = 'none';
+      }, i * 35);
+      io.unobserve(el);
+    });
+  }, { threshold: 0.06 });
+  items.forEach(function (el) { io.observe(el); });
+})();
+</script>
+</body>
+</html>

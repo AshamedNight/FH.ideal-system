@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多渠道 AI 社交工作台 — 可行性评估与架构方案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============ 设计令牌 ============ */
+:root{
+  --bg:#F2EFE9;
+  --surface:#FAF8F4;
+  --surface-2:#E9E4DA;
+  --ink:#14120E;
+  --ink-soft:#3B3730;
+  --muted:#6E675C;
+  --line:#CBC3B4;
+  --line-strong:#14120E;
+  --accent:#C4401A;         /* 琥珀橙 · 唯一强调色 */
+  --accent-soft:#F0D9CF;
+  --deep:#0E2A22;           /* 深墨绿 · 主色 */
+  --deep-soft:#1E4034;
+  --ok:#1F6B4A;
+  --warn:#9A6A0B;
+  --bad:#9E2418;
+  --ok-bg:#DCE9E1;
+  --warn-bg:#F2E7CC;
+  --bad-bg:#F1DAD5;
+
+  --f-display:"Bebas Neue","Impact","Haettenschweiler","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans","Source Han Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  --f-mono:"IBM Plex Mono","Consolas","Menlo",monospace;
+
+  --r-sm:2px; --r-md:4px; --r-lg:8px;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:72px; --s9:104px;
+  --sh1:0 1px 0 rgba(20,18,14,.08);
+  --sh2:0 8px 24px -12px rgba(20,18,14,.22);
+  --sh3:0 24px 56px -24px rgba(20,18,14,.3);
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --fast:160ms; --base:320ms; --slow:640ms;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:var(--f-body);font-size:15px;line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+  background-image:
+    linear-gradient(90deg,rgba(20,18,14,.035) 1px,transparent 1px),
+    linear-gradient(rgba(20,18,14,.035) 1px,transparent 1px);
+  background-size:48px 48px;
+  overflow-x:hidden;
+}
+/* 颗粒质感 */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:.045;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::selection{background:var(--accent);color:#fff}
+
+.wrap{max-width:1120px;margin:0 auto;padding:0 var(--s5)}
+
+/* ============ 顶部情报栏 ============ */
+.topbar{
+  position:sticky;top:0;z-index:100;
+  background:rgba(242,239,233,.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line-strong);
+}
+.topbar-in{
+  max-width:1120px;margin:0 auto;padding:10px var(--s5);
+  display:flex;align-items:center;gap:var(--s4);
+  font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+}
+.tb-mark{font-weight:600;color:var(--deep);white-space:nowrap}
+.tb-sep{width:1px;height:14px;background:var(--line);flex:none}
+.tb-item{color:var(--muted);white-space:nowrap}
+.tb-item b{color:var(--ink);font-weight:600}
+.tb-right{margin-left:auto;display:flex;gap:var(--s3);align-items:center}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;
+  animation:pulse 2.4s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ============ 英雄区 ============ */
+.hero{padding:var(--s8) 0 var(--s7);border-bottom:1px solid var(--line-strong);position:relative}
+.hero-kicker{
+  font-family:var(--f-mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--accent);display:flex;align-items:center;gap:var(--s2);margin-bottom:var(--s5);
+}
+.hero-kicker::after{content:"";flex:1;height:1px;background:var(--accent);opacity:.35}
+h1{
+  font-family:var(--f-display);font-weight:400;
+  font-size:clamp(44px,8.4vw,104px);line-height:.92;letter-spacing:.01em;
+  color:var(--deep);max-width:16ch;
+}
+h1 em{font-style:normal;color:var(--accent)}
+.hero-sub{
+  margin-top:var(--s5);max-width:58ch;font-size:17px;line-height:1.72;color:var(--ink-soft);
+}
+.hero-sub strong{color:var(--deep);font-weight:600;box-shadow:inset 0 -8px 0 var(--accent-soft)}
+
+.verdict{
+  margin-top:var(--s7);display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:0;
+  border:1px solid var(--line-strong);background:var(--surface);
+}
+.vcell{padding:var(--s5);border-right:1px solid var(--line);position:relative}
+.vcell:last-child{border-right:none}
+.vcell-tag{
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:var(--s3);display:block;
+}
+.vcell-num{
+  font-family:var(--f-display);font-size:clamp(30px,4.6vw,46px);line-height:1;
+  letter-spacing:.01em;display:block;margin-bottom:var(--s2);
+}
+.v-a .vcell-num{color:var(--bad)}
+.v-b .vcell-num{color:var(--warn)}
+.v-c .vcell-num{color:var(--ok)}
+.vcell p{font-size:13.5px;line-height:1.6;color:var(--ink-soft)}
+
+/* ============ 章节 ============ */
+section{padding:var(--s8) 0;border-bottom:1px solid var(--line)}
+.sec-head{display:flex;align-items:baseline;gap:var(--s4);margin-bottom:var(--s6);flex-wrap:wrap}
+.sec-no{
+  font-family:var(--f-mono);font-size:12px;letter-spacing:.1em;color:var(--accent);
+  border:1px solid var(--accent);padding:2px 8px;flex:none;
+}
+h2{
+  font-family:var(--f-display);font-weight:400;font-size:clamp(28px,4.2vw,44px);
+  line-height:1;letter-spacing:.015em;color:var(--deep);
+}
+.sec-note{margin-left:auto;font-family:var(--f-mono);font-size:11px;color:var(--muted);letter-spacing:.06em}
+h3{
+  font-family:var(--f-body);font-weight:600;font-size:16px;letter-spacing:.01em;
+  margin-bottom:var(--s3);color:var(--deep);display:flex;align-items:center;gap:var(--s2);
+}
+h3::before{content:"";width:14px;height:2px;background:var(--accent);flex:none}
+p.lede{max-width:64ch;color:var(--ink-soft);margin-bottom:var(--s5)}
+
+/* ============ 能力矩阵 ============ */
+.matrix{border:1px solid var(--line-strong);background:var(--surface);overflow:hidden}
+.matrix table{width:100%;border-collapse:collapse;font-size:13.5px}
+.matrix thead th{
+  background:var(--deep);color:#EDE9E1;font-family:var(--f-mono);font-weight:500;
+  font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  padding:var(--s3) var(--s4);text-align:left;white-space:nowrap;
+}
+.matrix tbody td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top}
+.matrix tbody tr:last-child td{border-bottom:none}
+.matrix tbody tr{transition:background var(--fast) var(--ease)}
+.matrix tbody tr:hover{background:var(--surface-2)}
+.plat{font-weight:600;color:var(--deep);white-space:nowrap}
+.plat small{display:block;font-family:var(--f-mono);font-size:10px;color:var(--muted);font-weight:400;letter-spacing:.04em}
+.st{
+  display:inline-flex;align-items:center;gap:6px;font-family:var(--f-mono);
+  font-size:11px;letter-spacing:.04em;padding:2px 7px;white-space:nowrap;border-radius:var(--r-sm);
+  font-weight:500;
+}
+.st::before{content:"";width:6px;height:6px;flex:none}
+.st-ok{background:var(--ok-bg);color:var(--ok)}.st-ok::before{background:var(--ok)}
+.st-warn{background:var(--warn-bg);color:var(--warn)}.st-warn::before{background:var(--warn)}
+.st-bad{background:var(--bad-bg);color:var(--bad)}.st-bad::before{background:var(--bad)}
+.matrix-note{
+  margin-top:var(--s3);font-family:var(--f-mono);font-size:11px;color:var(--muted);
+  line-height:1.8;letter-spacing:.02em;
+}
+
+/* ============ 三层判断 ============ */
+.layers{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--line-strong)}
+.layer{padding:var(--s5);border-right:1px solid var(--line);background:var(--surface)}
+.layer:last-child{border-right:none}
+.layer-h{
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:var(--s4);padding-bottom:var(--s3);border-bottom:1px dashed var(--line);
+}
+.layer-score{
+  font-family:var(--f-display);font-size:40px;line-height:1;margin-bottom:var(--s3);
+}
+.layer ul{list-style:none;font-size:13px;line-height:1.68;color:var(--ink-soft)}
+.layer li{position:relative;padding-left:14px;margin-bottom:var(--s2)}
+.layer li::before{content:"—";position:absolute;left:0;color:var(--line);font-family:var(--f-mono)}
+
+/* ============ 引用块 ============ */
+.quote{
+  border-left:3px solid var(--accent);padding:var(--s4) 0 var(--s4) var(--s5);
+  margin:var(--s5) 0;background:linear-gradient(90deg,var(--accent-soft),transparent 65%);
+  font-size:14px;line-height:1.72;color:var(--ink-soft);
+}
+.quote cite{
+  display:block;margin-top:var(--s3);font-family:var(--f-mono);font-size:11px;
+  color:var(--muted);font-style:normal;letter-spacing:.04em;
+}
+.quote b{color:var(--bad);font-weight:600}
+
+/* ============ 路径卡 ============ */
+.paths{display:grid;gap:var(--s4);margin-top:var(--s5)}
+.path{
+  border:1px solid var(--line-strong);background:var(--surface);
+  display:grid;grid-template-columns:96px 1fr auto;align-items:stretch;
+  transition:transform var(--base) var(--ease),box-shadow var(--base) var(--ease);
+}
+.path:hover{transform:translate(-2px,-2px);box-shadow:var(--sh3)}
+.path-no{
+  font-family:var(--f-display);font-size:44px;line-height:1;color:var(--surface);
+  background:var(--deep);display:flex;align-items:center;justify-content:center;
+  letter-spacing:.02em;
+}
+.path.recommend .path-no{background:var(--accent)}
+.path-body{padding:var(--s4) var(--s5)}
+.path-title{font-weight:600;font-size:15px;color:var(--deep);margin-bottom:var(--s2);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+.path-body p{font-size:13px;line-height:1.68;color:var(--ink-soft)}
+.path-side{
+  padding:var(--s4) var(--s5);border-left:1px solid var(--line);
+  display:flex;flex-direction:column;justify-content:center;gap:var(--s1);
+  font-family:var(--f-mono);font-size:11px;color:var(--muted);white-space:nowrap;letter-spacing:.03em;
+}
+.badge{
+  font-family:var(--f-mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  padding:1px 6px;border:1px solid currentColor;border-radius:var(--r-sm);
+}
+.badge-rec{color:var(--accent)}
+
+/* ============ 架构分层 ============ */
+.arch{border:1px solid var(--line-strong);background:var(--surface);margin-top:var(--s5)}
+.arch-row{
+  display:grid;grid-template-columns:200px 1fr;border-bottom:1px solid var(--line);
+  transition:background var(--fast) var(--ease);
+}
+.arch-row:last-child{border-bottom:none}
+.arch-row:hover{background:var(--surface-2)}
+.arch-row.gate{background:var(--accent-soft)}
+.arch-row.gate:hover{background:#EDD2C6}
+.arch-k{
+  padding:var(--s4) var(--s5);border-right:1px solid var(--line);
+  display:flex;align-items:center;gap:var(--s3);
+}
+.arch-idx{
+  font-family:var(--f-mono);font-size:11px;color:var(--accent);font-weight:600;flex:none;
+}
+.arch-name{font-weight:600;font-size:13.5px;color:var(--deep);line-height:1.35}
+.arch-name small{display:block;font-family:var(--f-mono);font-size:10px;color:var(--muted);font-weight:400;letter-spacing:.05em;margin-top:2px}
+.arch-v{padding:var(--s4) var(--s5);font-size:13px;line-height:1.7;color:var(--ink-soft)}
+
+/* ============ 人设卡 ============ */
+.persona-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--s3);margin-top:var(--s5)}
+.pcard{
+  border:1px solid var(--line);background:var(--surface);padding:var(--s4);
+  position:relative;transition:border-color var(--fast) var(--ease),transform var(--fast) var(--ease);
+}
+.pcard:hover{border-color:var(--deep);transform:translateY(-2px)}
+.pcard-n{
+  font-family:var(--f-mono);font-size:10px;color:var(--accent);letter-spacing:.1em;
+  margin-bottom:var(--s2);
+}
+.pcard h4{font-size:14px;font-weight:600;color:var(--deep);margin-bottom:var(--s2)}
+.pcard p{font-size:12.5px;line-height:1.62;color:var(--muted)}
+.pcard.hl{border-color:var(--accent);background:linear-gradient(160deg,var(--accent-soft),var(--surface) 60%)}
+
+/* ============ 表格 ============ */
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin-top:var(--s4);
+  border:1px solid var(--line-strong);background:var(--surface)}
+.tbl th{
+  background:var(--surface-2);font-family:var(--f-mono);font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;font-weight:600;padding:var(--s3) var(--s4);text-align:left;
+  border-bottom:1px solid var(--line-strong);color:var(--deep);
+}
+.tbl td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top;line-height:1.6}
+.tbl tr:last-child td{border-bottom:none}
+.tbl code{font-family:var(--f-mono);font-size:12px;background:var(--surface-2);padding:1px 4px;border-radius:var(--r-sm)}
+
+/* ============ 路线图 ============ */
+.road{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line-strong);margin-top:var(--s5)}
+.road-c{padding:var(--s5);border-right:1px solid var(--line);background:var(--surface);position:relative}
+.road-c:last-child{border-right:none}
+.road-c::before{
+  content:"";position:absolute;top:0;left:0;height:3px;width:100%;background:var(--deep);
+}
+.road-c.m1::before{background:var(--ok)}
+.road-c.m2::before{background:var(--deep)}
+.road-c.m3::before{background:var(--warn)}
+.road-c.m4::before{background:var(--accent)}
+.road-t{font-family:var(--f-mono);font-size:10px;letter-spacing:.14em;color:var(--muted);margin-bottom:var(--s3)}
+.road-c h4{font-size:14px;font-weight:600;color:var(--deep);margin-bottom:var(--s3);line-height:1.4}
+.road-c ul{list-style:none;font-size:12.5px;line-height:1.66;color:var(--ink-soft)}
+.road-c li{padding-left:12px;position:relative;margin-bottom:var(--s2)}
+.road-c li::before{content:"·";position:absolute;left:2px;color:var(--accent);font-weight:700}
+
+/* ============ 结论块 ============ */
+.final{
+  background:var(--deep);color:#EDE9E1;padding:var(--s7) var(--s6);margin-top:var(--s5);
+  position:relative;overflow:hidden;
+}
+.final::before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(600px 300px at 90% 0%,rgba(196,64,26,.28),transparent 70%);
+}
+.final-in{position:relative;z-index:1}
+.final h3{color:#fff;font-size:19px;margin-bottom:var(--s4)}
+.final h3::before{background:var(--accent)}
+.final ol{list-style:none;counter-reset:f;display:grid;gap:var(--s4)}
+.final li{
+  counter-increment:f;padding-left:var(--s6);position:relative;font-size:14px;line-height:1.7;
+  color:#C9C3B8;
+}
+.final li::before{
+  content:counter(f,decimal-leading-zero);position:absolute;left:0;top:0;
+  font-family:var(--f-display);font-size:26px;line-height:1;color:var(--accent);
+}
+.final li b{color:#fff;font-weight:600;display:block;margin-bottom:2px}
+
+/* ============ 页脚 ============ */
+footer{padding:var(--s6) 0 var(--s8);font-family:var(--f-mono);font-size:11px;color:var(--muted);
+  letter-spacing:.04em;line-height:2}
+
+/* ============ 入场序列 ============ */
+.reveal{opacity:0;transform:translateY(22px)}
+.reveal.in{opacity:1;transform:none;
+  transition:opacity var(--base) var(--ease),transform var(--base) var(--ease)}
+@media(prefers-reduced-motion:reduce){
+  .reveal{opacity:1;transform:none;transition:none}
+  .dot{animation:none}
+  html{scroll-behavior:auto}
+}
+
+/* ============ 响应式 ============ */
+@media(max-width:900px){
+  .layers{grid-template-columns:1fr}
+  .layer{border-right:none;border-bottom:1px solid var(--line)}
+  .layer:last-child{border-bottom:none}
+  .road{grid-template-columns:1fr 1fr}
+  .road-c:nth-child(2){border-right:none}
+  .road-c:nth-child(1),.road-c:nth-child(2){border-bottom:1px solid var(--line)}
+  .path{grid-template-columns:68px 1fr}
+  .path-side{grid-column:1/-1;border-left:none;border-top:1px solid var(--line);flex-direction:row;gap:var(--s4)}
+  .arch-row{grid-template-columns:1fr}
+  .arch-k{border-right:none;border-bottom:1px dashed var(--line);padding-bottom:var(--s2)}
+  .arch-v{padding-top:0}
+  .sec-note{margin-left:0;width:100%}
+}
+@media(max-width:640px){
+  body{font-size:14px}
+  .wrap,.topbar-in{padding-left:var(--s4);padding-right:var(--s4)}
+  .hero{padding:var(--s6) 0 var(--s5)}
+  section{padding:var(--s6) 0}
+  .matrix table{font-size:12px}
+  .matrix thead th,.matrix tbody td{padding:var(--s2) var(--s3)}
+  .verdict{grid-template-columns:1fr}
+  .vcell{border-right:none;border-bottom:1px solid var(--line)}
+  .vcell:last-child{border-bottom:none}
+  .road{grid-template-columns:1fr}
+  .road-c{border-right:none;border-bottom:1px solid var(--line)}
+  .tb-item.hide-sm{display:none}
+  .final{padding:var(--s5) var(--s4)}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <span class="tb-mark">NEXUS/工作台</span>
+    <span class="tb-sep"></span>
+    <span class="tb-item">文档 <b>01</b></span>
+    <span class="tb-sep"></span>
+    <span class="tb-item hide-sm">可行性评估 · 架构方案</span>
+    <div class="tb-right">
+      <span class="tb-item"><span class="dot"></span> 调研基于 2025-2026 平台公开规则</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ========== 英雄区 ========== -->
+  <header class="hero">
+    <div class="hero-kicker reveal">Preliminary Assessment / 阶段一判断</div>
+    <h1 class="reveal">两个功能<br>一个<em>能跑</em><br>一个不能</h1>
+    <p class="hero-sub reveal">
+      你设想的形态是：一个 APP，内置 AI 接管账号自动回复（微信 / QQ / B站 / Soul / 他趣），
+      再内置图文内容生成并自动发布（小红书 / 抖音）来获客。
+      <strong>结论先说：功能 B 能跑通一半，功能 A 在现行规则下跑不通。</strong>
+      下面是把"为什么"拆开讲清楚，以及在不放弃目标的前提下，路该怎么走。
+    </p>
+
+    <div class="verdict reveal">
+      <div class="vcell v-a">
+        <span class="vcell-tag">功能 A · 接管账号自动回复</span>
+        <span class="vcell-num">不可行</span>
+        <p>技术能实现，但微信明文定性为"外挂"，抖音/Soul/他趣无开放接口。作为上架 APP 分发会被拒。</p>
+      </div>
+      <div class="vcell v-b">
+        <span class="vcell-tag">功能 B · 图文获客发布</span>
+        <span class="vcell-num">半可行</span>
+        <p>小红书走官方 API 可行但需企业资质；抖音 2025-08 起明确排除营销类内容，官方通道关闭。</p>
+      </div>
+      <div class="vcell v-c">
+        <span class="vcell-tag">人设统一窗口</span>
+        <span class="vcell-num">必须做</span>
+        <p>不仅是"能加"，而是整个产品的架构中枢。人设不统一，每加一个平台就要重写一遍话术。</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========== 01 平台能力矩阵 ========== -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">01</span>
+      <h2>平台能力矩阵</h2>
+      <span class="sec-note">官方公开信息 · 逐条核实</span>
+    </div>
+    <p class="lede reveal">
+      这张表是整份文档的地基。你提到的每一个平台，我按"能不能拿官方接口读消息 / 能不能自动发内容"两栏拆开。
+      凡是没有官方接口的，剩下的路只有自动化模拟，而这一步直接决定你的产品能不能上架。
+    </p>
+
+    <div class="matrix reveal">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:20%">平台</th>
+            <th style="width:22%">官方消息收发</th>
+            <th style="width:22%">官方内容发布</th>
+            <th>关键约束</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="plat">微信<small>个人号</small></td>
+            <td><span class="st st-bad">无接口</span></td>
+            <td><span class="st st-bad">无接口</span></td>
+            <td>《个人账号使用规范》1.2.6 禁止第三方工具自动化操作；安全中心公告直接把"自动回复、自动聊天"列为外挂</td>
+          </tr>
+          <tr>
+            <td class="plat">微信<small>公众号 / 企业微信</small></td>
+            <td><span class="st st-ok">官方 API</span></td>
+            <td><span class="st st-ok">图文群发</span></td>
+            <td>需认证主体。客服消息有 48 小时窗口限制，被动回复 5 秒超时</td>
+          </tr>
+          <tr>
+            <td class="plat">QQ<small>开放平台 Bot</small></td>
+            <td><span class="st st-ok">官方 API</span></td>
+            <td><span class="st st-warn">受限</span></td>
+            <td>支持频道 / 群 / 单聊，WebSocket 或 Webhook。但只能以"机器人"身份存在，<b>无法接管你的个人 QQ 号</b></td>
+          </tr>
+          <tr>
+            <td class="plat">哔哩哔哩<small>开放平台</small></td>
+            <td><span class="st st-warn">需资质</span></td>
+            <td><span class="st st-warn">需资质</span></td>
+            <td>面向 UP 主与服务商，需资质认证。社区里流传的私信接口靠 Cookie(SESSDATA) 直连内部服务，非官方授权</td>
+          </tr>
+          <tr>
+            <td class="plat">小红书<small>开放平台</small></td>
+            <td><span class="st st-warn">受限</span></td>
+            <td><span class="st st-ok">笔记发布</span></td>
+            <td>创作者须完成资质审核（企业或个体户持营业执照）。笔记发布权限另行审核，需说明具体场景</td>
+          </tr>
+          <tr>
+            <td class="plat">抖音<small>开放平台</small></td>
+            <td><span class="st st-warn">私信受限</span></td>
+            <td><span class="st st-bad">营销场景关闭</span></td>
+            <td>2025-08 起：不再向个体户开放；企业需注册资本 ≥50 万且注册 ≥1 年；仅对创作工具/社区/硬件/游戏类应用开放；
+                <b>涉及企业宣传、商品介绍、诱导分享的营销类内容不开放准入</b></td>
+          </tr>
+          <tr>
+            <td class="plat">Soul</td>
+            <td><span class="st st-bad">无接口</span></td>
+            <td><span class="st st-bad">无接口</span></td>
+            <td>官方仅对 B 端开放语音合成 / 数字人 API（Loxinity），社交侧不对外开放。市面流通的接口均为抓包所得</td>
+          </tr>
+          <tr>
+            <td class="plat">他趣 / 其他社交</td>
+            <td><span class="st st-bad">无接口</span></td>
+            <td><span class="st st-bad">无接口</span></td>
+            <td>无公开开放平台。且此类平台对营销引流的风控极其严格，账号生命周期以天计</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="matrix-note reveal">
+      ※ 状态说明：<b>官方 API</b> = 有公开文档、可申请、可商用；<b>需资质</b> = 有通道但门槛在企业主体与审核；
+      <b>受限</b> = 能力存在但场景被限定；<b>无接口 / 关闭</b> = 只剩自动化模拟一条路。
+    </p>
+  </section>
+
+  <!-- ========== 02 功能 A 三层判断 ========== -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">02</span>
+      <h2>功能 A：接管账号自动回复</h2>
+      <span class="sec-note">三个层面，三种答案</span>
+    </div>
+    <p class="lede reveal">
+      "能不能跑通"这句话在技术圈和法务圈是两个完全不同的问题。我把它拆成三层，
+      因为你这三层里只要有一层过不去，产品就落不了地。
+    </p>
+
+    <div class="layers reveal">
+      <div class="layer">
+        <div class="layer-h">Layer 1 · 技术</div>
+        <div class="layer-score" style="color:var(--ok)">可行</div>
+        <ul>
+          <li>Android 无障碍服务（AccessibilityService）能跨 App 读取界面节点、模拟点击与输入</li>
+          <li>通知监听（NotificationListenerService）能拿到消息推送内容</li>
+          <li>上述两项在安卓上不需要 root，是正规系统能力</li>
+          <li>结论：单个设备上"看到消息 → 生成回复 → 填入输入框"完全能做到</li>
+        </ul>
+      </div>
+      <div class="layer">
+        <div class="layer-h">Layer 2 · 合规</div>
+        <div class="layer-score" style="color:var(--bad)">不可行</div>
+        <ul>
+          <li>微信把"自动回复、自动聊天"直接点名归为外挂</li>
+          <li>iOS 无跨应用界面注入能力，这一半市场天然不存在</li>
+          <li>小红书 / 抖音 / Soul / 他趣 用户协议均禁止自动化访问</li>
+          <li>结论：只有 QQ Bot 与微信公众号是"被授权"的自动化</li>
+        </ul>
+      </div>
+      <div class="layer">
+        <div class="layer-h">Layer 3 · 商业</div>
+        <div class="layer-score" style="color:var(--bad)">不可上架</div>
+        <ul>
+          <li>应用商店审核规则普遍拒绝"修改/接管第三方应用"类功能</li>
+          <li>iOS App Store 直接拒审，无法双端发行</li>
+          <li>一旦规模做大必然收到平台律师函，商业模型随时归零</li>
+          <li>结论：不能作为主线产品，只能作为小范围实验功能</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="quote reveal">
+      微信安全中心《针对在微信使用"外挂"行为的打击公告》原文列举的常见外挂类型中包含：
+      <b>"微信机器人：微信群营销，实现定时群发、自动回复、自动聊天等控制功能。"</b>
+      处理方式是"根据违规严重程度进行阶梯式处理；对于多次违规者，将加重处罚"。
+      <cite>— 腾讯 · 微信安全中心公开公告</cite>
+    </div>
+
+    <h3 class="reveal" style="margin-top:var(--s6)">所以哪些真的能跑</h3>
+    <table class="tbl reveal">
+      <thead>
+        <tr><th style="width:26%">场景</th><th style="width:16%">状态</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>QQ 群 / 频道 / 单聊 AI 机器人</td>
+          <td><span class="st st-ok">可上线</span></td>
+          <td>官方 Bot API，WebSocket 长连接，个人主体可创建，认证后进群上限 500</td>
+        </tr>
+        <tr>
+          <td>微信公众号 / 企业微信客服自动回复</td>
+          <td><span class="st st-ok">可上线</span></td>
+          <td>官方客服消息接口，需认证主体，注意 48 小时会话窗口</td>
+        </tr>
+        <tr>
+          <td>AI 辅助回复（生成 → 人工确认发送）</td>
+          <td><span class="st st-ok">可上线</span></td>
+          <td>界限在于"最终发送动作由人完成"。可用快捷回复面板 / 剪贴板 / 输入法实现</td>
+        </tr>
+        <tr>
+          <td>微信个人号全自动接管</td>
+          <td><span class="st st-bad">高风险</span></td>
+          <td>技术上能跑，违规。仅可作为不上架的实验室模式，需用户显式确认风险</td>
+        </tr>
+        <tr>
+          <td>Soul / 他趣 自动回复</td>
+          <td><span class="st st-bad">不建议</span></td>
+          <td>无接口、风控极严、账号成本高，投入产出不成立</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ========== 03 功能 B 三层判断 ========== -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">03</span>
+      <h2>功能 B：图文获客发布</h2>
+      <span class="sec-note">拆成三段看，只有中间那段卡住</span>
+    </div>
+    <p class="lede reveal">
+      这个功能其实包含三件事：读懂图片 → 写出文案 → 发出去。前两件没有任何平台限制，
+      只有第三件被平台规则卡住。所以正确做法是把它切成"可全自动"和"必须半自动"两段。
+    </p>
+
+    <div class="layers reveal">
+      <div class="layer">
+        <div class="layer-h">Layer 1 · 图片理解与文案生成</div>
+        <div class="layer-score" style="color:var(--ok)">完全自由</div>
+        <ul>
+          <li>多模态模型读图、提取卖点、识别场景，无平台约束</li>
+          <li>按平台调性改写（小红书种草体 / 抖音口播脚本）</li>
+          <li>这是你真正的产品壁垒所在，也是最该重投的部分</li>
+        </ul>
+      </div>
+      <div class="layer">
+        <div class="layer-h">Layer 2 · 自动发布</div>
+        <div class="layer-score" style="color:var(--warn)">分平台</div>
+        <ul>
+          <li>小红书：官方笔记发布 API 可用，但需资质审核</li>
+          <li>抖音：2025-08 新政明确不向营销场景开放，通道关闭</li>
+          <li>视频号：需走微信生态，个人主体无发布 API</li>
+        </ul>
+      </div>
+      <div class="layer">
+        <div class="layer-h">Layer 3 · 获客转化</div>
+        <div class="layer-score" style="color:var(--ok)">产品机会</div>
+        <ul>
+          <li>发布只是起点，真正值钱的是"谁看了、谁私信了、谁留了联系方式"</li>
+          <li>把这部分做成线索台账，产品价值立刻从工具变成资产</li>
+          <li>这也是竞品普遍缺失的一环</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="quote reveal">
+      抖音开放平台 2025 年公告原文：应用主体"不再向个体工商户类型主体开放"；企业需满足"注册资本 ≥50 万且注册时间 ≥1 年"；
+      应用类型"仅对创作工具、社区、硬件配套、游戏类应用开放"；
+      <b>"如涉及企业宣传、商品介绍、诱导分享等营销类内容分享，将不开放该能力准入。"</b>
+      <cite>— 抖音开放平台 · 发布内容至抖音能力回收与开放规范调整通知</cite>
+    </div>
+
+    <p class="reveal" style="max-width:66ch;color:var(--ink-soft);margin-top:var(--s5)">
+      这条规则的言外之意很清楚：抖音欢迎"帮用户把自己的作品发出去"，不欢迎"帮商家把广告发出去"。
+      你的场景属于后者。所以抖音这条路上，唯一成立的产品形态是
+      <b style="color:var(--deep)">生成好内容 + 一键跳转抖音 App 由用户自己点发布</b>——本质上是把自动发布降级成"极省力的人工发布"。
+      体验损失很小，合规风险归零。
+    </p>
+  </section>
+
+  <!-- ========== 04 三条路径 ========== -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">04</span>
+      <h2>三条可选路线</h2>
+      <span class="sec-note">按推荐度排序</span>
+    </div>
+    <p class="lede reveal">
+      既然原方案跑不通，目标不能丢——你要的是"AI 帮我把聊天和获客这两件重复劳动干掉"。
+      下面三条路都能通向这个目标，区别在于风险敞口和发行渠道。
+    </p>
+
+    <div class="paths">
+      <div class="path recommend reveal">
+        <div class="path-no">01</div>
+        <div class="path-body">
+          <div class="path-title">AI 副驾模式 <span class="badge badge-rec">推荐主线</span></div>
+          <p>
+            APP 不代替你发消息，而是把回复写到你能一键取用的地方：通知栏快捷回复、悬浮球面板、
+            系统输入法词条。AI 生成 3 个候选回复，你点一下即发送。
+            合规边界清晰——最终动作是人做的。可正常上架双端应用商店。
+          </p>
+        </div>
+        <div class="path-side">
+          <span>合规 · 高</span>
+          <span>上架 · 可</span>
+          <span>体验损失 · 小</span>
+        </div>
+      </div>
+
+      <div class="path reveal">
+        <div class="path-no">02</div>
+        <div class="path-body">
+          <div class="path-title">官方通道矩阵</div>
+          <p>
+            只接有官方接口的渠道：QQ Bot、微信公众号 / 企业微信客服、小红书企业号。
+            全部走授权 API，稳定性与规模化能力最强，且能做到真正的全自动。
+            代价是覆盖面小于你的初始设想，且需要企业主体。
+          </p>
+        </div>
+        <div class="path-side">
+          <span>合规 · 最高</span>
+          <span>上架 · 可</span>
+          <span>门槛 · 企业资质</span>
+        </div>
+      </div>
+
+      <div class="path reveal">
+        <div class="path-no">03</div>
+        <div class="path-body">
+          <div class="path-title">实验室模式</div>
+          <p>
+            个人号接管做成独立模块，不做应用商店分发（侧载 / 桌面端），首次启用强制阅读风险告知并二次确认。
+            功能完整但风险由用户承担。适合自用或小范围灰度，不适合作为商业主线。
+          </p>
+        </div>
+        <div class="path-side">
+          <span>合规 · 低</span>
+          <span>上架 · 否</span>
+          <span>定位 · 自用</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="reveal" style="margin-top:var(--s5);font-size:13.5px;color:var(--muted);max-width:68ch">
+      我的建议：<b style="color:var(--deep)">主线走 01，能力补 02，03 只做可选实验区。</b>
+      这三条路共用同一套底层（人设 + 回复引擎 + 内容工厂），所以不存在"做了 A 就不能做 B"的问题——
+      差别只在最上面那层渠道适配器。这也是下面板块拆分的设计前提。
+    </p>
+  </section>
+
+  <!-- ========== 05 板块拆分 ========== -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">05</span>
+      <h2>板块拆分：七层架构</h2>
+      <span class="sec-note">从下往上，越往上越容易被平台卡</span>
+    </div>
+    <p class="lede reveal">
+      拆板块的正确方式不是按"功能"切（自动回复一块、发内容一块），而是按"变化频率"切。
+      越容易变的放上面，越稳定的放下面。这样新增一个平台只是加一个适配器，不用动引擎。
+    </p>
+
+    <div class="arch reveal">
+      <div class="arch-row">
+        <div class="arch-k"><span class="arch-idx">L7</span><span class="arch-name">控制台<small>CONSOLE · APP 前端</small></span></div>
+        <div class="arch-v">五个一级页面：会话 / 获客 / 人设 / 渠道 / 我的。所有数据来自下层，自身不存业务状态。</div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-k"><span class="arch-idx">L6</span><span class="arch-name">渠道适配层<small>CHANNEL HUB · Adapter</small></span></div>
+        <div class="arch-v">
+          每个平台一个适配器，把平台原始消息统一成内部 <code>Message{ch, sender, text, media, ts}</code> 事件。
+          新增平台 = 新增一个文件。这是整个架构里最关键的解耦点。
+        </div>
+      </div>
+      <div class="arch-row gate">
+        <div class="arch-k"><span class="arch-idx">L5</span><span class="arch-name">风控闸门<small>GUARD · 不可省</small></span></div>
+        <div class="arch-v">
+          频控（每分钟/每小时条数）、敏感词、承诺类话术拦截、人工确认率、渠道健康度熔断。
+          <b>这一层看着不产生价值，但它是产品能活过三个月的唯一原因。</b>
+        </div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-k"><span class="arch-idx">L4</span><span class="arch-name">能力层<small>CAPABILITY · 无状态</small></span></div>
+        <div class="arch-v">
+          两个并列能力：<b>回复引擎</b>（读上下文 → 草稿）与<b>内容工厂</b>（读图 → 文案 → 平台改写）。
+          都是纯函数式的：输入上下文，输出草稿，不自己发出去。
+        </div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-k"><span class="arch-idx">L3</span><span class="arch-name">人设中枢<small>PERSONA · 一等实体</small></span></div>
+        <div class="arch-v">
+          所有渠道、所有能力共享同一份人设资产：身份、语气、知识库、边界、示范语料。
+          支持按渠道微调覆盖。这就是你问的"人设设置窗口"在架构里的位置。
+        </div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-k"><span class="arch-idx">L2</span><span class="arch-name">调度层<small>SCHEDULER · 队列</small></span></div>
+        <div class="arch-v">任务队列、限速、失败重试、定时发布、延迟回复（模拟人类节奏，避免秒回被判定为机器人）。</div>
+      </div>
+      <div class="arch-row">
+        <div class="arch-k"><span class="arch-idx">L1</span><span class="arch-name">数据层<small>LEDGER · 持久化</small></span></div>
+        <div class="arch-v">
+          会话记录、人设配置、内容草稿、发布记录、<b>线索台账</b>。获客功能的商业价值全部落在这里。
+        </div>
+      </div>
+    </div>
+
+    <h3 class="reveal" style="margin-top:var(--s6)">映射到 APP 的五个一级页面</h3>
+    <div class="persona-grid reveal">
+      <div class="pcard">
+        <div class="pcard-n">TAB 01</div>
+        <h4>会话 Inbox</h4>
+        <p>全渠道消息聚合。左侧平台筛选，中间对话流，右侧 AI 建议三选一。人工接管按钮常驻。</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-n">TAB 02</div>
+        <h4>获客 Acquire</h4>
+        <p>上传图片 → 生成文案 → 选平台 → 进发布队列。下半屏是线索台账：谁来过、留了什么、值多少。</p>
+      </div>
+      <div class="pcard hl">
+        <div class="pcard-n">TAB 03</div>
+        <h4>人设 Persona</h4>
+        <p>多个人设卡片管理 + 编辑面板 + 试衣间（左边改参数，右边实时对话预览）。详见下一节。</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-n">TAB 04</div>
+        <h4>渠道 Channels</h4>
+        <p>平台连接状态、授权有效期、今日配额消耗、健康度评分、风控告警。</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-n">TAB 05</div>
+        <h4>我的 Settings</h4>
+        <p>风控阈值、人工确认率、订阅、实验区开关（实验室模式的风险告知在此）。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 06 人设系统 ========== -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">06</span>
+      <h2>人设统一窗口</h2>
+      <span class="sec-note">不只是"能加"，而是第一优先级</span>
+    </div>
+    <p class="lede reveal">
+      直接回答你的问题：能加，而且这是整个产品最该先做的东西。
+      理由很实际——如果人设不统一，你在 B站练出来的二次元语气、在小红书练出来的种草话术、
+      在微信练出来的客服口吻，会变成三份互不相干的提示词。改一次要改三遍，加一个平台又要再抄一遍。
+      人设做成独立实体之后，这变成"改一处，全渠道生效"。
+    </p>
+
+    <h3 class="reveal">人设卡的数据结构</h3>
+    <table class="tbl reveal">
+      <thead>
+        <tr><th style="width:16%">模块</th><th style="width:40%">内容</th><th>为什么需要</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>身份</b> Identity</td>
+          <td>名称、头像、年龄、职业、所在地、一句话简介</td>
+          <td>决定 AI 的世界观。缺了这块，回复会变成没有立场的客服</td>
+        </tr>
+        <tr>
+          <td><b>语气</b> Voice</td>
+          <td>正式度、句长、emoji 频率、口头禅、标点习惯（用不用句号）</td>
+          <td>用滑块与标签而不是自由文本，因为"语气活泼一点"这种描述模型读不懂</td>
+        </tr>
+        <tr>
+          <td><b>知识</b> Knowledge</td>
+          <td>产品信息、价格表、FAQ、活动规则，结构化条目</td>
+          <td>这是防幻觉的唯一手段。自由文本知识库必然被编造</td>
+        </tr>
+        <tr>
+          <td><b>边界</b> Boundary</td>
+          <td>不聊什么、不能承诺什么、哪些词必须转人工</td>
+          <td>比"禁止说脏话"更重要的是"不许承诺效果、不许报价、不许答应退款"</td>
+        </tr>
+        <tr style="background:var(--accent-soft)">
+          <td><b>示范</b> Few-shot</td>
+          <td>8–15 组「对方说 → 我应该回」，可直接从真实聊天记录里导入</td>
+          <td><b>决定像不像人的从来不是形容词，是这几组样例。</b>收益最大的一栏</td>
+        </tr>
+        <tr>
+          <td><b>渠道覆盖</b> Override</td>
+          <td>同一人设在 B站 / 小红书 / 微信 的局部微调</td>
+          <td>让"统一"不等于"机械一致"，各平台仍保留语感差异</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="quote reveal" style="margin-top:var(--s6)">
+      <b>设计判断：</b>绝大多数同类产品的失败点，是把人设做成了"一个多行输入框让你写提示词"。
+      用户写了 200 字的角色描述，AI 还是回得像客服。正确做法是把编辑界面重心从"形容词"移到"示范语料"——
+      让用户填 10 句真实对话，比让他写 1000 字人设有效得多。所以人设窗口的默认页签应该是「示范」，不是「身份」。
+      <cite>— 架构建议</cite>
+    </div>
+
+    <h3 class="reveal" style="margin-top:var(--s6)">试衣间（Sandbox）</h3>
+    <p class="reveal" style="max-width:66ch;color:var(--ink-soft);margin-bottom:var(--s4)">
+      人设编辑面板必须有实时预览：左侧参数改动，右侧立刻用新参数生成一条回复。
+      没有这一步，用户只能"改完保存，去真实聊天里试，发现不对再回来改"——
+      这个循环一次要几分钟，用户第三天就流失了。
+    </p>
+  </section>
+
+  <!-- ========== 07 关于 GitHub 现成代码 ========== -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">07</span>
+      <h2>关于直接搬 GitHub 代码</h2>
+      <span class="sec-note">抄架构，别抄代码</span>
+    </div>
+    <p class="lede reveal">
+      你提到去 GitHub 找现成实现来省时间。这个思路对，但需要说清楚：我搜到的主流项目，
+      搬到"移动端 APP"这个目标上可用度很低。原因不在代码质量，在运行环境根本不同。
+    </p>
+
+    <table class="tbl reveal">
+      <thead>
+        <tr><th style="width:24%">主流项目类型</th><th style="width:16%">运行环境</th><th>迁移到你的 APP 的问题</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>wxauto / pywechat 系</td>
+          <td>Windows</td>
+          <td>依赖微信 PC 客户端的窗口控件树（UIAutomation）。手机上没有 PC 微信窗口，代码完全无法运行</td>
+        </tr>
+        <tr>
+          <td>Wechaty 系</td>
+          <td>Node / 多端</td>
+          <td>本身只是框架，真正连微信要买 puppet 服务（付费 token），且相关协议通道反复被封，稳定性不可控</td>
+        </tr>
+        <tr>
+          <td>Selenium 网页版微信</td>
+          <td>浏览器</td>
+          <td>网页版微信早已对绝大多数账号关闭登录入口，这条路 2021 年后基本失效</td>
+        </tr>
+        <tr>
+          <td>LangBot / 机器人编排框架</td>
+          <td>容器</td>
+          <td>这个值得看，但要看的是它的<b>平台适配器抽象</b>与消息队列设计，不是它的微信号连接方式</td>
+        </tr>
+        <tr>
+          <td>官方 SDK（QQ Bot / 小红书）</td>
+          <td>任意</td>
+          <td><b>这类可以直接用。</b>官方文档 + 官方 demo 是最好的起点，没必要自己造</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="reveal" style="margin-top:var(--s5);max-width:68ch;color:var(--ink-soft)">
+      实操建议：<b style="color:var(--deep)">底层通用组件直接装包（图片理解、文案生成、队列、本地数据库），
+      平台连接层自己写适配器。</b>因为适配器是你唯一能形成差异的地方，也是最容易出安全问题的地方，
+      用别人的黑盒代码，出问题你连日志都看不懂。
+    </p>
+  </section>
+
+  <!-- ========== 08 路线图 ========== -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">08</span>
+      <h2>落地路线</h2>
+      <span class="sec-note">四个里程碑，每个都能独立验证</span>
+    </div>
+    <p class="lede reveal">
+      不要一开始就做"五平台支持 + 全自动发布"。先用人设 + 单一渠道跑通闭环，
+      验证"AI 写的回复用户愿意直接发出去"这件事，再横向扩渠道。
+    </p>
+
+    <div class="road reveal">
+      <div class="road-c m1">
+        <div class="road-t">MILESTONE 01</div>
+        <h4>人设中枢 + 单渠道</h4>
+        <ul>
+          <li>人设卡 CRUD 与试衣间</li>
+          <li>QQ Bot 单一适配器</li>
+          <li>回复引擎接入，草稿三选一</li>
+          <li>验证指标：草稿采纳率 ≥ 40%</li>
+        </ul>
+      </div>
+      <div class="road-c m2">
+        <div class="road-t">MILESTONE 02</div>
+        <h4>内容工厂 + 半自动发布</h4>
+        <ul>
+          <li>图片上传与多模态读图</li>
+          <li>多平台文案改写</li>
+          <li>草稿箱与分享跳转</li>
+          <li>验证指标：从上传到可发布 &lt; 3 分钟</li>
+        </ul>
+      </div>
+      <div class="road-c m3">
+        <div class="road-t">MILESTONE 03</div>
+        <h4>风控闸门 + 线索台账</h4>
+        <ul>
+          <li>频控、敏感词、熔断</li>
+          <li>线索归集与打标</li>
+          <li>渠道健康度看板</li>
+          <li>验证指标：零封号 / 零投诉</li>
+        </ul>
+      </div>
+      <div class="road-c m4">
+        <div class="road-t">MILESTONE 04</div>
+        <h4>渠道横向扩张</h4>
+        <ul>
+          <li>微信公众号 / 企业微信</li>
+          <li>小红书企业号发布</li>
+          <li>B站适配器（如资质可行）</li>
+          <li>验证指标：新增渠道零改造引擎</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 结论 ========== -->
+  <section style="border-bottom:none">
+    <div class="final reveal">
+      <div class="final-in">
+        <h3>四句话收尾</h3>
+        <ol>
+          <li><b>功能 A 在现行规则下跑不通，别把它当主线。</b>
+            技术能做到，但微信已把"自动回复、自动聊天"明文列为外挂，抖音无接口，Soul 与他趣不开放，iOS 端物理上做不到。
+            作为上架 APP 的内置功能，它在审核环节就会被拦下。</li>
+          <li><b>功能 B 能跑，但要切成两段。</b>
+            读图 + 写文案完全自由，是真正的技术壁垒；自动发布只有小红书官方通道一条路，抖音 2025-08 起已明确排除营销场景。
+            半自动发布（生成好 + 一键跳转）体验损失很小，风险归零。</li>
+          <li><b>板块按"变化频率"拆成七层，不是按功能拆。</b>
+            渠道在最上面（天天变）、人设在中枢（最稳定）、闸门在中间（决定生死）。新增平台只加适配器，不动引擎。</li>
+          <li><b>人设统一窗口不仅可行，应该第一个做。</b>
+            它是把"三个平台三份提示词"变成"一份资产全渠道生效"的唯一办法。
+            设计上把重心放在示范语料而不是形容词，并配一个实时试衣间。</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>文档 01 / 可行性评估与架构方案 · 供 <b>多渠道 AI 社交工作台</b> 立项决策使用</div>
+    <div>规则依据：微信个人账号使用规范（2025-03-28 生效）· 微信安全中心外挂打击公告 · 抖音开放平台能力调整通知（2025-08）· 小红书开放平台开发者指南 · QQ 开放平台 Bot 文档</div>
+    <div>平台规则随时可能调整，进入开发前请以各平台开放平台最新公告为准。</div>
+  </footer>
+
+</div>
+
+<script>
+// 入场序列：IntersectionObserver 错峰揭示
+(function(){
+  var els = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    els.forEach(function(el){ el.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (!e.isIntersecting) return;
+      var parent = e.target.parentElement;
+      var sibs = parent ? Array.prototype.filter.call(parent.children, function(c){
+        return c.classList && c.classList.contains('reveal');
+      }) : [];
+      var idx = sibs.indexOf(e.target);
+      var delay = idx > 0 ? Math.min(idx, 4) * 90 : 0;
+      setTimeout(function(){ e.target.classList.add('in'); }, delay);
+      io.unobserve(e.target);
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+  els.forEach(function(el){ io.observe(el); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>安卓无障碍方案评估 · 交友平台红线 · AstrBot/MaiBot 改造</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,600;1,6..72,300&family=Karla:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FBF9F4;
+  --paper-2:#F4F0E7;
+  --rule:#D8D2C4;
+  --rule-strong:#8C8578;
+  --ink:#1C1B18;
+  --ink-2:#3A3833;
+  --muted:#78716A;
+  --brown:#332F27;
+  --rust:#A6462C;
+  --rust-soft:#F0DDD5;
+  --green:#2F6F5E;
+  --green-soft:#DDE8E2;
+  --amber:#8A6A1F;
+  --amber-soft:#F1E7CC;
+
+  --f-serif:"Newsreader","Songti SC","SimSun","Source Han Serif SC",serif;
+  --f-sans:"Karla","Source Han Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  --f-mono:"IBM Plex Mono","Consolas",monospace;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--paper);color:var(--ink);font-family:var(--f-sans);
+  font-size:15.5px;line-height:1.8;-webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+::selection{background:var(--rust);color:#fff}
+.wrap{max-width:1000px;margin:0 auto;padding:0 28px}
+
+/* ============ 报头 ============ */
+.masthead{
+  border-bottom:3px double var(--brown);padding:14px 0 10px;position:sticky;top:0;
+  background:rgba(251,249,244,.95);backdrop-filter:blur(8px);z-index:80;
+}
+.masthead-in{
+  max-width:1000px;margin:0 auto;padding:0 28px;
+  display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;
+}
+.mh-title{
+  font-family:var(--f-serif);font-size:19px;font-weight:600;letter-spacing:.01em;
+  color:var(--brown);line-height:1;
+}
+.mh-vol{
+  font-family:var(--f-mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--muted);
+}
+.mh-right{
+  margin-left:auto;font-family:var(--f-mono);font-size:9.5px;letter-spacing:.1em;
+  color:var(--muted);text-transform:uppercase;white-space:nowrap;
+}
+
+/* ============ 头版 ============ */
+.lead{padding:56px 0 40px;border-bottom:1px solid var(--rule)}
+.kicker{
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--rust);margin-bottom:20px;display:flex;align-items:center;gap:10px;
+}
+.kicker::after{content:"";flex:1;height:1px;background:var(--rule)}
+h1{
+  font-family:var(--f-serif);font-weight:400;font-size:clamp(36px,6.4vw,68px);
+  line-height:1.06;letter-spacing:-.022em;color:var(--brown);max-width:22ch;
+}
+h1 i{font-style:italic;color:var(--rust)}
+.deck{
+  margin-top:24px;font-family:var(--f-serif);font-size:19px;line-height:1.6;
+  color:var(--ink-2);max-width:52ch;font-weight:300;
+}
+.byline{
+  margin-top:26px;padding-top:14px;border-top:1px solid var(--rule);
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;color:var(--muted);
+  display:flex;gap:20px;flex-wrap:wrap;
+}
+.byline b{color:var(--brown);font-weight:500}
+
+/* ============ 三档结论 ============ */
+.tiers{
+  display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--brown);
+  border-bottom:1px solid var(--brown);margin-top:36px;
+}
+.tier{padding:18px 18px 18px 0;border-right:1px solid var(--rule)}
+.tier:last-child{border-right:none;padding-right:0}
+.tier:not(:first-child){padding-left:18px}
+.tier-n{
+  font-family:var(--f-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:8px;display:block;
+}
+.tier-v{
+  font-family:var(--f-serif);font-size:23px;line-height:1.15;letter-spacing:-.01em;
+  display:block;margin-bottom:6px;
+}
+.tier p{font-size:12.5px;line-height:1.6;color:var(--muted)}
+.v-yes{color:var(--green)} .v-mid{color:var(--amber)} .v-no{color:var(--rust)}
+
+/* ============ 章节 ============ */
+section{padding:52px 0;border-bottom:1px solid var(--rule)}
+.sec-head{
+  display:grid;grid-template-columns:60px 1fr;gap:22px;align-items:start;margin-bottom:26px;
+}
+.sec-no{
+  font-family:var(--f-serif);font-size:44px;line-height:.9;color:var(--rule-strong);
+  font-weight:300;letter-spacing:-.03em;padding-top:2px;
+}
+h2{
+  font-family:var(--f-serif);font-weight:400;font-size:clamp(25px,3.6vw,36px);
+  line-height:1.18;letter-spacing:-.018em;color:var(--brown);
+}
+h2 em{font-style:italic;color:var(--rust)}
+.sec-kicker{
+  font-family:var(--f-mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin-top:6px;
+}
+h3{
+  font-family:var(--f-serif);font-weight:600;font-size:18.5px;letter-spacing:-.008em;
+  color:var(--brown);margin:30px 0 10px;
+}
+p{max-width:76ch}
+p+p{margin-top:14px}
+.lede{
+  font-family:var(--f-serif);font-size:17.5px;line-height:1.7;color:var(--ink-2);
+  font-weight:300;max-width:70ch;
+}
+.lede b{font-weight:600;color:var(--brown);font-family:var(--f-sans);font-size:15.5px}
+/* 首字下沉 */
+.dropcap::first-letter{
+  font-family:var(--f-serif);font-size:52px;line-height:.82;float:left;
+  padding:6px 10px 0 0;color:var(--rust);font-weight:600;
+}
+
+/* ============ 双栏正文 ============ */
+.cols{
+  column-count:2;column-gap:38px;column-rule:1px solid var(--rule);
+  margin-top:16px;font-size:14.5px;line-height:1.8;color:var(--ink-2);
+}
+.cols p{max-width:none}
+.cols h4{
+  font-family:var(--f-sans);font-weight:700;font-size:13.5px;color:var(--brown);
+  margin:16px 0 6px;break-after:avoid;
+}
+
+/* ============ 表格 ============ */
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px}
+.tbl th{
+  font-family:var(--f-mono);font-size:9px;letter-spacing:.13em;text-transform:uppercase;
+  text-align:left;padding:8px 12px 8px 0;border-bottom:1.5px solid var(--brown);color:var(--brown);
+}
+.tbl td{
+  padding:11px 12px 11px 0;border-bottom:1px solid var(--rule);vertical-align:top;
+  line-height:1.65;
+}
+.tbl td:last-child{padding-right:0}
+.tbl tr:hover td{background:var(--paper-2)}
+.mono{font-family:var(--f-mono);font-size:11.5px;color:var(--brown)}
+.pn{font-weight:600;color:var(--brown);white-space:nowrap}
+.pn small{display:block;font-family:var(--f-mono);font-size:9.5px;color:var(--muted);font-weight:400;margin-top:1px}
+
+/* ============ 可见性图示 ============ */
+.figure{border:1px solid var(--rule);background:var(--paper-2);padding:20px;margin:24px 0}
+.figure svg{display:block;width:100%;height:auto}
+.figcap{
+  font-family:var(--f-mono);font-size:10px;color:var(--muted);letter-spacing:.03em;
+  margin-top:12px;padding-top:10px;border-top:1px solid var(--rule);line-height:1.7;
+}
+
+/* ============ 红线警示 ============ */
+.redline{
+  border:1px solid var(--rust);background:var(--rust-soft);padding:22px 24px;margin:26px 0;
+  position:relative;
+}
+.redline::before{
+  content:"红线";position:absolute;top:-1px;left:-1px;background:var(--rust);color:#fff;
+  font-family:var(--f-mono);font-size:9px;letter-spacing:.16em;padding:2px 9px;
+}
+.redline h4{
+  font-family:var(--f-sans);font-size:14.5px;font-weight:700;color:var(--rust);
+  margin:10px 0 8px;
+}
+.redline p{font-size:13.5px;line-height:1.75;color:#5A2418;max-width:none}
+.redline p+p{margin-top:10px}
+.redline b{color:var(--rust)}
+
+/* ============ 引言 ============ */
+.pull{
+  border-left:3px solid var(--rust);padding:8px 0 8px 22px;margin:26px 0;
+  font-family:var(--f-serif);font-size:19px;line-height:1.55;color:var(--brown);
+  font-style:italic;max-width:56ch;
+}
+.pull cite{
+  display:block;margin-top:10px;font-family:var(--f-mono);font-size:10px;
+  color:var(--muted);font-style:normal;letter-spacing:.04em;
+}
+
+/* ============ 借鉴点 ============ */
+.borrow{display:grid;gap:0;border-top:1.5px solid var(--brown);margin-top:16px}
+.br{
+  display:grid;grid-template-columns:34px 150px 1fr;gap:16px;
+  padding:16px 0;border-bottom:1px solid var(--rule);align-items:start;
+}
+.br-i{
+  font-family:var(--f-serif);font-size:22px;color:var(--rule-strong);line-height:1;
+  font-weight:300;
+}
+.br-k{font-weight:700;font-size:13.5px;color:var(--brown);line-height:1.45}
+.br-k small{
+  display:block;font-family:var(--f-mono);font-size:9.5px;color:var(--muted);
+  font-weight:400;margin-top:3px;letter-spacing:.04em;
+}
+.br-v{font-size:13.5px;line-height:1.72;color:var(--ink-2)}
+.br-v b{color:var(--brown)}
+
+/* ============ 代码 ============ */
+.code{
+  background:var(--brown);color:#D9D3C7;font-family:var(--f-mono);font-size:12px;
+  line-height:1.75;padding:16px 18px;overflow-x:auto;margin-top:12px;
+}
+.code .c{color:#7C7568;font-style:italic}
+.code .s{color:#A9C79A}
+.code .k{color:#D4A87C}
+.code .n{color:#E3C88E}
+
+/* ============ 路线 ============ */
+.road{border-top:1.5px solid var(--brown);margin-top:18px}
+.rw{
+  display:grid;grid-template-columns:88px 1fr;gap:20px;padding:15px 0;
+  border-bottom:1px solid var(--rule);align-items:baseline;
+}
+.rw-t{
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;color:var(--rust);
+  text-transform:uppercase;
+}
+.rw-c h4{font-size:14px;font-weight:700;color:var(--brown);margin-bottom:4px}
+.rw-c p{font-size:13px;line-height:1.68;color:var(--ink-2)}
+
+/* ============ 收尾 ============ */
+.closing{background:var(--brown);color:#D5CFC2;padding:40px 38px;margin-top:34px}
+.closing h3{
+  font-family:var(--f-serif);font-size:21px;color:#FBF9F4;margin:0 0 18px;font-weight:400;
+}
+.closing ol{list-style:none;counter-reset:c;display:grid;gap:15px}
+.closing li{
+  counter-increment:c;padding-left:30px;position:relative;font-size:14px;line-height:1.75;
+  color:#B8B2A5;
+}
+.closing li::before{
+  content:counter(c);position:absolute;left:0;top:2px;
+  font-family:var(--f-serif);font-size:16px;color:var(--rust);font-weight:600;
+}
+.closing li b{color:#FBF9F4;font-weight:600}
+
+footer{padding:28px 0 52px;font-family:var(--f-mono);font-size:10px;color:var(--muted);
+  letter-spacing:.03em;line-height:2}
+
+/* ============ 入场 ============ */
+.reveal{opacity:0;transform:translateY(18px)}
+.reveal.in{opacity:1;transform:none;transition:opacity .3s var(--ease),transform .3s var(--ease)}
+@media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}}
+
+/* ============ 响应式 ============ */
+@media(max-width:820px){
+  .tiers{grid-template-columns:1fr}
+  .tier{border-right:none;border-bottom:1px solid var(--rule);padding:14px 0}
+  .tier:not(:first-child){padding-left:0}
+  .tier:last-child{border-bottom:none}
+  .cols{column-count:1;column-rule:none}
+  .sec-head{grid-template-columns:44px 1fr;gap:14px}
+  .sec-no{font-size:32px}
+  .br{grid-template-columns:26px 1fr;gap:12px}
+  .br-v{grid-column:2}
+  .rw{grid-template-columns:1fr;gap:6px}
+  .closing{padding:26px 22px}
+}
+@media(max-width:560px){
+  .wrap,.masthead-in{padding-left:18px;padding-right:18px}
+  body{font-size:14.5px}
+  .lead{padding:36px 0 28px}
+  section{padding:38px 0}
+  .mh-right{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div class="masthead-in">
+    <span class="mh-title">NEXUS 技术档案</span>
+    <span class="mh-vol">No. 03 · 无障碍与平台边界</span>
+    <span class="mh-right">核查于 2026-11-09</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ================= 头版 ================= -->
+  <header class="lead">
+    <div class="kicker reveal">Android Accessibility · Platform Boundary</div>
+    <h1 class="reveal">跳过接口<br>能拿到<strong>什么</strong>，<br>又会<em>暴露什么</em></h1>
+    <p class="deck reveal">
+      安卓无障碍确实可以绕过所有开放平台，直接读屏、填字、点发送。
+      但它同时也会被看见——这一点决定了这个方案能走多远。
+      另外，交友类平台的性质和 QQ 群不一样，需要单独说清楚。
+    </p>
+
+    <div class="tiers reveal">
+      <div class="tier">
+        <span class="tier-n">安卓无障碍</span>
+        <span class="tier-v v-yes">能做</span>
+        <p>无障碍服务可跨应用读节点、填文本、点按钮。iOS 完全没有这条路。</p>
+      </div>
+      <div class="tier">
+        <span class="tier-n">被检测的程度</span>
+        <span class="tier-v v-mid">完全可见</span>
+        <p>包名在系统服务列表里，行为节奏在日志里。不是"可能被发现"，是"一定可见"。</p>
+      </div>
+      <div class="tier">
+        <span class="tier-n">交友类平台</span>
+        <span class="tier-v v-no">性质不同</span>
+        <p>心遇的女性回复可换钱。在这里做自动回复，性质不是违规，是骗取分成。</p>
+      </div>
+    </div>
+
+    <div class="byline reveal">
+      <span>配套代码 <b>app/android/</b></span>
+      <span>判定逻辑 <b>app/gateway/necessity.py</b></span>
+      <span>已跑通 <b>25 项单测</b></span>
+    </div>
+  </header>
+
+  <!-- ================= 01 技术链路 ================= -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">01</span>
+      <div>
+        <h2>技术链路：四步，每步都有坑</h2>
+        <div class="sec-kicker">read → decide → fill → send</div>
+      </div>
+    </div>
+
+    <p class="lede reveal dropcap">
+      安卓的无障碍服务（AccessibilityService）是系统给视障用户准备的接口，
+      它能读取当前窗口的完整控件树、取到每个控件的文字、并代替用户执行点击和输入。
+      这套能力用来做自动回复，技术上没有障碍——难的不是"能不能做"，是"做完之后能不能稳定地用"。
+    </p>
+
+    <table class="tbl reveal">
+      <thead>
+        <tr><th style="width:16%">环节</th><th style="width:30%">用什么</th><th>实际会卡在哪</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="pn">读消息</td>
+          <td class="mono">AccessibilityNodeInfo 树遍历</td>
+          <td>能拿到全部可见文本，但分不清"谁发的"。气泡左右对齐、头像位置各 App 不同，只能靠上下文猜</td>
+        </tr>
+        <tr>
+          <td class="pn">找输入框</td>
+          <td class="mono">viewId / className / text</td>
+          <td>各 App 命名不统一，版本升级会变。必须做成可配置的选择器链，写死在代码里撑不过三个版本</td>
+        </tr>
+        <tr>
+          <td class="pn">填文字</td>
+          <td class="mono">ACTION_SET_TEXT</td>
+          <td>自绘输入框不响应该动作，只能退回"点击唤起输入法再注入"，稳定性明显下降</td>
+        </tr>
+        <tr>
+          <td class="pn">点发送</td>
+          <td class="mono">ACTION_CLICK</td>
+          <td>节点在界面刷新后立即失效。填完字重新取根节点是必须的，缓存旧引用必崩</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="reveal" style="margin-top:22px">
+      我在 <code style="font-family:var(--f-mono);font-size:12.5px;background:var(--paper-2);padding:1px 5px">app/android/</code>
+      里写了完整骨架：服务主体、声明式选择器、节点查找与填入。核心设计是把「怎么找界面元素」抽成 JSON，
+      新增一个 App 只改配置不改代码——否则接第五个 App 时代码就没人敢动了。
+    </p>
+
+    <div class="code reveal"><span class="c">// 新增一个 App 的全部工作：写一段配置</span>
+<span class="s">"com.example.app"</span>: {
+  <span class="s">"input"</span>:   [{ <span class="s">"by"</span>: <span class="s">"className"</span>, <span class="s">"value"</span>: <span class="s">"android.widget.EditText"</span>, <span class="s">"pick"</span>: <span class="s">"last"</span> }],
+  <span class="s">"send"</span>:    [{ <span class="s">"by"</span>: <span class="s">"text"</span>, <span class="s">"value"</span>: <span class="s">"发送"</span> }],
+  <span class="s">"message"</span>: [{ <span class="s">"by"</span>: <span class="s">"className"</span>, <span class="s">"value"</span>: <span class="s">"android.widget.TextView"</span> }]
+}</div>
+  </section>
+
+  <!-- ================= 02 可见性 ================= -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">02</span>
+      <div>
+        <h2>它能看到的你，比你想象的多</h2>
+        <div class="sec-kicker">what the target app can see</div>
+      </div>
+    </div>
+
+    <p class="lede reveal">
+      很多方案文档在这里含糊过去，说"只要伪装得好就没事"。这是不负责的。
+      下面四层每一层都是确定可见的，区别只在于对方有没有专门去看。
+    </p>
+
+    <div class="figure reveal">
+      <svg viewBox="0 0 660 320" role="img" aria-label="目标应用能观察到的四层信息">
+        <text x="0" y="14" font-family="IBM Plex Mono, monospace" font-size="9" fill="#78716A" letter-spacing="1.4">被观察面 / OBSERVABLE SURFACE</text>
+
+        <!-- 第1层 -->
+        <rect x="0" y="30" width="660" height="58" fill="#F0DDD5" stroke="#A6462C" stroke-width="1"/>
+        <text x="14" y="52" font-family="Karla, sans-serif" font-size="12.5" font-weight="700" fill="#A6462C">① 服务是否开启 — 确定可见，无法隐藏</text>
+        <text x="14" y="70" font-family="IBM Plex Mono, monospace" font-size="10" fill="#5A2418">AccessibilityManager.getEnabledAccessibilityServiceList() → 返回你的包名</text>
+        <text x="14" y="82" font-family="Karla, sans-serif" font-size="10" fill="#5A2418">改包名没有用，包名本身就在返回列表里。</text>
+
+        <!-- 第2层 -->
+        <rect x="32" y="100" width="628" height="52" fill="#F1E7CC" stroke="#8A6A1F" stroke-width="1"/>
+        <text x="46" y="120" font-family="Karla, sans-serif" font-size="12.5" font-weight="700" fill="#8A6A1F">② 操作节奏 — 可见，取决于对方是否统计</text>
+        <text x="46" y="138" font-family="IBM Plex Mono, monospace" font-size="10" fill="#5C4712">固定间隔 / 秒回 / 24 小时在线 / 每次都立即响应</text>
+
+        <!-- 第3层 -->
+        <rect x="64" y="164" width="596" height="52" fill="#F1E7CC" stroke="#8A6A1F" stroke-width="1"/>
+        <text x="78" y="184" font-family="Karla, sans-serif" font-size="12.5" font-weight="700" fill="#8A6A1F">③ 内容特征 — 可见，最容易被抓的一层</text>
+        <text x="78" y="202" font-family="IBM Plex Mono, monospace" font-size="10" fill="#5C4712">重复句式 / 模板痕迹 / 答非所问 / 从不主动换话题</text>
+
+        <!-- 第4层 -->
+        <rect x="96" y="228" width="564" height="52" fill="#DDE8E2" stroke="#2F6F5E" stroke-width="1"/>
+        <text x="110" y="248" font-family="Karla, sans-serif" font-size="12.5" font-weight="700" fill="#2F6F5E">④ 账号行为画像 — 平台侧，与无障碍无关</text>
+        <text x="110" y="266" font-family="IBM Plex Mono, monospace" font-size="10" fill="#1E4A3E">注册时长 / 设备指纹 / 收款账户 / 举报记录</text>
+
+        <!-- 右侧标注 -->
+        <line x1="660" y1="30" x2="660" y2="280" stroke="#D8D2C4" stroke-dasharray="2 3"/>
+      </svg>
+      <div class="figcap">
+        ①②③ 三层是技术层面直接暴露的，越往上越难规避。④ 与你的技术方案无关，
+        但决定了平台愿意给你多大的容错空间。任何声称"完全不被检测"的方案，都是在回避这三层里至少一层。
+      </div>
+    </div>
+
+    <p class="reveal">
+      真正能降低命中率的不是"隐藏"，是<b style="color:var(--brown)">让行为本身不像机器</b>：
+      不秒回、有间隔抖动、同一话题不连续轰炸、偶尔答不上来就说"我确认一下"。
+      这也是为什么我在 PC 端的判定里加了「回复必要性」——真实聊天里最大的破绽不是语气，是每条都回。
+    </p>
+
+    <div class="pull reveal">
+      一个人对群消息的回复率通常远低于 50%。如果你 100% 都回，那不是像人，那是像客服机器人。
+      <cite>— app/gateway/necessity.py 的设计前提</cite>
+    </div>
+  </section>
+
+  <!-- ================= 03 交友平台红线 ================= -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">03</span>
+      <div>
+        <h2>交友平台：这里的问题<em>不是风控</em></h2>
+        <div class="sec-kicker">the line that is not about technology</div>
+      </div>
+    </div>
+
+    <p class="lede reveal">
+      你点名了心遇和他趣。我查了心遇的公开资料，发现一件必须先讲清楚的事：
+      它的商业模式是<b>谁先发消息谁付费</b>，男性发一条约 0.24–0.43 元，
+      女性回复可获得金币并提现。这意味着在这个平台上做自动回复，性质会变。
+    </p>
+
+    <div class="redline reveal">
+      <h4>同一个技术，在不同平台上性质完全不同</h4>
+      <p>
+        在 QQ 群里自动回复，违反的是平台用户协议，后果是封号。
+      </p>
+      <p>
+        在心遇这类「女性回复可提现」的平台自动回复，实际效果是：
+        <b>用机器冒充真人，让对方按条付费，再从平台把金币提出来。</b>
+        这已经不是协议问题了——收钱的一方是平台，付费的一方是真人用户，
+        中间那个"人"是假的。
+      </p>
+      <p>
+        公开报道里，已经有大量用户怀疑"屏幕另一头是 AI 机器人"，黑猫投诉平台相关投诉超过 1200 条。
+        这说明平台方自己也在这件事的争议中心，对第三方机器人的打击只会更狠，不会更松。
+      </p>
+    </div>
+
+    <p class="reveal">
+      我把这条线画在这里，不代表替你判断你的用途。如果你的目标是
+      <b style="color:var(--brown)">自己经营一个真实身份、用 AI 帮打字</b>，那是另一回事；
+      如果是<b style="color:var(--rust)">批量养号冒充女性赚金币</b>，那我不会帮你做这个，
+      技术上也建议你不要碰——它不是"被发现就封号"的成本，是可能被追究的成本。
+    </p>
+
+    <h3 class="reveal">他趣这类平台的特殊性</h3>
+    <p class="reveal">
+      他趣是"情趣电商 + 社交"的组合，内容侧涉及成人话题，监管口径比普通社交更严。
+      自动化引流在这类平台上除了平台风控，还会碰到内容合规的额外审查。
+      技术上同样能用无障碍做，但可预期的账号生命周期以天计，投入产出不成立。
+    </p>
+
+    <h3 class="reveal">可行的用法：只做草稿，不代发</h3>
+    <p class="reveal">
+      我在安卓骨架里把默认值设成了 <code style="font-family:var(--f-mono);font-size:12.5px;background:var(--paper-2);padding:1px 5px">Mode.autoSend = false</code>：
+      只把草稿弹在悬浮窗上，点不点发送由人决定。这样：
+    </p>
+    <div class="cols reveal">
+      <h4>性质上</h4>
+      <p>最终发送动作由人完成，工具性质是"辅助输入"，不是"代替你社交"。这条界限在平台规则和常识上都更站得住。</p>
+      <h4>效果上</h4>
+      <p>打字这件事本来就占了大半时间。你从"想措辞 + 打字"变成"看一眼 + 点一下"，省下的时间已经很多。</p>
+      <h4>风控上</h4>
+      <p>发送间隔由人控制，不会出现机器特有的固定节奏。这是最有效的降风险手段，比任何伪装都管用。</p>
+      <h4>成本上</h4>
+      <p>不需要为了绕过检测去研究 root、LSPosed、设备指纹伪造。那套东西的维护成本远超收益。</p>
+    </div>
+  </section>
+
+  <!-- ================= 04 AstrBot ================= -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">04</span>
+      <div>
+        <h2>AstrBot：决定开源之后，<br>许可证反而不再是问题</h2>
+        <div class="sec-kicker">from constraint to advantage</div>
+      </div>
+    </div>
+
+    <p class="lede reveal">
+      上一轮我把 AGPL-3.0 列为"黄灯"，前提是你要做闭源产品。
+      既然你决定改完直接开源上 GitHub，这个约束就消失了——AGPL 正好要求下游也开源，
+      和你想要的结果一致。所以这条路现在是通的，而且是最省力的。
+    </p>
+
+    <h3 class="reveal">改造应该分三层，不要动核心</h3>
+    <table class="tbl reveal">
+      <thead>
+        <tr><th style="width:18%">层</th><th style="width:14%">改不改</th><th>怎么改</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="pn">平台适配层<small>adapter</small></td>
+          <td><span class="mono" style="color:var(--green)">改</span></td>
+          <td>加安卓无障碍适配器、加抖音评论适配器。这部分本来就是要自己写的，AstrBot 只提供接口形状</td>
+        </tr>
+        <tr>
+          <td class="pn">插件层<small>plugin</small></td>
+          <td><span class="mono" style="color:var(--green)">改</span></td>
+          <td>业务能力全放插件里：人设注入、风控闸门、线索台账。插件是官方鼓励的扩展方式，改它不污染主干</td>
+        </tr>
+        <tr>
+          <td class="pn">核心层<small>core</small></td>
+          <td><span class="mono" style="color:var(--rust)">尽量别动</span></td>
+          <td>消息总线、事件分发、WebUI。改核心会让后续合并上游更新变成灾难，而 AstrBot 更新很频繁</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="redline reveal" style="background:var(--amber-soft);border-color:var(--amber)">
+      <h4 style="color:var(--amber)">一个容易被忽略的细节：AstrBot 有自己的 EULA</h4>
+      <p style="color:#584A24">
+        除开源许可证外，它还有一份最终用户许可协议，其中写明该项目"不构成任何形式的商业服务"。
+        如果你只是开源代码，不冲突；但如果你打算基于它做付费托管服务，需要单独读一遍 EULA 原文，
+        不能只看 LICENSE。许可证和 EULA 是两份文件，各管各的。
+      </p>
+    </div>
+
+    <h3 class="reveal">开源前必须做的一件事</h3>
+    <p class="reveal">
+      清理历史提交里的密钥。这类项目最容易在 <code style="font-family:var(--f-mono);font-size:12.5px;background:var(--paper-2);padding:1px 5px">config</code>
+      或 <code style="font-family:var(--f-mono);font-size:12.5px;background:var(--paper-2);padding:1px 5px">.env</code>
+      里留下 API key、OneBot token、数据库密码。推到 GitHub 之后，这些 key 会在几分钟内被扫到并盗用。
+      建议开仓库前先跑一遍密钥扫描，把历史记录整个重写一遍，而不是在新提交里删掉——旧提交仍然可查。
+    </p>
+  </section>
+
+  <!-- ================= 05 MaiBot ================= -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">05</span>
+      <div>
+        <h2>MaiBot 值得借的，<br>恰恰是它「不说话」的部分</h2>
+        <div class="sec-kicker">what to borrow, what to skip</div>
+      </div>
+    </div>
+
+    <p class="lede reveal">
+      我看了它的设计文档和公开的源码结构。它最有价值的不是话术，是四个工程决策——
+      而且这四个都能直接搬进你的项目，不需要搬它的代码。
+    </p>
+
+    <div class="borrow reveal">
+      <div class="br">
+        <div class="br-i">01</div>
+        <div class="br-k">心流 / 激活度<small>HeartFlow · reply_necessity</small></div>
+        <div class="br-v">
+          它不是"收到消息就回"，而是给每条消息打<b>激活度分数</b>，超过阈值才开口，大部分时候保持沉默。
+          三种模式：普通聊天按阈值回、专注聊天每几秒观察一轮、自动模式按群活跃度切换。
+          <br><br>
+          这是最该抄的一条。我在 <b>necessity.py</b> 里做了简化实现：问句 +0.35、命中知识 +0.30、
+          与语料相近 +0.25、私聊 +0.30，群聊未被点名 −0.15、连续发言 −0.25。
+          跑出来 10 条消息只开口 6 条。
+        </div>
+      </div>
+
+      <div class="br">
+        <div class="br-i">02</div>
+        <div class="br-k">记忆分层<small>A_Memorix / LPMM</small></div>
+        <div class="br-v">
+          它把"记忆"拆成四件事，而不是一个向量库：短期上下文窗口（带压缩）、
+          对话窗口摘要进长期、人物事实抽成画像、回答前检索并注入。
+          <br><br>
+          <b>“越来越懂你”靠的是回复之后的写回，不是把聊天记录越塞越长。</b>
+          少了写回这一步，记忆就只是一段不断变长的日志。
+        </div>
+      </div>
+
+      <div class="br">
+        <div class="br-i">03</div>
+        <div class="br-k">表达层与推理层分离<small>style / thinking</small></div>
+        <div class="br-v">
+          "想什么"和"怎么说"是两套逻辑。所以调人格风格时不用动推理链路。
+          <br><br>
+          它还刻意做了一些<b>不完美</b>：连发几条碎片消息、大小写不一致、偶尔打错字、按情绪发表情包。
+          这些在工程上是"降低质量"，在产品上是"提高像人程度"。这个取舍值得抄。
+        </div>
+      </div>
+
+      <div class="br">
+        <div class="br-i">04</div>
+        <div class="br-k">关系与黑话<small>relation · slang mining</small></div>
+        <div class="br-v">
+          每个用户、每个群都有独立的关系记录和亲密度分数；还有一套黑话挖掘，
+          自动检测高频圈内用语并在合适场景用出来。
+          <br><br>
+          对你的场景，关系系统比黑话更实用——它能让"同一个人第三次来问"和"陌生人第一次问"得到不同回复。
+        </div>
+      </div>
+    </div>
+
+    <div class="pull reveal">
+      不该抄的部分也很清楚：MaiBot 的目标是"在群里当个像人的群友"，不是完成任务。
+      它的官方文档自己也说，这种拟人化的代价是「人格没法像意图分类器那样做单测」。
+      你要做客服/获客场景，确定性和可审计性比"像人"更重要，别把这一半也抄过来。
+      <cite>— 取舍依据：MaiBot 官方定位与 EULA</cite>
+    </div>
+
+    <h3 class="reveal">已经落地的部分</h3>
+    <p class="reveal">
+      <code style="font-family:var(--f-mono);font-size:12.5px;background:var(--paper-2);padding:1px 5px">necessity.py</code>
+      是可跑的：<code style="font-family:var(--f-mono);font-size:12.5px;background:var(--paper-2);padding:1px 5px">python gateway.py flow</code>
+      会打印每条消息的分数、决策和逐条理由。理由是可解释的——线上判定错了，能直接看出是哪条规则生效。
+    </p>
+
+    <div class="code reveal"><span class="c"># python gateway.py flow</span>
+1. [群] 阿哲：这个桌子承重多少
+   → 0.85 / 回复
+     · 含问句特征 +0.35
+     · 命中知识条目（产品参数）+0.30
+     · 与示范语料相近（重合 8 字）+0.25
+     · 群聊但消息强相关，不扣参与欲
+
+5. [群] 路人甲：嗯
+   →  0.0 / 沉默
+     · 纯语气词，无信息量
+
+9. [私] 米粒：多久能到
+   →  1.0 / 回复
+     · 含问句特征 +0.35
+     · 命中知识条目（发货）+0.30
+     · 私聊场景（一对一必答）+0.30</div>
+
+    <p class="reveal" style="margin-top:16px">
+      跑的过程中发现两个判定失衡，都改了：一是私聊里「多久能到」被判成观望——
+      一对一场景用户已经开口问了，装看不见是失职；二是群里「搬得动吗」因为没被 @ 就掉到观望，
+      而它明明和语料重合十个字。现在的规则是<b style="color:var(--brown)">强相关时豁免"未被点名"的扣分</b>，
+      并且私聊不吃"刚说过话"的惩罚。这两条都补了回归测试。
+    </p>
+  </section>
+
+  <!-- ================= 06 许可证 ================= -->
+  <section>
+    <div class="sec-head reveal">
+      <span class="sec-no">06</span>
+      <div>
+        <h2>许可证拼图：<br>AGPL 和 GPLv3 能不能拼在一起</h2>
+        <div class="sec-kicker">license compatibility</div>
+      </div>
+    </div>
+
+    <p class="lede reveal">
+      你的计划是改 AstrBot（AGPL-3.0）并参考 MaiBot（GPL-3.0）。这两个能不能放进同一个仓库？能。
+    </p>
+
+    <table class="tbl reveal">
+      <thead>
+        <tr><th style="width:22%">项目</th><th style="width:18%">许可证</th><th>放进你的开源仓库时的义务</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="pn">AstrBot</td>
+          <td class="mono">AGPL-3.0</td>
+          <td>你的整个衍生作品按 AGPL 发布，包括通过网络提供服务时。用户有权拿到完整源码</td>
+        </tr>
+        <tr>
+          <td class="pn">MaiBot</td>
+          <td class="mono">GPL-3.0</td>
+          <td>AGPL-3.0 明确允许吸收 GPLv3 代码，组合后<b>整体受 AGPL 约束</b>。所以你的仓库发布为 AGPL-3.0 即可，不需要双许可</td>
+        </tr>
+        <tr>
+          <td class="pn">OneBot 实现<small>NapCat 等</small></td>
+          <td class="mono">各仓库为准</td>
+          <td>通常作为独立进程通信，不并入你的代码库，一般按"聚合"处理。但各仓库 LICENSE 要单独看，不能一概而论</td>
+        </tr>
+        <tr>
+          <td class="pn">Live2D 模型资产</td>
+          <td class="mono">单独授权</td>
+          <td>开源代码的许可证<b>不覆盖模型文件</b>。要商用需单独确认 Live2D Inc. 条款，或改用 VRM</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="reveal" style="margin-top:20px">
+      实操建议：仓库根目录放一份 AGPL-3.0，然后在 README 里写清楚哪部分来自哪个项目、各自原许可证是什么。
+      这既是合规要求，也是给别人省事——人家一看就知道能不能用你的代码。
+    </p>
+  </section>
+
+  <!-- ================= 07 节奏 ================= -->
+  <section style="border-bottom:none">
+    <div class="sec-head reveal">
+      <span class="sec-no">07</span>
+      <div>
+        <h2>两个产品，两条独立的线</h2>
+        <div class="sec-kicker">execution order</div>
+      </div>
+    </div>
+
+    <div class="road reveal">
+      <div class="rw">
+        <div class="rw-t">第 1 步</div>
+        <div class="rw-c">
+          <h4>产品 A：先跑通 PC 端，再扩到安卓</h4>
+          <p>
+            PC 端骨架已经能跑（25 项测试）。接 NapCat 之后先在群里 dry_run 一周，
+            只看草稿不发。同时把 necessity 的沉默率调到你觉得舒服的位置——这个参数比话术更影响"像不像"。
+          </p>
+        </div>
+      </div>
+      <div class="rw">
+        <div class="rw-t">第 2 步</div>
+        <div class="rw-c">
+          <h4>产品 A：安卓端只做「草稿 + 确认」</h4>
+          <p>
+            把 <span class="mono">app/android/</span> 补进 Android Studio，先适配 1 个 App，
+            校准好选择器。默认 autoSend=false，只用悬浮窗。跑两周看自己是否真的在用。
+          </p>
+        </div>
+      </div>
+      <div class="rw">
+        <div class="rw-t">第 3 步</div>
+        <div class="rw-c">
+          <h4>产品 A：改 AstrBot，开源</h4>
+          <p>
+            适配层和插件层动手，核心层不动。开源前清密钥、重写历史、写好 README 的许可证说明。
+            这一步的产出本身就能带来用户，比闭源做小工具更容易传播。
+          </p>
+        </div>
+      </div>
+      <div class="rw">
+        <div class="rw-t">第 4 步</div>
+        <div class="rw-c">
+          <h4>产品 B：陪伴应用，基于 AIRI 的 MIT 代码</h4>
+          <p>
+            这条线和 A 完全独立，可以并行。记住 AIRI 官方没有移动端，
+            安卓端要么把 Web 版做成 PWA，要么补一层 Capacitor 外壳。这一步的工期要按"自己补"来估算。
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="closing reveal">
+      <h3>三句话收尾</h3>
+      <ol>
+        <li><b>安卓无障碍能做，但"不被发现"这个前提是假的。</b>
+          包名在系统服务列表里，行为节奏在日志里。降低风险的唯一有效手段是让行为本身不像机器——
+          不秒回、有抖动、该沉默时沉默，而不是去研究怎么隐藏。</li>
+        <li><b>交友类平台要先分清用途再谈技术。</b>
+          心遇这类「回复可提现」的平台，全自动回复的实际效果是用机器骗取分成，性质不是违规。
+          自用、辅助输入、最终由人点发送，这条路是稳的；批量养号赚金币，我不参与，也建议你别碰。</li>
+        <li><b>AstrBot 决定开源之后就是最省力的底座，MaiBot 最该借的是「什么时候不说话」。</b>
+          AGPL 从约束变成了保证，GPLv3 也能直接吸收进来。改造只动适配层和插件层，
+          核心层别碰——它的更新频率很高，改了合并上游会很痛苦。</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    <div>技术档案 No.03 · 安卓无障碍方案评估 · 交友平台边界 · AstrBot / MaiBot 改造路径</div>
+    <div>事实依据：Android AccessibilityService 官方文档 · Android 17 Beta 2 对无障碍 API 的限制 · 心遇 App Store 页面与公开报道及收费规则 · 他趣业务构成 · AstrBot LICENSE / EULA · MaiBot LICENSE(GPL-3.0) 与官方文档 · NapCat / Lagrange / LLOneBot 仓库</div>
+    <div>本文档不构成法律意见。平台规则、收录状态与许可证条款以其最新原文为准。</div>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  var els = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    els.forEach(function(el){ el.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (!e.isIntersecting) return;
+      var p = e.target.parentElement;
+      var sibs = p ? Array.prototype.filter.call(p.children, function(c){
+        return c.classList && c.classList.contains('reveal');
+      }) : [];
+      var idx = sibs.indexOf(e.target);
+      var delay = idx > 0 ? Math.min(idx, 3) * 80 : 0;
+      setTimeout(function(){ e.target.classList.add('in'); }, delay);
+      io.unobserve(e.target);
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -6% 0px' });
+  els.forEach(function(el){ io.observe(el); });
+})();
+</script>
+</body>
+</html>

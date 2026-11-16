@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS 工作台 — APP 原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E5E0D6;
+  --surface:#FAF8F4;
+  --surface-2:#F1EDE5;
+  --surface-3:#E7E1D5;
+  --ink:#14120E;
+  --ink-soft:#3B3730;
+  --muted:#7A7267;
+  --line:#D5CDBE;
+  --line-2:#E3DCD0;
+  --accent:#C4401A;
+  --accent-soft:#F4DED3;
+  --deep:#0E2A22;
+  --deep-2:#1E4034;
+  --ok:#1F6B4A; --ok-bg:#DAE8DF;
+  --warn:#8A5E08; --warn-bg:#F3E6C9;
+  --bad:#9E2418; --bad-bg:#F2D9D3;
+  --f-display:"Bebas Neue","Impact","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans","Source Han Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  --f-mono:"IBM Plex Mono","Consolas",monospace;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+  --fast:160ms; --base:300ms; --slow:560ms;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--f-body);
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
+  background-image:
+    linear-gradient(90deg,rgba(20,18,14,.04) 1px,transparent 1px),
+    linear-gradient(rgba(20,18,14,.04) 1px,transparent 1px);
+  background-size:40px 40px;
+  display:flex;flex-direction:column;align-items:center;
+  padding:28px 20px 40px;gap:22px;
+}
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:999;opacity:.04;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ============ 页头 ============ */
+.masthead{
+  width:100%;max-width:1180px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;
+}
+.mh-mark{font-family:var(--f-display);font-size:26px;letter-spacing:.03em;color:var(--deep);line-height:1}
+.mh-line{flex:1;height:1px;background:var(--line);min-width:20px}
+.mh-tag{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* ============ 舞台 ============ */
+.stage{display:flex;align-items:flex-start;justify-content:center;gap:44px;width:100%;max-width:1180px}
+.rail{width:212px;flex:none;padding-top:8px}
+.rail-k{font-family:var(--f-mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.rail ol{list-style:none;font-size:12.5px;line-height:1.55;color:var(--ink-soft);display:grid;gap:11px;counter-reset:r}
+.rail li{counter-increment:r;padding-left:26px;position:relative}
+.rail li::before{
+  content:counter(r,decimal-leading-zero);position:absolute;left:0;top:0;
+  font-family:var(--f-mono);font-size:10px;color:var(--accent);font-weight:600;
+  border:1px solid var(--accent);width:18px;height:16px;display:flex;align-items:center;justify-content:center;
+  line-height:1;
+}
+.rail li b{display:block;color:var(--deep);font-weight:600;font-size:12.5px}
+.rail-note{margin-top:18px;font-size:11.5px;line-height:1.65;color:var(--muted);border-top:1px dashed var(--line);padding-top:12px}
+.rail-note b{color:var(--accent)}
+
+/* ============ 手机 ============ */
+.phone{
+  width:390px;height:800px;flex:none;position:relative;
+  background:#14120E;border-radius:42px;padding:9px;
+  box-shadow:0 44px 80px -28px rgba(20,18,14,.42),0 0 0 1px rgba(20,18,14,.18);
+}
+.phone::before{
+  content:"";position:absolute;left:50%;transform:translateX(-50%);top:17px;
+  width:104px;height:22px;background:#14120E;border-radius:14px;z-index:20;
+}
+.phone-inner{
+  width:100%;height:100%;background:var(--surface);border-radius:33px;overflow:hidden;
+  display:flex;flex-direction:column;position:relative;
+}
+/* 状态栏 */
+.statusbar{
+  height:38px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;
+  padding:0 20px 4px;font-family:var(--f-mono);font-size:11px;font-weight:600;color:var(--deep);
+  position:relative;z-index:15;
+}
+.sb-right{display:flex;gap:5px;align-items:center}
+.sb-bar{width:3px;background:var(--deep);border-radius:1px}
+.sb-bar.b1{height:5px}.sb-bar.b2{height:8px}.sb-bar.b3{height:11px}
+.sb-batt{width:20px;height:9px;border:1.2px solid var(--deep);border-radius:2px;position:relative;margin-left:3px}
+.sb-batt::after{content:"";position:absolute;inset:1.5px;right:5px;background:var(--deep);border-radius:.5px}
+
+/* 视图容器 */
+.screen{flex:1;overflow-y:auto;overflow-x:hidden;position:relative;scrollbar-width:none}
+.screen::-webkit-scrollbar{display:none}
+.view{display:none;padding:0 0 16px;animation:vfade var(--base) var(--ease)}
+.view.active{display:block}
+@keyframes vfade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* 页内标题 */
+.vhead{padding:6px 20px 14px}
+.vhead-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.vhead h1{
+  font-family:var(--f-display);font-size:34px;line-height:.95;letter-spacing:.02em;color:var(--deep);
+}
+.vhead p{font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+.vhead-act{
+  width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--surface);
+  display:grid;place-items:center;cursor:pointer;transition:all var(--fast) var(--ease);flex:none;
+}
+.vhead-act:hover{background:var(--deep);border-color:var(--deep)}
+.vhead-act:hover svg{stroke:#fff}
+.vhead-act svg{stroke:var(--deep);transition:stroke var(--fast)}
+
+/* 筛选 chips */
+.chips{display:flex;gap:7px;padding:0 20px 14px;overflow-x:auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  font-family:var(--f-mono);font-size:11px;letter-spacing:.04em;padding:6px 12px;border-radius:100px;
+  border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;white-space:nowrap;
+  transition:all var(--fast) var(--ease);flex:none;
+}
+.chip:hover{border-color:var(--deep);color:var(--deep)}
+.chip.on{background:var(--deep);border-color:var(--deep);color:#F3F0E9}
+
+/* ============ 会话列表 ============ */
+.conv{
+  display:flex;gap:12px;padding:13px 20px;border-bottom:1px solid var(--line-2);
+  cursor:pointer;transition:background var(--fast) var(--ease);position:relative;align-items:flex-start;
+}
+.conv:hover{background:var(--surface-2)}
+.av{
+  width:40px;height:40px;border-radius:10px;flex:none;display:grid;place-items:center;
+  font-family:var(--f-mono);font-size:13px;font-weight:600;color:#F5F2EB;position:relative;
+}
+.av.qq{background:var(--deep)}
+.av.wx{background:#2E5A43}
+.av.xhs{background:var(--accent)}
+.av.soul{background:#5A4A6B}
+.av-badge{
+  position:absolute;right:-3px;bottom:-3px;font-family:var(--f-mono);font-size:8px;
+  background:var(--surface);border:1px solid var(--line);color:var(--muted);
+  padding:0 3px;border-radius:3px;line-height:1.4;letter-spacing:.02em;
+}
+.conv-main{flex:1;min-width:0}
+.conv-top{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+.conv-name{font-weight:600;font-size:14px;color:var(--deep);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-time{margin-left:auto;font-family:var(--f-mono);font-size:10px;color:var(--muted);flex:none}
+.conv-msg{
+  font-size:12.5px;color:var(--muted);line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
+}
+.conv-tags{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
+.tag{
+  font-family:var(--f-mono);font-size:9.5px;letter-spacing:.04em;padding:1.5px 6px;border-radius:3px;
+  display:inline-flex;align-items:center;gap:3px;
+}
+.tag::before{content:"";width:4px;height:4px;border-radius:50%;flex:none}
+.tag.ai{background:var(--ok-bg);color:var(--ok)}.tag.ai::before{background:var(--ok)}
+.tag.human{background:var(--warn-bg);color:var(--warn)}.tag.human::before{background:var(--warn)}
+.tag.hot{background:var(--accent-soft);color:var(--accent)}.tag.hot::before{background:var(--accent)}
+
+/* 会话展开的 AI 建议 */
+.draft{
+  margin:0 20px 14px;border:1px solid var(--line);background:var(--surface);
+  overflow:hidden;animation:vfade var(--base) var(--ease);
+}
+.draft-h{
+  display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--deep);color:#EFEBE2;
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+}
+.draft-h .spacer{flex:1}
+.draft-h .rate{color:#9FBFAE}
+.drep{padding:11px 12px;border-bottom:1px dashed var(--line);font-size:13px;line-height:1.62;color:var(--ink-soft);cursor:pointer;transition:background var(--fast)}
+.drep:last-of-type{border-bottom:none}
+.drep:hover{background:var(--surface-2)}
+.drep b{color:var(--deep);font-weight:600}
+.drep span{
+  display:block;font-family:var(--f-mono);font-size:9.5px;color:var(--muted);
+  letter-spacing:.06em;margin-top:4px;
+}
+.draft-f{display:flex;border-top:1px solid var(--line)}
+.draft-f button{
+  flex:1;padding:10px;border:none;background:var(--surface);cursor:pointer;
+  font-family:var(--f-mono);font-size:10.5px;letter-spacing:.06em;color:var(--deep);
+  transition:background var(--fast) var(--ease);
+}
+.draft-f button:first-child{border-right:1px solid var(--line)}
+.draft-f button:hover{background:var(--surface-2)}
+.draft-f button.primary{background:var(--accent);color:#fff}
+.draft-f button.primary:hover{background:#A83515}
+
+/* ============ 获客页 ============ */
+.upzone{
+  margin:0 20px 16px;border:1.5px dashed var(--line);border-radius:12px;
+  padding:22px 16px;text-align:center;cursor:pointer;transition:all var(--fast) var(--ease);
+  background:var(--surface);
+}
+.upzone:hover{border-color:var(--accent);background:var(--accent-soft)}
+.upzone.done{border-style:solid;border-color:var(--line);padding:0;overflow:hidden;background:var(--surface)}
+.up-icon{width:34px;height:34px;margin:0 auto 9px;opacity:.5}
+.up-icon svg{stroke:var(--deep)}
+.up-t{font-size:13px;font-weight:600;color:var(--deep)}
+.up-s{font-family:var(--f-mono);font-size:10px;color:var(--muted);margin-top:3px;letter-spacing:.04em}
+.up-thumb{width:100%;height:150px;background:linear-gradient(135deg,#4A6B52,#8FA96F 45%,#D8C89A 75%,#B07A4E);position:relative}
+.up-thumb::after{
+  content:"已识别 · 户外露营桌 · 3 个卖点";position:absolute;left:0;bottom:0;right:0;
+  padding:7px 12px;background:linear-gradient(transparent,rgba(20,18,14,.72));
+  color:#fff;font-family:var(--f-mono);font-size:9.5px;letter-spacing:.05em;
+}
+
+.copycard{margin:0 20px 14px;border:1px solid var(--line);background:var(--surface)}
+.copycard-h{
+  display:flex;align-items:center;gap:7px;padding:8px 12px;border-bottom:1px solid var(--line);
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+}
+.copycard-h .plat-dot{width:6px;height:6px;border-radius:50%}
+.copycard-h .spacer{flex:1}
+.copycard-body{padding:12px;font-size:13px;line-height:1.72;color:var(--ink-soft)}
+.copycard-body .ttl{display:block;font-weight:600;color:var(--deep);margin-bottom:6px;font-size:13.5px}
+.copycard-body .tw{color:var(--accent);font-weight:500}
+.copycard-f{
+  display:flex;gap:0;border-top:1px solid var(--line);
+}
+.copycard-f button{
+  flex:1;padding:9px;border:none;background:transparent;cursor:pointer;
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.06em;color:var(--deep);
+  transition:background var(--fast);
+}
+.copycard-f button+button{border-left:1px solid var(--line)}
+.copycard-f button:hover{background:var(--surface-2)}
+.copycard-f button.warn{color:var(--warn)}
+
+/* 线索台账 */
+.sec-label{
+  padding:4px 20px 10px;display:flex;align-items:baseline;gap:8px;
+}
+.sec-label h2{font-family:var(--f-display);font-size:20px;letter-spacing:.03em;color:var(--deep);line-height:1}
+.sec-label span{font-family:var(--f-mono);font-size:9.5px;color:var(--muted);letter-spacing:.08em}
+.sec-label .more{margin-left:auto;font-family:var(--f-mono);font-size:10px;color:var(--accent);cursor:pointer}
+
+.lead{
+  display:flex;align-items:center;gap:10px;padding:11px 20px;border-bottom:1px solid var(--line-2);
+  transition:background var(--fast);
+}
+.lead:hover{background:var(--surface-2)}
+.lead-av{width:30px;height:30px;border-radius:8px;flex:none;display:grid;place-items:center;
+  font-family:var(--f-mono);font-size:11px;font-weight:600;color:#F5F2EB}
+.lead-main{flex:1;min-width:0}
+.lead-n{font-size:13px;font-weight:600;color:var(--deep)}
+.lead-m{font-family:var(--f-mono);font-size:10px;color:var(--muted);letter-spacing:.03em;margin-top:1px}
+.lead-val{font-family:var(--f-display);font-size:19px;line-height:1;text-align:right}
+.lead-val small{display:block;font-family:var(--f-mono);font-size:8.5px;color:var(--muted);letter-spacing:.06em;font-weight:400}
+.hi{color:var(--accent)}.mid{color:var(--warn)}.lo{color:var(--muted)}
+
+/* ============ 人设页 ============ */
+.persona-hero{
+  margin:0 20px 16px;border:1px solid var(--deep);background:var(--deep);color:#EDE9E1;
+  padding:16px;position:relative;overflow:hidden;cursor:pointer;
+  transition:transform var(--fast) var(--ease);
+}
+.persona-hero:hover{transform:translateY(-2px)}
+.persona-hero::before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(300px 160px at 100% 0%,rgba(196,64,26,.4),transparent 70%);
+}
+.ph-in{position:relative;z-index:1}
+.ph-top{display:flex;align-items:center;gap:11px;margin-bottom:11px}
+.ph-av{
+  width:42px;height:42px;border-radius:11px;background:var(--accent);color:#fff;
+  display:grid;place-items:center;font-family:var(--f-display);font-size:19px;letter-spacing:.02em;flex:none;
+}
+.ph-name{font-size:15px;font-weight:600;line-height:1.2}
+.ph-role{font-family:var(--f-mono);font-size:10px;color:#9FBFAE;letter-spacing:.06em;margin-top:2px}
+.ph-status{
+  margin-left:auto;font-family:var(--f-mono);font-size:9px;letter-spacing:.08em;
+  border:1px solid #3E6653;color:#9FBFAE;padding:2px 6px;border-radius:3px;
+}
+.ph-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#27473A}
+.ph-stat{background:var(--deep);padding:9px 10px}
+.ph-stat b{display:block;font-family:var(--f-display);font-size:20px;line-height:1;color:#fff}
+.ph-stat span{font-family:var(--f-mono);font-size:8.5px;color:#7E9E8D;letter-spacing:.06em;display:block;margin-top:3px}
+
+.p-row{
+  display:flex;align-items:center;gap:12px;padding:13px 20px;border-bottom:1px solid var(--line-2);
+  cursor:pointer;transition:background var(--fast);
+}
+.p-row:hover{background:var(--surface-2)}
+.p-row-av{width:36px;height:36px;border-radius:10px;flex:none;display:grid;place-items:center;
+  font-family:var(--f-mono);font-size:12px;font-weight:600;color:#F5F2EB}
+.p-row-main{flex:1;min-width:0}
+.p-row-n{font-size:13.5px;font-weight:600;color:var(--deep)}
+.p-row-d{font-family:var(--f-mono);font-size:10px;color:var(--muted);margin-top:2px;letter-spacing:.02em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-row-ch{display:flex;gap:3px;flex:none}
+.ch-dot{width:16px;height:16px;border-radius:4px;display:grid;place-items:center;
+  font-family:var(--f-mono);font-size:8px;font-weight:600;color:#fff}
+.ch-dot.qq{background:var(--deep)}.ch-dot.wx{background:#2E5A43}.ch-dot.xhs{background:var(--accent)}
+.ch-dot.off{background:var(--surface-3);color:var(--muted)}
+
+/* ============ 渠道页 ============ */
+.ch-card{
+  margin:0 20px 10px;border:1px solid var(--line);background:var(--surface);padding:13px;
+  transition:border-color var(--fast);
+}
+.ch-card:hover{border-color:var(--deep)}
+.ch-card.muted{opacity:.62;background:var(--surface-2)}
+.ch-top{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.ch-av{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex:none;
+  font-family:var(--f-mono);font-size:11px;font-weight:600;color:#fff}
+.ch-n{font-size:13.5px;font-weight:600;color:var(--deep);line-height:1.2}
+.ch-sub{font-family:var(--f-mono);font-size:9.5px;color:var(--muted);margin-top:2px;letter-spacing:.03em}
+.ch-st{margin-left:auto;font-family:var(--f-mono);font-size:9px;letter-spacing:.06em;
+  padding:2px 7px;border-radius:3px;white-space:nowrap}
+.ch-st.ok{background:var(--ok-bg);color:var(--ok)}
+.ch-st.warn{background:var(--warn-bg);color:var(--warn)}
+.ch-st.bad{background:var(--bad-bg);color:var(--bad)}
+.ch-st.gray{background:var(--surface-3);color:var(--muted)}
+.ch-meta{display:flex;gap:14px;font-family:var(--f-mono);font-size:10px;color:var(--muted);letter-spacing:.03em}
+.ch-meta b{color:var(--deep);font-weight:600}
+.ch-bar{height:3px;background:var(--surface-3);margin-top:9px;overflow:hidden}
+.ch-bar i{display:block;height:100%;background:var(--ok)}
+.ch-bar i.warn{background:var(--warn)}
+.ch-note{font-size:11.5px;color:var(--muted);line-height:1.55;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.ch-note b{color:var(--bad)}
+
+/* ============ 我的页 ============ */
+.set-row{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line-2)}
+.set-main{flex:1;min-width:0}
+.set-n{font-size:13.5px;font-weight:600;color:var(--deep)}
+.set-d{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:2px}
+.switch{
+  width:42px;height:24px;border-radius:100px;background:var(--surface-3);border:none;
+  position:relative;cursor:pointer;flex:none;transition:background var(--base) var(--ease);
+}
+.switch::after{
+  content:"";position:absolute;left:2px;top:2px;width:20px;height:20px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 3px rgba(20,18,14,.3);
+  transition:transform var(--base) var(--ease);
+}
+.switch.on{background:var(--ok)}
+.switch.on::after{transform:translateX(18px)}
+.switch.danger.on{background:var(--bad)}
+
+.slider-row{padding:14px 20px;border-bottom:1px solid var(--line-2)}
+.slider-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+.slider-h b{font-size:13px;color:var(--deep);font-weight:600}
+.slider-h span{font-family:var(--f-mono);font-size:11px;color:var(--accent);font-weight:600}
+input[type=range]{
+  -webkit-appearance:none;width:100%;height:3px;background:var(--surface-3);outline:none;border:none;
+  border-radius:2px;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--deep);
+  border:2.5px solid var(--surface);box-shadow:0 1px 4px rgba(20,18,14,.3);cursor:pointer;
+  transition:transform var(--fast);
+}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15)}
+input[type=range]::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;background:var(--deep);border:2.5px solid var(--surface);cursor:pointer;
+}
+
+.danger-box{
+  margin:14px 20px;border:1px solid var(--bad);background:var(--bad-bg);padding:13px;
+}
+.danger-box h4{font-size:12.5px;color:var(--bad);font-weight:600;margin-bottom:5px;display:flex;gap:6px;align-items:center}
+.danger-box p{font-size:11.5px;line-height:1.6;color:#6B1A12}
+
+/* ============ 底部 Tab ============ */
+.tabbar{
+  flex:none;height:64px;display:flex;border-top:1px solid var(--line);background:rgba(250,248,244,.96);
+  backdrop-filter:blur(12px);padding-bottom:4px;position:relative;z-index:12;
+}
+.tab{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  background:none;border:none;cursor:pointer;padding:0;position:relative;
+}
+.tab svg{stroke:var(--muted);transition:stroke var(--fast)}
+.tab span{font-family:var(--f-mono);font-size:9px;letter-spacing:.06em;color:var(--muted);transition:color var(--fast)}
+.tab.on svg{stroke:var(--deep)}
+.tab.on span{color:var(--deep);font-weight:600}
+.tab.on::before{
+  content:"";position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:24px;height:2px;background:var(--accent);
+}
+.tab-fab{
+  flex:none;width:56px;display:grid;place-items:center;
+}
+.fab{
+  width:44px;height:44px;border-radius:14px;background:var(--accent);border:none;cursor:pointer;
+  display:grid;place-items:center;box-shadow:0 6px 16px -4px rgba(196,64,26,.55);
+  transition:transform var(--fast) var(--ease);
+}
+.fab:hover{transform:scale(1.06)}
+.fab svg{stroke:#fff}
+
+/* ============ 人设编辑面板 ============ */
+.sheet{
+  position:absolute;inset:0;z-index:60;background:var(--surface);
+  display:flex;flex-direction:column;
+  transform:translateY(100%);transition:transform var(--slow) var(--ease);
+  will-change:transform;
+}
+.sheet.open{transform:translateY(0)}
+.sheet-h{
+  flex:none;padding:14px 16px 0;border-bottom:1px solid var(--line);background:var(--surface);
+}
+.sheet-h-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.sheet-title{font-size:15px;font-weight:600;color:var(--deep);line-height:1.2}
+.sheet-sub{font-family:var(--f-mono);font-size:9.5px;color:var(--muted);letter-spacing:.05em;margin-top:2px}
+.sheet-close{
+  margin-left:auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);
+  background:transparent;cursor:pointer;display:grid;place-items:center;flex:none;
+  transition:all var(--fast);
+}
+.sheet-close:hover{background:var(--deep);border-color:var(--deep)}
+.sheet-close:hover svg{stroke:#fff}
+.sheet-tabs{display:flex;gap:0;overflow-x:auto;scrollbar-width:none}
+.sheet-tabs::-webkit-scrollbar{display:none}
+.stab{
+  padding:9px 11px;border:none;background:none;cursor:pointer;position:relative;flex:none;
+  font-family:var(--f-mono);font-size:10.5px;letter-spacing:.05em;color:var(--muted);
+  transition:color var(--fast);
+}
+.stab.on{color:var(--deep);font-weight:600}
+.stab.on::after{
+  content:"";position:absolute;left:8px;right:8px;bottom:0;height:2px;background:var(--accent);
+}
+.sheet-body{flex:1;overflow-y:auto;padding:16px;scrollbar-width:thin}
+.sheet-body::-webkit-scrollbar{width:4px}
+.sheet-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
+
+.sfield{margin-bottom:16px}
+.sfield label{
+  display:block;font-family:var(--f-mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:5px;
+}
+.sinput,.stextarea{
+  width:100%;border:1px solid var(--line);background:var(--surface);padding:9px 11px;
+  font-family:var(--f-body);font-size:13.5px;color:var(--ink);border-radius:6px;
+  transition:border-color var(--fast);
+}
+.sinput:focus,.stextarea:focus{outline:2px solid var(--deep);outline-offset:1px;border-color:var(--deep)}
+.stextarea{resize:vertical;min-height:68px;line-height:1.6}
+
+.tone-block{margin-bottom:15px}
+.tone-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:5px}
+.tone-h b{font-size:12.5px;color:var(--deep);font-weight:600}
+.tone-h em{font-family:var(--f-mono);font-size:9.5px;color:var(--accent);font-style:normal}
+.tags{display:flex;flex-wrap:wrap;gap:5px}
+.ttag{
+  font-family:var(--f-mono);font-size:10px;letter-spacing:.03em;padding:4px 9px;border-radius:100px;
+  border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;
+  transition:all var(--fast) var(--ease);
+}
+.ttag:hover{border-color:var(--deep);color:var(--deep)}
+.ttag.on{background:var(--deep);border-color:var(--deep);color:#F3F0E9}
+
+.kb-item{
+  display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px dashed var(--line);
+}
+.kb-item:last-child{border-bottom:none}
+.kb-k{font-family:var(--f-mono);font-size:10px;color:var(--accent);flex:none;width:52px;padding-top:2px;letter-spacing:.02em}
+.kb-v{font-size:12.5px;color:var(--ink-soft);line-height:1.55;flex:1}
+
+.fs-item{
+  border:1px solid var(--line);background:var(--surface-2);padding:10px 11px;margin-bottom:8px;
+  position:relative;
+}
+.fs-q{font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:5px}
+.fs-q::before{content:"对方 ";font-family:var(--f-mono);font-size:9px;color:var(--accent);letter-spacing:.05em}
+.fs-a{font-size:13px;color:var(--deep);line-height:1.6;font-weight:500}
+.fs-a::before{content:"你 ";font-family:var(--f-mono);font-size:9px;color:var(--ok);letter-spacing:.05em;font-weight:400}
+.fs-add{
+  width:100%;border:1px dashed var(--line);background:transparent;padding:9px;cursor:pointer;
+  font-family:var(--f-mono);font-size:10.5px;color:var(--muted);letter-spacing:.05em;
+  transition:all var(--fast);
+}
+.fs-add:hover{border-color:var(--accent);color:var(--accent)}
+
+/* 试衣间 */
+.sandbox{
+  flex:none;border-top:1px solid var(--deep);background:var(--deep);color:#EDE9E1;
+  max-height:60px;transition:max-height var(--slow) var(--ease);overflow:hidden;
+}
+.sandbox.open{max-height:340px}
+.sb-h{
+  display:flex;align-items:center;gap:8px;padding:11px 16px;cursor:pointer;user-select:none;
+}
+.sb-h .lb{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#9FBFAE}
+.sb-h .live{
+  display:inline-flex;align-items:center;gap:4px;font-family:var(--f-mono);font-size:9px;
+  color:#7FD1A8;letter-spacing:.05em;
+}
+.sb-h .live::before{content:"";width:5px;height:5px;border-radius:50%;background:#7FD1A8;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.sb-h .arw{margin-left:auto;transition:transform var(--base) var(--ease)}
+.sandbox.open .sb-h .arw{transform:rotate(180deg)}
+.sb-body{padding:0 16px 14px;display:grid;gap:9px}
+.sb-line{font-size:12.5px;line-height:1.62;color:#C9C3B8}
+.sb-line .who{font-family:var(--f-mono);font-size:9px;letter-spacing:.06em;display:block;margin-bottom:2px}
+.sb-line.them .who{color:#8B8478}
+.sb-line.me .who{color:#7FD1A8}
+.sb-bubble{
+  background:rgba(255,255,255,.06);border-left:2px solid #7FD1A8;padding:8px 10px;
+  font-size:13px;line-height:1.6;color:#F0EDE6;
+}
+.sb-foot{display:flex;gap:7px;margin-top:2px}
+.sb-foot button{
+  flex:1;padding:8px;border:1px solid rgba(255,255,255,.18);background:transparent;cursor:pointer;
+  font-family:var(--f-mono);font-size:9.5px;letter-spacing:.06em;color:#C9C3B8;border-radius:4px;
+  transition:all var(--fast);
+}
+.sb-foot button:hover{background:rgba(255,255,255,.1);color:#fff}
+.sb-foot button.hl{border-color:var(--accent);background:var(--accent);color:#fff}
+
+/* Toast */
+.toast{
+  position:absolute;left:50%;bottom:84px;transform:translate(-50%,14px);z-index:90;
+  background:var(--deep);color:#F0EDE6;padding:9px 16px;border-radius:8px;
+  font-family:var(--f-mono);font-size:11px;letter-spacing:.03em;white-space:nowrap;
+  opacity:0;pointer-events:none;transition:all var(--base) var(--ease);
+  box-shadow:0 10px 24px -8px rgba(20,18,14,.5);
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition-duration:.01ms!important}
+}
+@media(max-width:1120px){
+  .rail{display:none}
+  .stage{gap:0}
+}
+@media(max-width:640px){
+  body{padding:0;gap:0;background:var(--surface)}
+  .masthead{display:none}
+  .phone{width:100%;height:100vh;height:100dvh;border-radius:0;padding:0;box-shadow:none}
+  .phone::before{display:none}
+  .phone-inner{border-radius:0}
+  .statusbar{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <span class="mh-mark">NEXUS/工作台</span>
+  <span class="mh-line"></span>
+  <span class="mh-tag">交互原型 v0.1 · 点击底部标签切换 · 人设页可打开编辑面板</span>
+</div>
+
+<div class="stage">
+
+  <!-- 左栏说明 -->
+  <aside class="rail">
+    <div class="rail-k">页面结构</div>
+    <ol>
+      <li><b>会话</b>全渠道收件箱，AI 三选一草稿</li>
+      <li><b>获客</b>图片→文案→发布队列→线索</li>
+      <li><b>人设</b>统一人设中枢（核心）</li>
+      <li><b>渠道</b>连接状态与健康度</li>
+      <li><b>我的</b>风控阈值与实验区</li>
+    </ol>
+    <div class="rail-note">
+      底部中间的 <b>+</b> 是快速入口：可以随时从任意页面发起"生成回复"或"生成文案"。
+    </div>
+  </aside>
+
+  <!-- 手机 -->
+  <div class="phone">
+    <div class="phone-inner">
+
+      <div class="statusbar">
+        <span>9:41</span>
+        <div class="sb-right">
+          <span class="sb-bar b1"></span><span class="sb-bar b2"></span><span class="sb-bar b3"></span>
+          <span class="sb-batt"></span>
+        </div>
+      </div>
+
+      <div class="screen" id="screen">
+
+        <!-- ========== 会话 ========== -->
+        <section class="view active" id="v-inbox">
+          <div class="vhead">
+            <div class="vhead-row">
+              <div>
+                <h1>会话</h1>
+                <p>3 unread · 2 drafts ready</p>
+              </div>
+              <button class="vhead-act" onclick="toast('已切换为「仅需人工」视图')" aria-label="筛选">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round">
+                  <path d="M3 6h18M7 12h10M11 18h2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="chips">
+            <button class="chip on">全部</button>
+            <button class="chip">QQ</button>
+            <button class="chip">微信</button>
+            <button class="chip">小红书</button>
+            <button class="chip">需人工</button>
+          </div>
+
+          <div class="conv" onclick="toggleDraft(this,'d1')">
+            <div class="av qq">哲<span class="av-badge">QQ</span></div>
+            <div class="conv-main">
+              <div class="conv-top">
+                <span class="conv-name">阿哲</span>
+                <span class="conv-time">2 分钟前</span>
+              </div>
+              <div class="conv-msg">这个露营桌承重多少？能带炉子吗</div>
+              <div class="conv-tags">
+                <span class="tag ai">AI 草稿就绪</span>
+                <span class="tag hot">高意向</span>
+              </div>
+            </div>
+          </div>
+          <div id="d1" style="display:none">
+            <div class="draft">
+              <div class="draft-h">
+                <span>AI 草稿 · 人设「小陆」</span>
+                <span class="spacer"></span>
+                <span class="rate">置信 0.91</span>
+              </div>
+              <div class="drep" onclick="toast('已采纳并填入输入框')">
+                <b>承重 30 公斤，桌面放卡式炉完全没问题。</b>我一般会垫个隔热垫，木面不容易留痕。要看看实际用的照片吗？
+                <span>方案 A · 直接回答 + 引导</span>
+              </div>
+              <div class="drep" onclick="toast('已采纳并填入输入框')">
+                30kg 稳稳的，炉子随便放～不过建议配个隔热垫，我发你图看看？
+                <span>方案 B · 口语化</span>
+              </div>
+              <div class="drep" onclick="toast('已采纳并填入输入框')">
+                这两点我确认一下再回你，稍等两分钟。
+                <span>方案 C · 保守拖延（低置信度时使用）</span>
+              </div>
+              <div class="draft-f">
+                <button onclick="toast('已转人工，草稿已保留')">转人工</button>
+                <button class="primary" onclick="toast('已发送（模拟）')">采纳并发送</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="conv" onclick="toggleDraft(this,'d2')">
+            <div class="av wx">米<span class="av-badge">微信</span></div>
+            <div class="conv-main">
+              <div class="conv-top">
+                <span class="conv-name">米粒</span>
+                <span class="conv-time">8 分钟前</span>
+              </div>
+              <div class="conv-msg">能便宜点吗，我买两个</div>
+              <div class="conv-tags">
+                <span class="tag human">需人工 · 涉及议价</span>
+              </div>
+            </div>
+          </div>
+          <div id="d2" style="display:none">
+            <div class="draft">
+              <div class="draft-h">
+                <span>已拦截 · 触发人设边界</span>
+                <span class="spacer"></span>
+                <span class="rate" style="color:#E8A88F">不自动回复</span>
+              </div>
+              <div style="padding:11px 12px;font-size:12.5px;line-height:1.65;color:var(--ink-soft)">
+                该消息命中人设「小陆」的边界规则 <b style="color:var(--bad)">不许报价 / 不许承诺折扣</b>，
+                系统未生成草稿。请人工处理。
+              </div>
+              <div class="draft-f">
+                <button onclick="toast('已忽略')">忽略</button>
+                <button class="primary" onclick="toast('已打开人工回复框')">人工回复</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="conv" onclick="toggleDraft(this,'d3')">
+            <div class="av xhs">红<span class="av-badge">小红书</span></div>
+            <div class="conv-main">
+              <div class="conv-top">
+                <span class="conv-name">用户 8823</span>
+                <span class="conv-time">15 分钟前</span>
+              </div>
+              <div class="conv-msg">求链接！！这个在哪买</div>
+              <div class="conv-tags">
+                <span class="tag ai">AI 已回复</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="conv" style="opacity:.62;cursor:default">
+            <div class="av soul">灵<span class="av-badge">Soul</span></div>
+            <div class="conv-main">
+              <div class="conv-top">
+                <span class="conv-name">（未接入）</span>
+                <span class="conv-time">—</span>
+              </div>
+              <div class="conv-msg">该平台无开放接口，仅支持手动模式</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========== 获客 ========== -->
+        <section class="view" id="v-acquire">
+          <div class="vhead">
+            <div class="vhead-row">
+              <div>
+                <h1>获客</h1>
+                <p>Content Forge · 1 draft pending</p>
+              </div>
+              <button class="vhead-act" onclick="toast('已打开素材库')" aria-label="素材库">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-5L5 19"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="upzone" id="upzone" onclick="uploadImg()">
+            <div class="up-icon">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round">
+                <path d="M12 16V4m0 0L7 9m5-5l5 5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
+              </svg>
+            </div>
+            <div class="up-t">上传图片生成文案</div>
+            <div class="up-s">JPG / PNG · 支持一次 9 张</div>
+          </div>
+
+          <div id="copyArea" style="display:none">
+            <div class="copycard">
+              <div class="copycard-h">
+                <span class="plat-dot" style="background:#C4401A"></span>
+                <span>小红书版</span>
+                <span class="spacer"></span>
+                <span style="color:var(--ok)">可自动发布</span>
+              </div>
+              <div class="copycard-body">
+                <span class="ttl">把露营过成野餐｜这张桌子我搬去了三次山里</span>
+                轻到一只手能拎走，承重 30 公斤，放炉子煮咖啡纹丝不动。
+                收起来只有一把伞那么长，塞后备箱完全不占地方。
+                木纹是真的，晒一下午也不会发白。
+                <br><span class="tw">#露营装备 #户外好物 #野餐桌 #露营生活</span>
+              </div>
+              <div class="copycard-f">
+                <button onclick="toast('已复制文案')">复制</button>
+                <button onclick="toast('已重新生成，换了 3 个角度')">换一版</button>
+                <button onclick="toast('已加入发布队列 · 今天 19:30')">排期发布</button>
+              </div>
+            </div>
+
+            <div class="copycard">
+              <div class="copycard-h">
+                <span class="plat-dot" style="background:#141210"></span>
+                <span>抖音版</span>
+                <span class="spacer"></span>
+                <span style="color:var(--warn)">需手动发布</span>
+              </div>
+              <div class="copycard-body">
+                <span class="ttl">开局 3 秒：把桌子从背包里抽出来</span>
+                「谁懂啊，这张桌子比我电脑还轻。」
+                <br>· 一支手能拎 · 承重 30kg · 收起来一把伞那么长
+                <br>评论区问链接的都回了。
+              </div>
+              <div class="copycard-f">
+                <button onclick="toast('已复制文案')">复制</button>
+                <button class="warn" onclick="toast('抖音官方不开放营销类发布，需跳转 App 手动发')">跳转抖音发布</button>
+              </div>
+            </div>
+
+            <div style="margin:0 20px 18px;padding:10px 12px;border-left:2px solid var(--warn);
+                        background:var(--warn-bg);font-size:11.5px;line-height:1.6;color:#5C4006">
+              <b>为什么抖音是手动：</b>抖音 2025-08 起明确不对营销类内容开放发布能力。
+              系统只负责把文案准备好，最后一步由你点。
+            </div>
+          </div>
+
+          <div class="sec-label">
+            <h2>线索台账</h2>
+            <span>Lead Ledger</span>
+            <span class="more" onclick="toast('已打开完整台账')">全部 24 →</span>
+          </div>
+
+          <div class="lead">
+            <div class="lead-av" style="background:#2E5A43">米</div>
+            <div class="lead-main">
+              <div class="lead-n">米粒</div>
+              <div class="lead-m">微信 · 已加好友 · 问过价格</div>
+            </div>
+            <div class="lead-val hi">86<small>意向分</small></div>
+          </div>
+          <div class="lead">
+            <div class="lead-av" style="background:#0E2A22">哲</div>
+            <div class="lead-main">
+              <div class="lead-n">阿哲</div>
+              <div class="lead-m">QQ 群 · 待跟进 · 问过参数</div>
+            </div>
+            <div class="lead-val mid">62<small>意向分</small></div>
+          </div>
+          <div class="lead">
+            <div class="lead-av" style="background:#C4401A">8</div>
+            <div class="lead-main">
+              <div class="lead-n">用户 8823</div>
+              <div class="lead-m">小红书 · 已留联系方式</div>
+            </div>
+            <div class="lead-val hi">74<small>意向分</small></div>
+          </div>
+        </section>
+
+        <!-- ========== 人设 ========== -->
+        <section class="view" id="v-persona">
+          <div class="vhead">
+            <div class="vhead-row">
+              <div>
+                <h1>人设</h1>
+                <p>Persona Studio · 3 profiles</p>
+              </div>
+              <button class="vhead-act" onclick="toast('已新建空白人设')" aria-label="新建">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="persona-hero" onclick="openSheet()">
+            <div class="ph-in">
+              <div class="ph-top">
+                <div class="ph-av">陆</div>
+                <div>
+                  <div class="ph-name">小陆</div>
+                  <div class="ph-role">主号 · 客服型</div>
+                </div>
+                <span class="ph-status">使用中</span>
+              </div>
+              <div class="ph-stats">
+                <div class="ph-stat"><b>12</b><span>示范语料</span></div>
+                <div class="ph-stat"><b>3</b><span>覆盖渠道</span></div>
+                <div class="ph-stat"><b>91%</b><span>草稿采纳</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding:0 20px 8px">
+            <div style="font-family:var(--f-mono);font-size:9.5px;letter-spacing:.1em;
+                        text-transform:uppercase;color:var(--muted);margin-bottom:8px">其他人设</div>
+          </div>
+
+          <div class="p-row" onclick="openSheet()">
+            <div class="p-row-av" style="background:#C4401A">林</div>
+            <div class="p-row-main">
+              <div class="p-row-n">阿林</div>
+              <div class="p-row-d">种草型 · 小红书主用 · 语气更轻</div>
+            </div>
+            <div class="p-row-ch">
+              <span class="ch-dot off">Q</span>
+              <span class="ch-dot off">微</span>
+              <span class="ch-dot xhs">红</span>
+            </div>
+          </div>
+
+          <div class="p-row" onclick="openSheet()">
+            <div class="p-row-av" style="background:#5A4A6B">夜</div>
+            <div class="p-row-main">
+              <div class="p-row-n">夜行</div>
+              <div class="p-row-d">闲聊型 · B站备用 · 二次元</div>
+            </div>
+            <div class="p-row-ch">
+              <span class="ch-dot off">Q</span>
+              <span class="ch-dot off">微</span>
+              <span class="ch-dot off">红</span>
+            </div>
+          </div>
+
+          <div style="margin:16px 20px 0;padding:11px 13px;border:1px dashed var(--line);
+                      font-size:11.5px;line-height:1.65;color:var(--muted)">
+            人设是跨渠道共享的资产。改一次，所有已连接的平台同时生效；
+            单个渠道需要区别对待时，在「渠道」页签里做局部覆盖。
+          </div>
+        </section>
+
+        <!-- ========== 渠道 ========== -->
+        <section class="view" id="v-channel">
+          <div class="vhead">
+            <div class="vhead-row">
+              <div>
+                <h1>渠道</h1>
+                <p>2 connected · 1 pending review</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="ch-card">
+            <div class="ch-top">
+              <div class="ch-av" style="background:#0E2A22">Q</div>
+              <div>
+                <div class="ch-n">QQ 机器人</div>
+                <div class="ch-sub">官方 Bot API · WebSocket</div>
+              </div>
+              <span class="ch-st ok">已连接</span>
+            </div>
+            <div class="ch-meta"><span>健康度 <b>96</b></span><span>今日 <b>480</b>/1000</span><span>3 群</span></div>
+            <div class="ch-bar"><i style="width:48%"></i></div>
+          </div>
+
+          <div class="ch-card">
+            <div class="ch-top">
+              <div class="ch-av" style="background:#2E5A43">微</div>
+              <div>
+                <div class="ch-n">微信公众号</div>
+                <div class="ch-sub">客服消息 · 48h 会话窗口</div>
+              </div>
+              <span class="ch-st ok">已连接</span>
+            </div>
+            <div class="ch-meta"><span>健康度 <b>88</b></span><span>今日 <b>320</b>/500</span></div>
+            <div class="ch-bar"><i class="warn" style="width:64%"></i></div>
+          </div>
+
+          <div class="ch-card">
+            <div class="ch-top">
+              <div class="ch-av" style="background:#C4401A">红</div>
+              <div>
+                <div class="ch-n">小红书</div>
+                <div class="ch-sub">笔记发布 API · 审核中</div>
+              </div>
+              <span class="ch-st warn">需资质</span>
+            </div>
+            <div class="ch-note">
+              笔记发布权限需企业或个体户主体 + 场景说明审核。当前仅开放手动模式。
+            </div>
+          </div>
+
+          <div class="ch-card muted">
+            <div class="ch-top">
+              <div class="ch-av" style="background:#8B8478">抖</div>
+              <div>
+                <div class="ch-n">抖音</div>
+                <div class="ch-sub">发布能力 · 营销场景不开放</div>
+              </div>
+              <span class="ch-st bad">不可用</span>
+            </div>
+            <div class="ch-note">
+              平台明确不对企业宣传 / 商品介绍 / 诱导分享类内容开放发布能力。仅保留「复制文案 + 跳转 App」。
+            </div>
+          </div>
+
+          <div class="ch-card muted">
+            <div class="ch-top">
+              <div class="ch-av" style="background:#5A4A6B">灵</div>
+              <div>
+                <div class="ch-n">Soul / 他趣</div>
+                <div class="ch-sub">无开放平台</div>
+              </div>
+              <span class="ch-st gray">不支持</span>
+            </div>
+            <div class="ch-note">无公开接口，仅自动化模拟，违反平台协议且账号寿命极短。</div>
+          </div>
+        </section>
+
+        <!-- ========== 我的 ========== -->
+        <section class="view" id="v-me">
+          <div class="vhead">
+            <div class="vhead-row">
+              <div>
+                <h1>我的</h1>
+                <p>Guard settings · Pro</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="sec-label"><h2>风控</h2><span>Guard</span></div>
+
+          <div class="slider-row">
+            <div class="slider-h"><b>人工确认率</b><span id="vRate">100%</span></div>
+            <input type="range" min="0" max="100" value="100" step="10"
+                   oninput="document.getElementById('vRate').textContent=this.value+'%'">
+            <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">
+              100% 表示每条 AI 草稿都要你确认后才发送。降到 0 即全自动。
+            </div>
+          </div>
+
+          <div class="slider-row">
+            <div class="slider-h"><b>单渠道每分钟上限</b><span id="vFreq">6 条</span></div>
+            <input type="range" min="1" max="30" value="6"
+                   oninput="document.getElementById('vFreq').textContent=this.value+' 条'">
+            <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">
+              超过阈值自动暂停并告警。秒回 + 高频是账号被判定为机器人的首要特征。
+            </div>
+          </div>
+
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-n">延迟回复（模拟人类间隔）</div>
+              <div class="set-d">随机 20–90 秒后再发出</div>
+            </div>
+            <button class="switch on" onclick="this.classList.toggle('on')" aria-label="切换"></button>
+          </div>
+
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-n">敏感词二次确认</div>
+              <div class="set-d">命中后强制转人工，不自动发送</div>
+            </div>
+            <button class="switch on" onclick="this.classList.toggle('on')" aria-label="切换"></button>
+          </div>
+
+          <div class="sec-label" style="padding-top:18px"><h2>实验区</h2><span>Lab</span></div>
+
+          <div class="danger-box">
+            <h4>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9E2418" stroke-width="2.2" stroke-linecap="round">
+                <path d="M12 9v5M12 17.5v.5"/><path d="M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/>
+              </svg>
+              个人号接管 · 高风险
+            </h4>
+            <p>
+              绕过平台官方接口接管个人账号，违反《微信个人账号使用规范》，可能导致永久封号。
+              本功能不随应用商店版本分发，仅限本人设备侧载启用，风险自负。
+            </p>
+          </div>
+
+          <div class="set-row" style="border-bottom:none">
+            <div class="set-main">
+              <div class="set-n">我已了解风险，启用实验室模式</div>
+              <div class="set-d">默认关闭 · 需二次确认</div>
+            </div>
+            <button class="switch danger" onclick="labConfirm(this)" aria-label="切换"></button>
+          </div>
+        </section>
+
+      </div><!-- /screen -->
+
+      <!-- 底部 Tab -->
+      <nav class="tabbar">
+        <button class="tab on" data-v="v-inbox" onclick="go(this)">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a8 8 0 01-8 8H7l-4 3v-6a8 8 0 018-13h2a8 8 0 018 8z"/>
+          </svg>
+          <span>会话</span>
+        </button>
+        <button class="tab" data-v="v-acquire" onclick="go(this)">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 17l5-5 4 4 4-7 5 5"/><path d="M3 21h18"/>
+          </svg>
+          <span>获客</span>
+        </button>
+        <div class="tab-fab">
+          <button class="fab" onclick="toast('快速生成：选一张图或一段对话')" aria-label="快速生成">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </button>
+        </div>
+        <button class="tab" data-v="v-persona" onclick="go(this)">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0115 0"/>
+          </svg>
+          <span>人设</span>
+        </button>
+        <button class="tab" data-v="v-channel" onclick="go(this)">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="18" r="2.6"/>
+            <path d="M6 8.6v4.4a3 3 0 003 3h6"/>
+          </svg>
+          <span>渠道</span>
+        </button>
+      </nav>
+
+      <!-- ========== 人设编辑面板 ========== -->
+      <div class="sheet" id="sheet">
+        <div class="sheet-h">
+          <div class="sheet-h-top">
+            <div class="ph-av" style="width:34px;height:34px;font-size:16px">陆</div>
+            <div>
+              <div class="sheet-title">编辑人设 · 小陆</div>
+              <div class="sheet-sub">PERSONA · 跨 3 个渠道共享</div>
+            </div>
+            <button class="sheet-close" onclick="closeSheet()" aria-label="关闭">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#14120E" stroke-width="2" stroke-linecap="round">
+                <path d="M6 6l12 12M18 6L6 18"/>
+              </svg>
+            </button>
+          </div>
+          <div class="sheet-tabs">
+            <button class="stab" data-p="fs" onclick="pickTab(this)">示范 12</button>
+            <button class="stab" data-p="id" onclick="pickTab(this)">身份</button>
+            <button class="stab" data-p="voice" onclick="pickTab(this)">语气</button>
+            <button class="stab" data-p="kb" onclick="pickTab(this)">知识</button>
+            <button class="stab" data-p="bd" onclick="pickTab(this)">边界</button>
+            <button class="stab" data-p="ch" onclick="pickTab(this)">渠道覆盖</button>
+          </div>
+        </div>
+
+        <div class="sheet-body" id="sheetBody">
+
+          <!-- 示范（默认页签，收益最大） -->
+          <div class="spanel" data-p="fs">
+            <div style="font-size:11.5px;line-height:1.65;color:var(--muted);margin-bottom:14px;
+                        padding:10px 11px;background:var(--accent-soft);border-left:2px solid var(--accent)">
+              这里填的例句比任何形容词都管用。直接从真实聊天记录里复制 8–15 组，AI 的语气会立刻稳下来。
+            </div>
+
+            <div class="fs-item">
+              <div class="fs-q">这个还能便宜吗</div>
+              <div class="fs-a">价格这块我说了不算，但可以帮你看看有没有券能用。</div>
+            </div>
+            <div class="fs-item">
+              <div class="fs-q">多久能到啊</div>
+              <div class="fs-a">今天下单的话后天就到，我这边盯着发货。</div>
+            </div>
+            <div class="fs-item">
+              <div class="fs-q">在吗</div>
+              <div class="fs-a">在的，你说。</div>
+            </div>
+            <div class="fs-item">
+              <div class="fs-q">质量行不行啊</div>
+              <div class="fs-a">不敢说最好，但用过的都回来复购了。你可以先看看评价区那几条长评。</div>
+            </div>
+
+            <button class="fs-add" onclick="toast('已从聊天记录导入 6 组例句')">+ 从聊天记录批量导入</button>
+          </div>
+
+          <!-- 身份 -->
+          <div class="spanel" data-p="id" style="display:none">
+            <div class="sfield">
+              <label>人设名称</label>
+              <input class="sinput" value="小陆">
+            </div>
+            <div class="sfield">
+              <label>一句话身份</label>
+              <input class="sinput" value="露营装备店主，自己也在用，说话直接不推销">
+            </div>
+            <div class="sfield">
+              <label>背景设定</label>
+              <textarea class="stextarea">做了四年户外装备，店里三个人。平时自己也露营，一个月至少出去两次。不太会说漂亮话，习惯先回答问题再聊别的。</textarea>
+            </div>
+            <div class="sfield">
+              <label>所在地 / 年龄</label>
+              <input class="sinput" value="杭州 · 32">
+            </div>
+          </div>
+
+          <!-- 语气 -->
+          <div class="spanel" data-p="voice" style="display:none">
+
+            <div class="tone-block">
+              <div class="tone-h"><b>正式度</b><em id="lbFormal">偏随意</em></div>
+              <input type="range" min="0" max="100" value="28" oninput="setTone('formal',this.value)">
+            </div>
+
+            <div class="tone-block">
+              <div class="tone-h"><b>句子长度</b><em id="lbLen">短句</em></div>
+              <input type="range" min="0" max="100" value="30" oninput="setTone('len',this.value)">
+            </div>
+
+            <div class="tone-block">
+              <div class="tone-h"><b>emoji 频率</b><em id="lbEmoji">偶尔</em></div>
+              <input type="range" min="0" max="100" value="25" oninput="setTone('emoji',this.value)">
+            </div>
+
+            <div class="sfield" style="margin-top:18px">
+              <label>口头禅 / 习惯用法</label>
+              <div class="tags">
+                <button class="ttag on" onclick="this.classList.toggle('on');refresh()">说真的</button>
+                <button class="ttag" onclick="this.classList.toggle('on');refresh()">不吹</button>
+                <button class="ttag on" onclick="this.classList.toggle('on');refresh()">我这边</button>
+                <button class="ttag" onclick="this.classList.toggle('on');refresh()">说实话</button>
+                <button class="ttag on" onclick="this.classList.toggle('on');refresh()">可以看看</button>
+                <button class="ttag" onclick="this.classList.toggle('on');refresh()">哈哈哈</button>
+              </div>
+            </div>
+
+            <div class="sfield">
+              <label>标点习惯</label>
+              <div class="tags">
+                <button class="ttag on" onclick="this.classList.toggle('on');refresh()">句末不加句号</button>
+                <button class="ttag" onclick="this.classList.toggle('on');refresh()">用「」不用引号</button>
+                <button class="ttag" onclick="this.classList.toggle('on');refresh()">破折号代替逗号</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 知识 -->
+          <div class="spanel" data-p="kb" style="display:none">
+            <div style="font-size:11.5px;line-height:1.65;color:var(--muted);margin-bottom:12px">
+              结构化条目，而不是一大段自由文本。自由文本必然被模型改写，条目能被精确引用。
+            </div>
+            <div class="kb-item"><div class="kb-k">产品</div><div class="kb-v">折叠露营桌 · 铝木结构 · 承重 30kg · 净重 2.4kg</div></div>
+            <div class="kb-item"><div class="kb-k">价格</div><div class="kb-v">单只 429，两只 799。<b style="color:var(--bad)">不许在聊天里主动报价</b></div></div>
+            <div class="kb-item"><div class="kb-k">发货</div><div class="kb-v">杭州仓，当日 16:00 前下单当天发，偏远地区 +1 天</div></div>
+            <div class="kb-item"><div class="kb-k">售后</div><div class="kb-v">7 天无理由，非人为损坏一年换新</div></div>
+            <div class="kb-item"><div class="kb-k">常见问题</div><div class="kb-v">能带炉子吗 → 可以，建议垫隔热垫｜能上飞机吗 → 不能，尺寸超了</div></div>
+            <div class="kb-item"><div class="kb-k">活动</div><div class="kb-v">本周满 599 减 50，不与店铺券叠加</div></div>
+          </div>
+
+          <!-- 边界 -->
+          <div class="spanel" data-p="bd" style="display:none">
+            <div style="font-size:11.5px;line-height:1.65;color:var(--muted);margin-bottom:12px">
+              命中以下任意一条，系统<b>不生成草稿</b>，直接转人工。这一栏比"禁止说脏话"重要得多。
+            </div>
+
+            <div class="set-row" style="padding-left:0;padding-right:0">
+              <div class="set-main">
+                <div class="set-n">涉及议价 / 折扣</div>
+                <div class="set-d">一律不自动回复</div>
+              </div>
+              <button class="switch on" onclick="this.classList.toggle('on')" aria-label="切换"></button>
+            </div>
+            <div class="set-row" style="padding-left:0;padding-right:0">
+              <div class="set-main">
+                <div class="set-n">涉及退款 / 投诉</div>
+                <div class="set-d">一律不自动回复</div>
+              </div>
+              <button class="switch on" onclick="this.classList.toggle('on')" aria-label="切换"></button>
+            </div>
+            <div class="set-row" style="padding-left:0;padding-right:0">
+              <div class="set-main">
+                <div class="set-n">承诺效果 / 保证</div>
+                <div class="set-d">拦截「保证」「一定」「绝对」类表述</div>
+              </div>
+              <button class="switch on" onclick="this.classList.toggle('on')" aria-label="切换"></button>
+            </div>
+            <div class="set-row" style="padding-left:0;padding-right:0;border-bottom:none">
+              <div class="set-main">
+                <div class="set-n">负面情绪识别</div>
+                <div class="set-d">检测到不满 / 催促 / 威胁语气即转人工</div>
+              </div>
+              <button class="switch on" onclick="this.classList.toggle('on')" aria-label="切换"></button>
+            </div>
+          </div>
+
+          <!-- 渠道覆盖 -->
+          <div class="spanel" data-p="ch" style="display:none">
+            <div style="font-size:11.5px;line-height:1.65;color:var(--muted);margin-bottom:14px">
+              统一不等于一模一样。这里给每个渠道做局部微调，但人设主体仍只有一份。
+            </div>
+
+            <div class="ch-card" style="margin:0 0 10px">
+              <div class="ch-top">
+                <div class="ch-av" style="background:#0E2A22;width:28px;height:28px;font-size:10px">Q</div>
+                <div><div class="ch-n" style="font-size:12.5px">QQ</div></div>
+                <span class="ch-st ok" style="margin-left:auto">继承主体</span>
+              </div>
+              <div class="ch-note" style="border:none;padding:0;margin:0">群聊场景，句长再短 20%，可多用梗</div>
+            </div>
+
+            <div class="ch-card" style="margin:0 0 10px">
+              <div class="ch-top">
+                <div class="ch-av" style="background:#2E5A43;width:28px;height:28px;font-size:10px">微</div>
+                <div><div class="ch-n" style="font-size:12.5px">微信</div></div>
+                <span class="ch-st ok" style="margin-left:auto">继承主体</span>
+              </div>
+              <div class="ch-note" style="border:none;padding:0;margin:0">私聊场景，正式度 +15，不主动发问句</div>
+            </div>
+
+            <div class="ch-card" style="margin:0 0 10px">
+              <div class="ch-top">
+                <div class="ch-av" style="background:#C4401A;width:28px;height:28px;font-size:10px">红</div>
+                <div><div class="ch-n" style="font-size:12.5px">小红书</div></div>
+                <span class="ch-st warn" style="margin-left:auto">已覆盖</span>
+              </div>
+              <div class="ch-note" style="border:none;padding:0;margin:0">
+                原本使用人设「阿林」，语气更轻、emoji 更多
+              </div>
+            </div>
+
+            <button class="fs-add" style="margin-top:4px" onclick="toast('已新增一个渠道覆盖')">+ 新增渠道覆盖</button>
+          </div>
+
+        </div><!-- /sheet-body -->
+
+        <!-- 试衣间 -->
+        <div class="sandbox open" id="sandbox">
+          <div class="sb-h" onclick="document.getElementById('sandbox').classList.toggle('open')">
+            <span class="lb">试衣间</span>
+            <span class="live">实时预览</span>
+            <svg class="arw" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9FBFAE" stroke-width="2" stroke-linecap="round">
+              <path d="M6 15l6-6 6 6"/>
+            </svg>
+          </div>
+          <div class="sb-body">
+            <div class="sb-line them"><span class="who">对方</span>你们这个桌子女孩子一个人搬得动吗</div>
+            <div class="sb-line me" style="margin-top:2px">
+              <span class="who">小陆 · 按当前参数</span>
+              <div class="sb-bubble" id="sbText">搬得动，2.4 公斤，我这边一个女生同事单手就能拎。收起来跟伞差不多长。</div>
+            </div>
+            <div class="sb-foot">
+              <button onclick="refresh()">重新生成</button>
+              <button class="hl" onclick="toast('参数已保存，3 个渠道同步生效')">保存并生效</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /sheet -->
+
+      <div class="toast" id="toast"></div>
+
+    </div><!-- /phone-inner -->
+  </div><!-- /phone -->
+
+  <!-- 右栏说明 -->
+  <aside class="rail">
+    <div class="rail-k">可尝试的交互</div>
+    <ol>
+      <li><b>点开会话</b>看 AI 三选一草稿与"被边界拦下"的状态</li>
+      <li><b>点上传框</b>走一遍图片→文案→双平台适配</li>
+      <li><b>点人设卡片</b>打开完整编辑面板</li>
+      <li><b>切到「语气」拖滑块</b>看下方试衣间文字实时变化</li>
+      <li><b>切到「示范」</b>验证"语料优先于形容词"的设计</li>
+    </ol>
+    <div class="rail-note">
+      所有数据为演示用。<b>发送、发布、授权</b>均为模拟动作，不会真的对外发出任何消息。
+    </div>
+  </aside>
+
+</div>
+
+<script>
+/* ---------- Tab 切换 ---------- */
+function go(btn){
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('on'); });
+  btn.classList.add('on');
+  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+  var target = document.getElementById(btn.dataset.v);
+  if (target) target.classList.add('active');
+  document.getElementById('screen').scrollTop = 0;
+}
+
+/* ---------- Toast ---------- */
+var toastTimer;
+function toast(msg){
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 1900);
+}
+
+/* ---------- 会话草稿展开 ---------- */
+function toggleDraft(row, id){
+  var box = document.getElementById(id);
+  if (!box) return;
+  var isOpen = box.style.display !== 'none';
+  // 关闭其他
+  document.querySelectorAll('[id^="d"]').forEach(function(d){
+    if (d.classList && d.classList.contains('draft-h') === false && /^d\d$/.test(d.id)) d.style.display = 'none';
+  });
+  box.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) {
+    setTimeout(function(){
+      box.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    }, 60);
+  }
+}
+
+/* ---------- 获客：模拟上传 ---------- */
+var uploaded = false;
+function uploadImg(){
+  if (uploaded) return;
+  var zone = document.getElementById('upzone');
+  zone.classList.add('done');
+  zone.innerHTML = '<div class="up-thumb"></div>';
+  uploaded = true;
+  setTimeout(function(){
+    document.getElementById('copyArea').style.display = 'block';
+    document.getElementById('copyArea').scrollIntoView({ behavior:'smooth', block:'nearest' });
+    toast('已生成 2 个平台版本');
+  }, 620);
+}
+
+/* ---------- 人设面板 ---------- */
+function openSheet(){
+  document.getElementById('sheet').classList.add('open');
+  refresh();
+}
+function closeSheet(){
+  document.getElementById('sheet').classList.remove('open');
+}
+function pickTab(btn){
+  document.querySelectorAll('.stab').forEach(function(t){ t.classList.remove('on'); });
+  btn.classList.add('on');
+  var p = btn.dataset.p;
+  document.querySelectorAll('.spanel').forEach(function(s){
+    s.style.display = (s.dataset.p === p) ? 'block' : 'none';
+  });
+  document.getElementById('sheetBody').scrollTop = 0;
+}
+
+/* ---------- 语气参数 → 试衣间实时预览 ---------- */
+var tone = { formal: 28, len: 30, emoji: 25 };
+
+function label(id, text){ var e = document.getElementById(id); if (e) e.textContent = text; }
+
+function setTone(key, val){
+  tone[key] = parseInt(val, 10);
+  if (key === 'formal'){
+    label('lbFormal', tone.formal < 25 ? '很随意' : tone.formal < 50 ? '偏随意' : tone.formal < 75 ? '较正式' : '很正式');
+  }
+  if (key === 'len'){
+    label('lbLen', tone.len < 30 ? '短句' : tone.len < 60 ? '中等' : '长句');
+  }
+  if (key === 'emoji'){
+    label('lbEmoji', tone.emoji < 15 ? '几乎不用' : tone.emoji < 40 ? '偶尔' : tone.emoji < 70 ? '较多' : '很多');
+  }
+  refresh();
+}
+
+/* 用参数驱动句式变化，让预览真的"随参数改变" */
+function buildReply(){
+  var f = tone.formal, l = tone.len, em = tone.emoji;
+
+  // 开场
+  var open;
+  if (f >= 70)      open = '可以的，';
+  else if (f >= 45) open = '搬得动，';
+  else if (f >= 22) open = '搬得动，';
+  else              open = '完全没问题，';
+
+  // 核心信息
+  var core;
+  if (l >= 62)      core = '整张桌子净重 2.4 公斤，铝合金加木面，我这边一个女生同事单手就能拎起来走一段路，收起来大概一把长柄伞那么长，塞后备箱角落就行。';
+  else if (l >= 34) core = '净重 2.4 公斤，我这边一个女生同事单手就能拎。收起来跟伞差不多长。';
+  else              core = '2.4 公斤，单手能拎。收起来跟伞一样长。';
+
+  // 收尾
+  var tail;
+  if (f >= 70)      tail = '如果您需要，我可以发一段实拍视频给您参考。';
+  else if (f >= 40) tail = '需要的话我发你一段实拍。';
+  else              tail = '要不要看实拍？';
+
+  var txt = open + core + tail;
+
+  // emoji 注入
+  var emo = '';
+  if (em >= 70) emo = ' 🏕️😄';
+  else if (em >= 40) emo = ' 🏕️';
+  else if (em >= 15) emo = '';
+  else emo = '';
+
+  // 高正式度压掉 emoji
+  if (f >= 75) emo = '';
+
+  return txt + emo;
+}
+
+function refresh(){
+  var el = document.getElementById('sbText');
+  if (el) el.textContent = buildReply();
+}
+
+/* ---------- 实验室模式二次确认 ---------- */
+var labArmed = false;
+function labConfirm(btn){
+  if (!labArmed){
+    labArmed = true;
+    toast('再点一次确认启用（高风险）');
+    setTimeout(function(){ labArmed = false; }, 4000);
+    return;
+  }
+  btn.classList.toggle('on');
+  toast(btn.classList.contains('on') ? '实验室模式已启用（模拟）' : '已关闭实验室模式');
+  labArmed = false;
+}
+
+/* ---------- 初始化 ---------- */
+document.querySelector('.stab[data-p="fs"]').classList.add('on');
+refresh();
+</script>
+</body>
+</html>

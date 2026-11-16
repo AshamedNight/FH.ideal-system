@@ -1,0 +1,18 @@
+{
+  "_说明": "复制成 wecom.json 再填。这四组值都在企业微信管理后台 → 应用管理 → 你的应用里。",
+  "_corp_id": "我的企业 → 企业信息 → 企业ID，ww 开头",
+  "_corp_secret": "应用详情页 → Secret，点「查看」并复制",
+  "_agent_id": "应用详情页 → AgentId，纯数字",
+  "_token": "接收消息 → 设置API接收 → Token，自己填，会用于验签",
+  "_encoding_aes_key": "同页面 → EncodingAESKey，点「随机获取」得到 43 位",
+  "_port": "本机监听端口。公网访问需要反代或内网穿透，且必须是 80/443 或带端口的 http",
+  "_dry": "想先只收不回，启动时加 --dry",
+  "corp_id": "",
+  "corp_secret": "",
+  "agent_id": "",
+  "token": "",
+  "encoding_aes_key": "",
+  "port": 8780,
+  "db": "wecom_state.db",
+  "persona": "persona.json"
+}
