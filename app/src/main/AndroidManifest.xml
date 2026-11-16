@@ -17,12 +17,20 @@
         <package android:name="com.ss.android.ugc.aweme.lite" />
     </queries>
 
+    <!--
+      usesCleartextTraffic：Android 9+ 默认禁止 http://。
+      允许它只有一个原因 —— 手机不挂代理，改走局域网到电脑上的中转
+      （http://192.168.x.x:8787），这样手机的出口 IP 保持本地宽带，
+      目标平台看不到境外 IP。这是"模型必须挂 VPN"与"封号风险最低"之间唯一的解。
+      正式模型地址仍是 https，这条不影响。
+    -->
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">
 
         <activity

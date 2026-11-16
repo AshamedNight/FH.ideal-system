@@ -28,7 +28,13 @@ class LlmClient(
         data class Err(val reason: String) : Result()
     }
 
+    /** 地址填 mock 时走本地假回复：不联网、不花钱，用来验证管道。 */
+    val isMock: Boolean get() = baseUrl.trim().equals(MOCK, ignoreCase = true)
+
     fun chat(system: String, user: String, maxTokens: Int = 400): Result {
+        // mock 必须排在"未配置"检查之前 —— 假模型本来就不需要 Key
+        if (isMock) return Result.Ok(mockReply(user))
+
         if (baseUrl.isBlank() || apiKey.isBlank()) {
             return Result.Err("模型接口未配置：设置里填接口地址和 API Key")
         }
@@ -80,5 +86,29 @@ class LlmClient(
         } finally {
             conn?.disconnect()
         }
+    }
+
+    /**
+     * 本地假回复。刻意写得**不像**真人 —— 目的是验证管道，
+     * 如果它伪装得太像，就没法一眼分清"这是模型写的"还是"这是假模型写的"。
+     *
+     * 从提示词里取最后一条「对方：...」，按几种粗糙规则选一句。
+     * 能验证的东西：prompt 里的对话是否完整、清洗是否生效、
+     * 禁忌词检查是否会被触发、能不能填进输入框。
+     * 不能验证的：生成质量（这本来就只有真模型能给）。
+     */
+    private fun mockReply(user: String): String {
+        val last = Regex("对方：(.+)").findAll(user).lastOrNull()
+            ?.groupValues?.get(1)?.trim().orEmpty()
+        return when {
+            last.isEmpty() -> "嗯"
+            last.length <= 2 -> "咋了"
+            last.endsWith("？") || last.endsWith("?") -> "让我想想"
+            else -> "哈哈 是"
+        }
+    }
+
+    private companion object {
+        const val MOCK = "mock"
     }
 }

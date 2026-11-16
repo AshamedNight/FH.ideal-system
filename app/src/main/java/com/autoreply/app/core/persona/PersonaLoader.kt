@@ -15,21 +15,30 @@ import com.autoreply.app.core.AppConfig
  */
 object PersonaLoader {
 
-    fun load(context: Context, config: AppConfig): Persona {
+    /** 人设 + 它从哪来的。来源要能看见，否则"改了没生效"永远查不出原因。 */
+    data class Loaded(val persona: Persona, val source: String)
+
+    fun load(context: Context, config: AppConfig): Persona = resolve(context, config).persona
+
+    fun resolve(context: Context, config: AppConfig): Loaded {
         val pasted = config.personaJson
         if (pasted.isNotEmpty()) {
-            Persona.fromJson(pasted)?.let { return withGuardrails(it) }
+            Persona.fromJson(pasted)?.let {
+                return Loaded(withGuardrails(it), "设置页粘贴的 JSON")
+            }
         }
 
         try {
             val builtin = context.assets.open("persona.json")
                 .bufferedReader().use { it.readText() }
-            Persona.fromJson(builtin)?.let { return withGuardrails(it) }
+            Persona.fromJson(builtin)?.let {
+                return Loaded(withGuardrails(it), "内置 assets/persona.json")
+            }
         } catch (_: Exception) {
             // assets 缺失/损坏都不算致命，继续往下回退
         }
 
-        return withGuardrails(Persona.fromFreeText(config.persona))
+        return Loaded(withGuardrails(Persona.fromFreeText(config.persona)), "设置页自由文本")
     }
 
     private fun withGuardrails(p: Persona): Persona = p.copy(

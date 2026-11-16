@@ -22,6 +22,8 @@ _signing/
 # 这些是跑起来才生成的：数据库、WAL、日志、抓包记录、缓存。
 # 进仓库只会让 clone 变慢，而且可能含聊天内容，不该跟着代码走。
 _legacy/gateway/_runtime/
+__pycache__/
+*.pyc
 _legacy/gateway/__pycache__/
 _legacy/gateway/outbox/
 _legacy/gateway/recordings/

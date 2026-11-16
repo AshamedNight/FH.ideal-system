@@ -132,14 +132,19 @@ class MainActivity : Activity() {
         // 报错会被埋在"生成失败"里，看起来像模型坏了。
         // 而且这解释了另一个高频误解 —— 没配 Key 时「试填」只能复读原文，
         // 那是它本来的行为，不是生成坏了。
-        if (config.llmApiKey.isBlank()) {
+        //
+        // 例外：接口地址填 mock 时走本地假回复，不需要 Key（离线验证管道用）。
+        val mockMode = config.llmBaseUrl.trim().equals("mock", ignoreCase = true)
+        if (!mockMode && config.llmApiKey.isBlank()) {
             output.text = buildString {
                 append("还没配 API Key，所以只能「试填（复读原文）」。\n\n")
                 append("去 设置 → 模型，填三项：\n")
                 append("  接口地址  https://api.deepseek.com/v1\n")
                 append("  API Key   你的 key\n")
                 append("  模型名    deepseek-chat\n\n")
-                append("填完再点这个按钮，才会走人设 + 样例 + 上下文生成。")
+                append("想先离线验证整条链路，把接口地址改成 mock（Key 留空也行），\n")
+                append("它会用固定的几句假话回答 —— 能验证「判定 → 生成 → 清洗 → 填字」，\n")
+                append("但验证不了语气，那个只有真模型能给。")
             }
             return
         }
@@ -186,7 +191,9 @@ class MainActivity : Activity() {
                         val sink = AccessibilityReplySink(service, profile)
                         val fill = sink.fill(result.text)
                         output.text = buildString {
-                            append("草稿（第 ${result.attempts} 次生成）：\n")
+                            // 假模型必须标出来，否则会被当成"模型就写成这样"，
+                            // 转头去调人设 —— 那是白费功夫。
+                            append(if (mockMode) "草稿（本地假模型，非真实生成）：\n" else "草稿（第 ${result.attempts} 次生成）：\n")
                             append(result.text)
                             append("\n\n填入：")
                             append(
@@ -285,6 +292,22 @@ class MainActivity : Activity() {
                 is FillResult.Mismatch -> "回读不一致 — ${result.actual}"
             }
         )
+
+        // 人设到底有没有进提示词，是这个项目最容易"以为改了其实没生效"的地方。
+        // 所以试填顺带把来源、条数、提示词开头都打出来 —— 不配 Key、不联网也能自查。
+        val loaded = PersonaLoader.resolve(this, config)
+        val p = loaded.persona
+        sb.append("\n\n人设：knowledge ${p.knowledge.size} 条 / few_shot ${p.fewShot.size} 条")
+        sb.append(" / 边界 ${p.boundaries.size} 个 / 禁忌 ${p.tabooWords.size} 个")
+        sb.append("\n来源：").append(loaded.source)
+
+        val probeEngine = ReplyEngine(config, p)
+        sb.append("\n\n---- 发给模型的提示词（前 900 字）----\n")
+        sb.append(probeEngine.previewSystem().take(900))
+        if (probeEngine.isMockModel) {
+            sb.append("\n\n[本地假模型：接口地址填的是 mock，不会联网，回复是固定的几句话]")
+        }
+
         output.text = sb.toString()
 
         // 回读校验：ACTION_SET_TEXT 返回 true 不代表界面真的变了，

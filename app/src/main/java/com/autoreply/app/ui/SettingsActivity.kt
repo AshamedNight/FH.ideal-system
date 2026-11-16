@@ -64,7 +64,7 @@ class SettingsActivity : Activity() {
         root.addView(field("llmBaseUrl", "接口地址", config.llmBaseUrl, InputType.TYPE_TEXT_VARIATION_URI))
         root.addView(field("llmApiKey", "API Key", config.llmApiKey, InputType.TYPE_TEXT_VARIATION_PASSWORD))
         root.addView(field("llmModel", "模型名", config.llmModel, InputType.TYPE_CLASS_TEXT))
-        root.addView(note("默认走国内直连。若改成境外接口，手机会为了访问它而挂代理，出口 IP 随之变成境外 —— 这件事本身就会提高账号被限制的概率。"))
+        root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，不要给手机挂代理，改成电脑中转：\nhttp://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
 
         root.addView(section("人设"))
         root.addView(multi("persona", config.persona, 8))

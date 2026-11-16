@@ -88,6 +88,21 @@ class ReplyEngine(
 
     // ------------------------------------------------------------------ 提示词
 
+    /**
+     * 把真正要发出去的提示词原样取出来，用于在没有 Key / 没有网络时检查
+     * 「人设到底有没有生效」。
+     *
+     * 这一步比接模型更能说明问题：如果 few_shot 不在提示词里，
+     * 换任何模型都写不出你要的语气，而这一点靠看输出是反推不出来的。
+     */
+    fun previewSystem(): String = buildSystem(persona, config.maxReplyChars)
+
+    fun previewUser(turns: List<Turn>): String = buildUser(turns)
+
+    /** 假模型标记，UI 用来提示"这不是真模型写的"。 */
+    val isMockModel: Boolean
+        get() = config.llmBaseUrl.trim().equals("mock", ignoreCase = true)
+
     private fun buildSystem(persona: Persona, maxChars: Int): String = buildString {
         appendLine(persona.identity.trim())
         appendLine()
