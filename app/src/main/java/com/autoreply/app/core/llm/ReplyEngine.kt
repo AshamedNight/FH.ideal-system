@@ -119,7 +119,14 @@ class ReplyEngine(
         if (persona.fewShot.isNotEmpty()) {
             appendLine()
             appendLine("# 你平时说话的样例（模仿语感，不要照抄内容）")
-            persona.fewShot.take(8).forEach {
+            // 全部给，而且每次打乱顺序。
+            //
+            // 原先是 take(8)：用户填了 15 条，只有前 8 条生效 ——
+            // 排在后面的（「加个微信吧」「有对象吗」）一次都用不上，
+            // 而按顺序补充样例几乎是所有人都会踩的坑。
+            // 固定顺序还有个副作用：模型被开头几条的句式带偏，输出越来越像。
+            // 15 条约 300 token，这点成本可以忽略。
+            persona.fewShot.shuffled().forEach {
                 appendLine("对方：${it.q}")
                 appendLine("你：${it.a}")
             }

@@ -302,8 +302,11 @@ class MainActivity : Activity() {
         sb.append("\n来源：").append(loaded.source)
 
         val probeEngine = ReplyEngine(config, p)
-        sb.append("\n\n---- 发给模型的提示词（前 900 字）----\n")
-        sb.append(probeEngine.previewSystem().take(900))
+        // 提示词现在带全部样例，比 900 字更容易超，所以把总长度一起写出来 ——
+        // 否则用户看到结尾被截断，会以为样例没进提示词。
+        val system = probeEngine.previewSystem()
+        sb.append("\n\n---- 发给模型的提示词（共 ${system.length} 字，显示前 1200 字）----\n")
+        sb.append(system.take(1200))
         if (probeEngine.isMockModel) {
             sb.append("\n\n[本地假模型：接口地址填的是 mock，不会联网，回复是固定的几句话]")
         }
