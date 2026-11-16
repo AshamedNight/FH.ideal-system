@@ -31,7 +31,8 @@ _legacy/gateway/recordings/
 *.jsonl
 *.log
 
-# 真机 dump 里有真实聊天内容，不进仓库
-/dump.txt
-/dump-*.txt
+# 真机 dump 里有真实聊天内容，绝不进仓库。
+# 用 /*.txt 覆盖根目录所有 txt：这个项目的源码里不会有 .txt，
+# 而 dump 文件名五花八门（dump.txt、pkg=xxx.txt、新dump.txt…），逐个列必然漏。
+/*.txt
 /dumps/

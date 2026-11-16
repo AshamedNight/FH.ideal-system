@@ -76,14 +76,22 @@ object NodeQuery {
         val midX = rootRect.centerX()
 
         val raw = ArrayList<ChatMessage>()
+        // 同一个 id 常常同时打在容器和文本节点上（抖音私信页的 #content_layout
+        // 就是 LinearLayout 与 TextView 同名），两层都命中会重复。
+        // 按「位置 + 文本」去重，只留一条。
+        val seen = HashSet<String>()
         for (sel in profile.message) {
             val nodes = collect(scope) { sel.matches(it) }
             for (n in nodes) {
                 val t = textOf(n)
                 if (!isRealMessage(t)) continue
+                // 平台的安全提示混在同一个列表里，不排除会被当成"对方说的话"
+                if (profile.exclude.any { t.contains(it) }) continue
                 val r = Rect()
                 n.getBoundsInScreen(r)
                 if (r.width() <= 0 || r.height() <= 0) continue
+                val dedupKey = "${r.left},${r.top},${r.right},${r.bottom}|$t"
+                if (!seen.add(dedupKey)) continue
                 raw.add(ChatMessage(t, r.centerX() < midX, r))
             }
             // 第一种选择器命中就够了；多条候选是给版本差异用的，不是用来叠加的

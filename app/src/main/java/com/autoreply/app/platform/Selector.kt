@@ -62,6 +62,14 @@ data class PlatformProfile(
     val input: List<Selector>,
     /** 只有命中这些才算"在聊天页"，用来挡掉"在首页也瞎读"的情况。 */
     val pageHint: List<Selector>,
+    /**
+     * 系统提示文案，出现即丢弃。
+     *
+     * 抖音私信列表里混着「为保障用户沟通安全，未互相关注的陌生人违规消息可能会被处理…」
+     * 这类系统提示，它和真实气泡在同一个 RecyclerView 里。不排除的话会被当成
+     * "对方说的话"喂给模型，回复内容直接跑偏。
+     */
+    val exclude: List<String> = emptyList(),
 ) {
     val isConfigured: Boolean get() = input.isNotEmpty() || message.isNotEmpty()
 }
@@ -103,6 +111,7 @@ object Profiles {
                     message = o.selectors("message"),
                     input = o.selectors("input"),
                     pageHint = o.selectors("pageHint"),
+                    exclude = o.strings("exclude"),
                 )
             }
         } catch (e: Exception) {
@@ -122,6 +131,14 @@ object Profiles {
             val value = o.optString("value", "")
             if (by.isEmpty() || value.isEmpty()) null
             else Selector(by, value, o.optString("pick", "first"))
+        }
+    }
+
+    /** 纯字符串数组，用于 exclude 这类"文案列表"。 */
+    private fun JSONObject.strings(key: String): List<String> {
+        val arr = optJSONArray(key) ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            arr.optString(i).takeIf { it.isNotEmpty() }
         }
     }
 }

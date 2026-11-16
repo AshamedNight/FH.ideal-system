@@ -1,23 +1,37 @@
 {
-  "_README": "每个平台一段，key 是包名。by 支持 viewId / viewIdEnds / className / text / textContains / contentDesc；pick 支持 first / last。所有值必须来自真机 dump，不要凭印象写。字段都是候选列表，按顺序试，任一命中即停 —— 因为同一 App 的不同版本锚点会变一到两个。",
+  "_README": "每个平台一段，key 是包名。by 支持 viewId / viewIdEnds / className / text / textContains / contentDesc；pick 支持 first / last。所有值必须来自真机 dump。字段是候选列表，按顺序试，任一命中即停 —— 同一个 App 的不同页面（私信页 / 内置 AI 页）锚点不同，靠候选列表一起覆盖。",
 
   "com.ss.android.ugc.aweme": {
-    "_note": "抖音（含内置豆包 AI 聊天页）。2026-11-16 真机 dump。id 是资源混淆后的 1-3 字符短名，大版本更新可能变，所以每条都留了 className 兜底。注意：这份 dump 是豆包 AI 页，不是真人私信页；私信页的 id 不同，需要另外抓一份补进来。",
+    "_note": "抖音。2026-11-16 两份真机 dump：① 私信聊天页（有真实对话）② 内置豆包 AI 页。两条候选分别对应这两个页面，私信的排在前面。抖音的 viewId 是资源混淆后的 1-3 字符短名，大版本更新可能变，所以每条都留了兜底。",
+
     "messageList": [
+      { "by": "viewId", "value": "v6m" },
       { "by": "viewId", "value": "y0" },
       { "by": "className", "value": "androidx.recyclerview.widget.RecyclerView" }
     ],
+
     "message": [
-      { "by": "viewId", "value": "dyl" },
-      { "by": "className", "value": "android.widget.TextView" }
+      { "by": "viewId", "value": "content_layout" },
+      { "by": "viewId", "value": "dyl" }
     ],
+
     "input": [
-      { "by": "viewId", "value": "jbj" },
-      { "by": "className", "value": "android.widget.EditText", "pick": "last" }
+      { "by": "viewId", "value": "msg_et" },
+      { "by": "viewId", "value": "jbj" }
     ],
+
     "pageHint": [
-      { "by": "viewId", "value": "jbj" },
-      { "by": "className", "value": "android.widget.EditText" }
+      { "by": "viewId", "value": "msg_et" },
+      { "by": "viewId", "value": "jbj" }
+    ],
+
+    "_exclude_note": "私信列表里混着安全提示，它和真实气泡在同一个 RecyclerView 里，必须排除。",
+    "exclude": [
+      "为保障用户沟通安全",
+      "请遵守法律法规",
+      "该用户已注销",
+      "消息已发出，但被对方拒收",
+      "对方设置了隐私权限"
     ]
   }
 }
