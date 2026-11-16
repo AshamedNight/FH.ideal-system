@@ -128,6 +128,21 @@ class MainActivity : Activity() {
             toast("读屏没开")
             return
         }
+        // 前置检查放在最前面：没 Key 时让网络请求先跑一遍再失败，
+        // 报错会被埋在"生成失败"里，看起来像模型坏了。
+        // 而且这解释了另一个高频误解 —— 没配 Key 时「试填」只能复读原文，
+        // 那是它本来的行为，不是生成坏了。
+        if (config.llmApiKey.isBlank()) {
+            output.text = buildString {
+                append("还没配 API Key，所以只能「试填（复读原文）」。\n\n")
+                append("去 设置 → 模型，填三项：\n")
+                append("  接口地址  https://api.deepseek.com/v1\n")
+                append("  API Key   你的 key\n")
+                append("  模型名    deepseek-chat\n\n")
+                append("填完再点这个按钮，才会走人设 + 样例 + 上下文生成。")
+            }
+            return
+        }
         val root = service.targetRoot()
         if (root == null) {
             output.text = "目标界面不在前台。先切到聊天页停留 2 秒，再切回来点这个按钮。"
@@ -252,11 +267,17 @@ class MainActivity : Activity() {
             return
         }
 
-        // 测试草稿故意带标记：万一手滑点了发送，对面也能看出是测试，不会造成误会
-        val draft = "【测试】收到：${lastOther.text.take(12)}"
+        // 这个按钮的定位是「验链路」，不是「生成回复」：
+        // 草稿就是原文复读，用来证明读到的文本能原样写进输入框。
+        //
+        // 早先加了「【测试】收到：」前缀防误发，但链路已经验收通过，
+        // 前缀留着反而碍事 —— 真要发的时候还得先手动删掉。
+        // 所以前缀去掉，改由按钮文案自己说明它是复读。
+        val draft = lastOther.text
         val sink = AccessibilityReplySink(service, profile)
         val result = sink.fill(draft)
         sb.append("\n草稿：").append(draft)
+        sb.append("\n（原文复读，只验链路。要模型生成请点右侧「生成并填入」）")
         sb.append("\n填字：").append(
             when (result) {
                 is FillResult.Ok -> "成功，已写入输入框（未发送）"

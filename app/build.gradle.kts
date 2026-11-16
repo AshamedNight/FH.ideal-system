@@ -11,14 +11,24 @@ val appVersionName = if (versionFromCi.isEmpty()) "0.1.0" else versionFromCi
 val versionParts = appVersionName.split(".").map { part ->
     part.filter { ch -> ch in '0'..'9' }.toIntOrNull()
 }
-val appVersionCode = run {
-    val major = versionParts.getOrNull(0)
-    val minor = versionParts.getOrNull(1)
-    val patch = versionParts.getOrNull(2)
-    if (major != null && minor != null && patch != null) {
-        (major * 10000 + minor * 100 + patch).coerceAtLeast(1)
+// CI 直接给递增的 versionCode（github.run_number）。
+// 只靠 versionName 推导是不够的：dev 包的 versionName 里 patch 段是文字，
+// 推出来恒为 1 —— 每次构建 versionCode 都一样，系统就当同一个版本，
+// 弹「已安装相同版本」而不是升级。这条路必须优先。
+val versionCodeFromCi = (System.getenv("APP_VERSION_CODE") ?: "").trim().toIntOrNull()
+val appVersionCode: Int = run {
+    val fromCi = versionCodeFromCi
+    if (fromCi != null && fromCi > 0) {
+        fromCi
     } else {
-        1
+        val major = versionParts.getOrNull(0)
+        val minor = versionParts.getOrNull(1)
+        val patch = versionParts.getOrNull(2)
+        if (major != null && minor != null && patch != null) {
+            (major * 10000 + minor * 100 + patch).coerceAtLeast(1)
+        } else {
+            1
+        }
     }
 }
 

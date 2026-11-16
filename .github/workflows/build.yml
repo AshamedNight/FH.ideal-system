@@ -102,7 +102,13 @@ jobs:
 
       - name: Build debug APK
         env:
-          APP_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '0.0.0-dev' }}
+          # 打 tag 出正式包时用 tag 名；平时每次构建都带 run_number。
+          # run_number 必须进 versionName —— 否则手机上几个包版本号长得一样，
+          # 装完分不清哪个是新的。
+          APP_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.1.0-dev.{0}', github.run_number) }}
+          # versionCode 单调递增是关键：相同 versionCode 的包，系统只提示
+          # 「已安装相同版本」而不当作升级，用户会以为装不上。
+          APP_VERSION_CODE: ${{ github.run_number }}
         # tee 存一份日志，供失败时提取错误；pipefail 保证 gradle 的退出码不被管道吞掉。
         run: |
           set -o pipefail

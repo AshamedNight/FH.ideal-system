@@ -92,6 +92,18 @@ object NodeQuery {
                 if (r.width() <= 0 || r.height() <= 0) continue
                 val dedupKey = "${r.left},${r.top},${r.right},${r.bottom}|$t"
                 if (!seen.add(dedupKey)) continue
+                // 「位置+文本」只能挡住 id 完全相同的两个节点。
+                // 更常见的是外层容器和内层文本各命中一次：文本一样，
+                // 但容器 bounds 含内边距，位置差几十像素，去重键就不同了 ——
+                // 表现是同一条消息被读成两条（x=408 / x=480）。
+                // 再按「文本相同 且 垂直区间重叠过半」挡一次：
+                // 真人连发两条一样的话（「哈哈」「好」）不会垂直重叠，不会误合并。
+                val duplicated = raw.any { prev ->
+                    prev.text == t &&
+                        minOf(prev.rect.bottom, r.bottom) - maxOf(prev.rect.top, r.top) >
+                        maxOf(1, r.height() / 2)
+                }
+                if (duplicated) continue
                 raw.add(ChatMessage(t, r.centerX() < midX, r))
             }
             // 第一种选择器命中就够了；多条候选是给版本差异用的，不是用来叠加的
