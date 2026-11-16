@@ -16,6 +16,7 @@ import com.autoreply.app.capture.CaptureService
 import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.llm.ReplyEngine
 import com.autoreply.app.core.llm.Turn
+import com.autoreply.app.core.persona.PersonaLoader
 import com.autoreply.app.platform.AccessibilityReplySink
 import com.autoreply.app.platform.FillResult
 import com.autoreply.app.platform.NodeQuery
@@ -153,7 +154,7 @@ class MainActivity : Activity() {
         val turns = messages.map { Turn(it.text, it.fromOther) }
         output.text = "正在生成…（对方最后一句：${lastOther.text.take(24)}）"
 
-        val engine = ReplyEngine(config)
+        val engine = ReplyEngine(config, PersonaLoader.load(this, config))
         Thread {
             val result = engine.generate(turns)
             runOnUiThread {

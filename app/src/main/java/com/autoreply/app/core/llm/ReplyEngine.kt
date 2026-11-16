@@ -22,7 +22,14 @@ data class Turn(val text: String, val fromOther: Boolean)
  * 第 1 步和第 4 步是两个方向，不能合并：前者决定"这条不回"，
  * 后者决定"这句不能说"。合成一个词表会导致该沉默的时候回了、该重写的时候沉默了。
  */
-class ReplyEngine(private val config: AppConfig) {
+class ReplyEngine(
+    private val config: AppConfig,
+    /**
+     * 人设由外部传入，不在这里加载 —— 这样这个类不依赖 Context，
+     * 判定逻辑可以脱离 Android 单测。
+     */
+    private val persona: Persona,
+) {
 
     sealed class Result {
         data class Draft(val text: String, val attempts: Int) : Result()
@@ -37,8 +44,6 @@ class ReplyEngine(private val config: AppConfig) {
     fun generate(turns: List<Turn>): Result {
         val last = turns.lastOrNull { it.fromOther }
             ?: return Result.Blocked("没有对方发来的消息")
-
-        val persona = Persona.fromFreeText(config.persona)
 
         // 输入侧边界：命中就整条转人工，不生成
         val boundary = persona.boundaries.firstOrNull { last.text.contains(it) }

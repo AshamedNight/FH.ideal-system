@@ -76,6 +76,16 @@ class AppConfig(context: Context) {
         get() = sp.getString(KEY_PERSONA, DEFAULT_PERSONA) ?: DEFAULT_PERSONA
         set(value) = sp.edit().putString(KEY_PERSONA, value).apply()
 
+    /**
+     * 设置页粘贴的人设 JSON，**优先级高于 assets/persona.json**。
+     *
+     * 留空就用内置那份；填了就覆盖。这样调人设不用重新打包 ——
+     * 调语气是个反复试的过程，改一次等一次 CI（6 分钟）谁都受不了。
+     */
+    var personaJson: String
+        get() = sp.getString(KEY_PERSONA_JSON, "") ?: ""
+        set(value) = sp.edit().putString(KEY_PERSONA_JSON, value.trim()).apply()
+
     /** 用户自定义的禁止词，一行一个，与内置词表合并。 */
     var bannedWords: String
         get() = sp.getString(KEY_BANNED, "") ?: ""
@@ -111,6 +121,7 @@ class AppConfig(context: Context) {
         private const val KEY_LLM_KEY = "llm_key"
         private const val KEY_LLM_MODEL = "llm_model"
         private const val KEY_PERSONA = "persona"
+        private const val KEY_PERSONA_JSON = "persona_json"
         private const val KEY_BANNED = "banned"
         private const val KEY_MAX_CHARS = "max_chars"
     }

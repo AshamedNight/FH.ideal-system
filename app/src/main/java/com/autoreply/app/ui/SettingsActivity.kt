@@ -70,6 +70,11 @@ class SettingsActivity : Activity() {
         root.addView(multi("persona", config.persona, 8))
         root.addView(note("用「你是……」开头描述这个人是什么身份、怎么说话、绝不说什么。不要写「请帮我生成回复」，那是任务不是人设。"))
 
+        root.addView(section("人设 JSON（进阶，可选）"))
+        root.addView(multi("personaJson", config.personaJson, 6))
+        root.addView(note("留空则用内置那份。填了就覆盖它，改完保存立刻生效，不用重新打包。"))
+        root.addView(note("这里能填 few_shot（对方说→我回的样例）——治「回复单一」最有效的就是它，比写一堆形容词管用。格式照仓库里的 assets/persona.json。"))
+
         root.addView(section("禁止出现的内容"))
         root.addView(multi("bannedWords", config.bannedWords, 5))
         root.addView(note("一行一个词或短语。命中的草稿会被丢弃并重新生成，两次仍命中的话只显示给你看，不填入。"))
@@ -99,6 +104,7 @@ class SettingsActivity : Activity() {
         config.llmApiKey = textOf("llmApiKey")
         config.llmModel = textOf("llmModel")
         config.persona = textOf("persona")
+        config.personaJson = textOf("personaJson")
         config.bannedWords = textOf("bannedWords")
         config.maxReplyChars = intOf("maxReplyChars", config.maxReplyChars)
 

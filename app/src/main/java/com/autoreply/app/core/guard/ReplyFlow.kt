@@ -5,7 +5,7 @@ import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.llm.ReplyEngine
 import com.autoreply.app.core.llm.Turn
 import com.autoreply.app.core.persona.NecessityJudge
-import com.autoreply.app.core.persona.Persona
+import com.autoreply.app.core.persona.PersonaLoader
 import kotlin.random.Random
 
 /**
@@ -28,7 +28,10 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
 
     private val pacer = PacerGuard(context, config)
     private val energy = Energy(context)
-    private val engine = ReplyEngine(config)
+
+    /** 人设只加载一次，整条链共用同一份。 */
+    private val persona = PersonaLoader.load(context, config)
+    private val engine = ReplyEngine(config, persona)
 
     sealed class Outcome {
         /** 可以填。risk 只用于界面标注，不影响填充。 */
@@ -60,8 +63,6 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
 
         val last = turns.lastOrNull { it.fromOther }
             ?: return Outcome.Silent("没有对方发来的消息")
-
-        val persona = Persona.fromFreeText(config.persona)
 
         // ---- 2. 该不该开口 ----
         val judgment = NecessityJudge.judge(
