@@ -8,13 +8,13 @@
     <!--
       包可见性（Android 11+）：不声明 queries，getLaunchIntentForPackage 永远返回 null，
       表现为「明明装了目标 App，却提示没有安装」。
-
-      目标平台的包名确定后，在这里补一行：
-        <package android:name="目标包名" />
-      同时在 PlatformAdapter 里改 TARGET_PKG。
+      每接一个新平台都要在这里加一行，否则「打开目标应用」按钮会失效。
+      读取界面本身不受此限制（无障碍拿的是窗口，不是包管理查询）。
     -->
     <queries>
-        <!-- 占位：等待目标平台包名 -->
+        <!-- 抖音 -->
+        <package android:name="com.ss.android.ugc.aweme" />
+        <package android:name="com.ss.android.ugc.aweme.lite" />
     </queries>
 
     <application

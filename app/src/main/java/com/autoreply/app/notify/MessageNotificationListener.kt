@@ -28,9 +28,11 @@ class MessageNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
-        val target = AppConfig(this).targetPackage
-        if (target.isEmpty()) return
-        if (sbn.packageName != target) return
+        val targets = AppConfig(this).targetPackages
+        // 通知监听必须显式配置包名：没有目标清单时，任何一条聊天通知都会被当成信号，
+        // 那是误触发的源头。
+        if (targets.isEmpty()) return
+        if (!targets.contains(sbn.packageName)) return
 
         // 自己的常驻通知（如果有）不算。
         if (sbn.notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return

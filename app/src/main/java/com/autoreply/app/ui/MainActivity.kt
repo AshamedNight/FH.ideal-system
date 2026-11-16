@@ -46,16 +46,20 @@ class MainActivity : Activity() {
         }
 
         findViewById<Button>(R.id.btn_open_target).setOnClickListener {
-            val pkg = config.targetPackage
-            if (pkg.isEmpty()) {
+            val targets = config.targetPackages
+            if (targets.isEmpty()) {
                 toast("先在设置里填目标应用包名")
                 return@setOnClickListener
             }
-            val launch = packageManager.getLaunchIntentForPackage(pkg)
-            if (launch == null) {
-                toast("没找到 $pkg，确认已安装且包名正确")
-            } else {
+            var opened = false
+            for (pkg in targets) {
+                val launch = packageManager.getLaunchIntentForPackage(pkg) ?: continue
                 startActivity(launch)
+                opened = true
+                break
+            }
+            if (!opened) {
+                toast("没找到已安装的目标应用：${targets.joinToString(" / ")}")
             }
         }
 

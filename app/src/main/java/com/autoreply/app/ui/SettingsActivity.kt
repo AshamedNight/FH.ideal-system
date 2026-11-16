@@ -48,7 +48,8 @@ class SettingsActivity : Activity() {
         root.addView(levelGroup)
 
         root.addView(section("目标应用"))
-        root.addView(field("targetPackage", "包名（如 com.xxx.yyy）", config.targetPackage, InputType.TYPE_CLASS_TEXT))
+        root.addView(multi("targetPackages", config.targetPackages.joinToString("\n"), 4))
+        root.addView(note("一行一个包名，可填多个平台。留空表示抓取时不过滤（任何非本 App 界面都抓），方便第一次摸结构。"))
         root.addView(note("改完包名要同步修改 AndroidManifest.xml 里 queries 的 package，否则打不开目标应用。"))
 
         root.addView(section("节奏护栏"))
@@ -88,7 +89,7 @@ class SettingsActivity : Activity() {
             else -> AppConfig.LEVEL_NOTIFY
         }
         config.level = level
-        config.targetPackage = textOf("targetPackage")
+        config.targetPackages = textOf("targetPackages").split('\n')
         config.hourlyCap = intOf("hourlyCap", config.hourlyCap)
         config.burstLimit = intOf("burstLimit", config.burstLimit).coerceAtLeast(1)
         config.cooldownMinutes = intOf("cooldownMinutes", config.cooldownMinutes)

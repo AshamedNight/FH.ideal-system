@@ -39,10 +39,22 @@ class AppConfig(context: Context) {
         get() = sp.getInt(KEY_GAP_SEC, 45)
         set(value) = sp.edit().putInt(KEY_GAP_SEC, value.coerceAtLeast(30)).apply()
 
-    /** 目标平台包名。写入后需要同步改 AndroidManifest 的 queries。 */
-    var targetPackage: String
-        get() = sp.getString(KEY_TARGET_PKG, "") ?: ""
-        set(value) = sp.edit().putString(KEY_TARGET_PKG, value.trim()).apply()
+    /**
+     * 目标平台包名，可多个（一行一个）。
+     *
+     * 这个产品不是只服务一个平台，所以包名从一开始就是集合而不是单值。
+     * 每接一个新平台，在这里加一行包名 + 在 profiles.json 加一段选择器，
+     * 不需要改任何 Kotlin 代码。
+     */
+    var targetPackages: List<String>
+        get() = (sp.getString(KEY_TARGET_PKGS, "") ?: "")
+            .split('\n', ',', '，')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+        set(value) = sp.edit()
+            .putString(KEY_TARGET_PKGS, value.map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString("\n"))
+            .apply()
 
     /** true 时才允许程序点开别的会话（L1/L2）。L0 下恒为 false。 */
     val allowsOpeningConversation: Boolean
@@ -94,7 +106,7 @@ class AppConfig(context: Context) {
         private const val KEY_BURST = "burst"
         private const val KEY_COOLDOWN_MIN = "cooldown_min"
         private const val KEY_GAP_SEC = "gap_sec"
-        private const val KEY_TARGET_PKG = "target_pkg"
+        private const val KEY_TARGET_PKGS = "target_pkgs"
         private const val KEY_LLM_URL = "llm_url"
         private const val KEY_LLM_KEY = "llm_key"
         private const val KEY_LLM_MODEL = "llm_model"
