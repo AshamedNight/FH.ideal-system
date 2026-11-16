@@ -1,8 +1,8 @@
 {
-  "_README": "每个平台一段，key 是包名。by 支持 viewId / viewIdEnds / className / text / textContains / contentDesc；pick 支持 first / last。所有值必须来自真机 dump。字段是候选列表，按顺序试，任一命中即停 —— 同一个 App 的不同页面（私信页 / 内置 AI 页）锚点不同，靠候选列表一起覆盖。",
+  "_README": "每个平台一段，key 是包名。by 支持 viewId / viewIdEnds / className / text / textContains / contentDesc；pick 支持 first / last。所有值必须来自真机 dump。字段是候选列表，按顺序试，任一命中即停 —— 同一个 App 的不同页面锚点不同，靠候选列表一起覆盖。",
 
   "com.ss.android.ugc.aweme": {
-    "_note": "抖音。2026-11-16 两份真机 dump：① 私信聊天页（有真实对话）② 内置豆包 AI 页。两条候选分别对应这两个页面，私信的排在前面。抖音的 viewId 是资源混淆后的 1-3 字符短名，大版本更新可能变，所以每条都留了兜底。",
+    "_note": "抖音。2026-11-16 两份真机 dump：① 私信聊天页（有真实对话）② 内置豆包 AI 页。两条候选分别对应这两个页面，私信排在前面。抖音的 viewId 是资源混淆后的 1-3 字符短名，大版本更新可能变，所以每条都留了兜底。",
 
     "messageList": [
       { "by": "viewId", "value": "v6m" },
@@ -25,13 +25,42 @@
       { "by": "viewId", "value": "jbj" }
     ],
 
-    "_exclude_note": "私信列表里混着安全提示，它和真实气泡在同一个 RecyclerView 里，必须排除。",
     "exclude": [
       "为保障用户沟通安全",
       "请遵守法律法规",
       "该用户已注销",
       "消息已发出，但被对方拒收",
       "对方设置了隐私权限"
+    ]
+  },
+
+  "com.netease.moyi": {
+    "_note": "网易 moyi。2026-11-16 真机 dump。这是目前结构最规范的一个：id 全是语义化全名（不是混淆短名），且消息体用的是网易云信 SDK 的标准组件 nim_message_item_text_body —— 意味着同类接入云信 SDK 的 App 可以共用这套锚点。",
+
+    "messageList": [
+      { "by": "viewId", "value": "biz_msg_chat_message_list_view" },
+      { "by": "className", "value": "androidx.recyclerview.widget.RecyclerView" }
+    ],
+
+    "message": [
+      { "by": "viewId", "value": "nim_message_item_text_body" },
+      { "by": "viewId", "value": "message_item_text_body" }
+    ],
+
+    "input": [
+      { "by": "viewId", "value": "editTextView" },
+      { "by": "className", "value": "android.widget.EditText", "pick": "last" }
+    ],
+
+    "pageHint": [
+      { "by": "viewId", "value": "editTextView" },
+      { "by": "viewId", "value": "biz_msg_chat_message_list_view" }
+    ],
+
+    "exclude": [
+      "缘分天使",
+      "匹配度较高",
+      "别错过缘分"
     ]
   }
 }
