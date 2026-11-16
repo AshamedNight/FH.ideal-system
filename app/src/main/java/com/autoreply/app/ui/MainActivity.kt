@@ -14,6 +14,8 @@ import android.widget.Toast
 import com.autoreply.app.R
 import com.autoreply.app.capture.CaptureService
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.core.llm.ReplyEngine
+import com.autoreply.app.core.llm.Turn
 import com.autoreply.app.platform.AccessibilityReplySink
 import com.autoreply.app.platform.FillResult
 import com.autoreply.app.platform.NodeQuery
@@ -109,6 +111,80 @@ class MainActivity : Activity() {
         }
 
         findViewById<Button>(R.id.btn_probe).setOnClickListener { runProbe() }
+        findViewById<Button>(R.id.btn_generate).setOnClickListener { runGenerate() }
+    }
+
+    /**
+     * 真实流程：读消息 → 调模型生成 → 填进输入框。
+     *
+     * 这里有一条跨线程的链：网络请求必须在后台线程（主线程会抛
+     * NetworkOnMainThreadException），而无障碍操作必须在主线程
+     * （AccessibilityNodeInfo 不是线程安全的）。所以是"后台生成、主线程填"。
+     */
+    private fun runGenerate() {
+        val service = CaptureService.instance
+        if (service == null) {
+            toast("读屏没开")
+            return
+        }
+        val root = service.targetRoot()
+        if (root == null) {
+            output.text = "目标界面不在前台。先切到聊天页停留 2 秒，再切回来点这个按钮。"
+            return
+        }
+        val pkg = root.packageName?.toString().orEmpty()
+        val profile = Profiles.forPackage(pkg)
+        if (profile == null) {
+            output.text = "「$pkg」还没有界面配置。"
+            return
+        }
+
+        val messages = NodeQuery.readMessages(root, profile)
+        if (messages.isEmpty()) {
+            output.text = "没读到消息，选择器可能失效。"
+            return
+        }
+        val lastOther = messages.lastOrNull { it.fromOther }
+        if (lastOther == null) {
+            output.text = "最后几条都不是对方发的，不生成。"
+            return
+        }
+
+        val turns = messages.map { Turn(it.text, it.fromOther) }
+        output.text = "正在生成…（对方最后一句：${lastOther.text.take(24)}）"
+
+        val engine = ReplyEngine(config)
+        Thread {
+            val result = engine.generate(turns)
+            runOnUiThread {
+                // 生成要几秒，这期间用户可能已经退出页面
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                when (result) {
+                    is ReplyEngine.Result.Blocked -> {
+                        output.text = "不回复：${result.reason}"
+                    }
+                    is ReplyEngine.Result.Failed -> {
+                        output.text = "生成失败：${result.reason}"
+                    }
+                    is ReplyEngine.Result.Draft -> {
+                        val sink = AccessibilityReplySink(service, profile)
+                        val fill = sink.fill(result.text)
+                        output.text = buildString {
+                            append("草稿（第 ${result.attempts} 次生成）：\n")
+                            append(result.text)
+                            append("\n\n填入：")
+                            append(
+                                when (fill) {
+                                    is FillResult.Ok -> "成功，已写入输入框（未发送）"
+                                    is FillResult.Unavailable -> "失败 — ${fill.reason}"
+                                    is FillResult.Mismatch -> "回读不一致 — ${fill.actual}"
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }.start()
     }
 
     /**

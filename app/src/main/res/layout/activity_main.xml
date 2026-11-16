@@ -145,13 +145,29 @@
             android:textColor="@color/text_secondary"
             android:layout_marginBottom="8dp" />
 
-        <Button
-            android:id="@+id/btn_probe"
-            style="@style/PrimaryButton"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            android:text="@string/btn_probe" />
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btn_probe"
+                style="@style/GhostButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/btn_probe" />
+
+            <Button
+                android:id="@+id/btn_generate"
+                style="@style/PrimaryButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="@string/btn_generate" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/output"
