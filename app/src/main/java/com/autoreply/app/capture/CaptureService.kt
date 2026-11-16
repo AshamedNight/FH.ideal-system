@@ -84,16 +84,24 @@ class CaptureService : AccessibilityService() {
     /**
      * 系统界面判断 —— 这些永远不是要抓的对象。
      *
-     * 没有这一层会出大问题：包名留空时原本的规则是"非本 App 即目标"，
-     * 而导航栏、状态栏、桌面、输入法统统满足"非本 App"，于是点抓取拿到的是
-     * com.android.systemui 的 navigation_bar_frame —— 看起来像抓取坏了，
-     * 实际是把系统悬浮窗当成了目标界面。
+     * 这里踩过两次坑，两次都表现为"抓取看起来能跑，但抓到的不是目标"：
+     *
+     * 1. 包名留空时规则是"非本 App 即目标"，而导航栏、状态栏、桌面、输入法
+     *    统统满足"非本 App" → 抓到 com.android.systemui 的 navigation_bar_frame。
+     *    更糟的是 systemui 的窗口内容事件极频繁（状态栏时间每秒刷新），
+     *    缓存一直被它覆盖，表现为"换几个 App 都抓到同一份"。
+     *
+     * 2. 分屏 / 自由窗口模式下，窗口容器的包名是 `android`（不是 systemui），
+     *    抓到的是 #flexible_task_caption_view_root 这种标题栏（最小化/关闭按钮）。
+     *    所以必须单独排除 `android` 这个包名。
      *
      * 用关键字匹配而不是枚举全部包名：各家 ROM 的 launcher / 输入法包名太多，
      * 穷举必然漏。
      */
     private fun isSystemUi(pkg: String): Boolean {
         if (pkg == packageName) return true
+        // 系统框架自身的窗口：分屏/自由窗口的标题栏、Toast、音量条都在这里
+        if (pkg == "android") return true
         if (pkg.startsWith("com.android.systemui")) return true
         if (pkg.startsWith("com.android.settings")) return true
         if (pkg.contains("launcher", ignoreCase = true)) return true
@@ -111,11 +119,21 @@ class CaptureService : AccessibilityService() {
     }
 
     /**
+     * 只接受「应用窗口」。
+     *
+     * 单看包名不够：TYPE_SYSTEM 的窗口可以属于任何包名，
+     * 而 TYPE_APPLICATION 才是真正承载 App 界面的那一层。
+     * 分屏时有多个 TYPE_APPLICATION 窗口，按 z-order 取第一个命中目标的。
+     */
+    private fun isAppWindow(w: android.view.accessibility.AccessibilityWindowInfo): Boolean =
+        w.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION
+
+    /**
      * 目标 App 的根节点。
      *
      * **不要用 rootInActiveWindow 直接判"目标在不在"**：
      * 用户开分屏/小窗时，目标 App 明明就在屏幕上，rootInActiveWindow
-     * 返回的却可能是我方或另一个窗口。先看活动窗口，不是就遍历 windows 按包名找。
+     * 返回的却可能是标题栏或另一个窗口。先看活动窗口，不是就遍历 windows 按包名找。
      */
     fun targetRoot(): AccessibilityNodeInfo? {
         val active = rootInActiveWindow
@@ -124,7 +142,9 @@ class CaptureService : AccessibilityService() {
 
         val list = windows ?: return null
         for (w in list) {
-            val r = w?.root ?: continue
+            if (w == null) continue
+            if (!isAppWindow(w)) continue
+            val r = w.root ?: continue
             if (isTarget(r.packageName?.toString())) return r
         }
         return null
@@ -134,7 +154,9 @@ class CaptureService : AccessibilityService() {
     fun targetWindowBounds(): Rect? {
         val list = windows ?: return null
         for (w in list) {
-            val r = w?.root ?: continue
+            if (w == null) continue
+            if (!isAppWindow(w)) continue
+            val r = w.root ?: continue
             if (!isTarget(r.packageName?.toString())) continue
             val rect = Rect()
             w.getBoundsInScreen(rect)
@@ -143,26 +165,72 @@ class CaptureService : AccessibilityService() {
         return null
     }
 
+    /**
+     * 当前所有窗口的概览，供排查用。
+     *
+     * 抓错东西时，光看抓到的节点树无法判断"为什么抓到了它"；
+     * 附上窗口清单就能一眼看出：当时屏幕上有哪些窗口、都是什么类型、谁在前。
+     */
+    fun describeWindows(): String {
+        val list = windows ?: return "（拿不到窗口列表：无障碍服务可能未连接）"
+        if (list.isEmpty()) return "（窗口列表为空）"
+        val sb = StringBuilder()
+        for ((i, w) in list.withIndex()) {
+            if (w == null) {
+                sb.append("# $i null\n")
+                continue
+            }
+            val pkg = w.root?.packageName?.toString() ?: "?"
+            val type = when (w.type) {
+                android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION -> "APP"
+                android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD -> "IME"
+                android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM -> "SYS"
+                android.view.accessibility.AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY -> "A11Y"
+                android.view.accessibility.AccessibilityWindowInfo.TYPE_SPLIT_SCREEN_DIVIDER -> "DIVIDER"
+                else -> "OTHER(${w.type})"
+            }
+            val rect = Rect()
+            w.getBoundsInScreen(rect)
+            sb.append("# $i $type $pkg ")
+                .append("[${rect.left},${rect.top},${rect.right},${rect.bottom}]")
+                .append(if (w.isActive) " active" else "")
+                .append(if (w.isFocused) " focused" else "")
+                .append('\n')
+        }
+        return sb.toString()
+    }
+
     /** 前台是不是目标 App。L0 档要靠它决定能不能动作。 */
     fun isTargetForeground(): Boolean = isTarget(rootInActiveWindow?.packageName?.toString())
 
     data class Snapshot(val text: String, val source: String)
 
-    /** 前台就是目标时抓实时；否则退回最近一次缓存。都没有返回 null。 */
+    /**
+     * 前台就是目标时抓实时；否则退回最近一次缓存。都没有返回 null。
+     *
+     * 不管走哪条路，末尾都附一份「当前窗口」清单 —— 抓错对象时，
+     * 光看节点树看不出为什么抓到了它；有窗口清单就能直接看到
+     * 当时屏幕上有哪些窗口、什么类型、谁在前。
+     */
     fun snapshot(): Snapshot? {
+        val body: String
+        val source: String
         val root = targetRoot()
         if (root != null) {
-            val text = NodeDumper.dump(root)
-            cachedDump = text
+            body = NodeDumper.dump(root)
+            cachedDump = body
             cachedAtWall = System.currentTimeMillis()
             cachedPkg = root.packageName?.toString() ?: ""
-            return Snapshot(text, "实时")
-        }
-        if (cachedDump.isNotEmpty()) {
+            source = "实时"
+        } else if (cachedDump.isNotEmpty()) {
+            body = cachedDump
             val who = if (cachedPkg.isEmpty()) "" else "（$cachedPkg）"
-            return Snapshot(cachedDump, "缓存于 ${agoText(cachedAtWall)}$who")
+            source = "缓存于 ${agoText(cachedAtWall)}$who"
+        } else {
+            return null
         }
-        return null
+        val text = body + "\n\n# ---- 当前窗口（排查用）----\n" + describeWindows()
+        return Snapshot(text, source)
     }
 
     private fun agoText(at: Long): String {

@@ -75,7 +75,14 @@ class MainActivity : Activity() {
             }
             val snapshot = service.snapshot()
             if (snapshot == null) {
-                output.text = getString(R.string.hint_no_dump)
+                // 抓不到时把窗口清单也一并显示：这样"为什么抓不到"有据可查，
+                // 而不是只能看到一句提示。
+                output.text = buildString {
+                    append(getString(R.string.hint_no_dump))
+                    append("\n\n# ---- 当前窗口（排查用）----\n")
+                    append(service.describeWindows())
+                }
+                toast("没抓到目标界面，已列出当前窗口")
                 return@setOnClickListener
             }
             output.text = snapshot.text
