@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  flagReportViewIds      不带它，节点的 viewIdResourceName 全是 null，只能靠界面文字匹配，
+                         目标 App 一次改版就全废。这是最关键的 flag。
+  flagRetrieveInteractiveWindows
+                         能拿到所有窗口，弹窗（输入法、二次确认、平台提示）才不会漏掉；
+                         开分屏/小窗时也能找到目标 App 的窗口。
+
+  canPerformGestures 刻意设为 false：
+     本项目只用 ACTION_CLICK / ACTION_SET_TEXT，不注入模拟手势（dispatchGesture）。
+     手势注入会产生一份伪造的触摸轨迹，而 performAction 不会 —— 需要滑动时优先
+     找可滚动的容器节点调 ACTION_SCROLL，而不是注入手势。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="false"
+    android:description="@string/accessibility_desc"
+    android:notificationTimeout="200" />

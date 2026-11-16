@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AutoReply</string>
+    <string name="title_settings">设置</string>
+
+    <string name="service_label">AutoReply 界面读取</string>
+    <string name="service_notify_label">AutoReply 消息通知读取</string>
+    <string name="accessibility_desc">在你开启自动回复后，读取当前聊天界面的消息内容并填入回复草稿。程序不会替你点发送，草稿是否发出始终由你决定。</string>
+
+    <string name="status_service_off">读屏服务：未开启</string>
+    <string name="status_service_on">读屏服务：已连接</string>
+    <string name="status_notify_off">通知读取：未授权</string>
+    <string name="status_notify_on">通知读取：已授权</string>
+
+    <string name="btn_enable_accessibility">开启读屏</string>
+    <string name="btn_enable_notify">开启通知读取</string>
+    <string name="btn_open_target">打开目标应用</string>
+    <string name="btn_dump">抓取当前界面</string>
+    <string name="btn_copy">复制结果</string>
+    <string name="btn_settings">设置</string>
+    <string name="btn_stop">停止</string>
+
+    <string name="hint_usage">用法：先开启读屏与通知读取，再在设置里填好模型和人设。收到新消息后，程序会把回复草稿填进输入框，由你点发送。</string>
+    <string name="hint_no_dump">还没抓到界面：先切到目标应用的聊天页划一下，再回来点「抓取当前界面」。</string>
+
+    <string name="level_0">L0 只填不发</string>
+    <string name="level_1">L1 通知驱动（推荐）</string>
+    <string name="level_2">L2 列表轮询（不建议）</string>
+    <string name="level_2_warning">L2 会反复扫会话列表并逐个点开，是自动化特征最明显的行为，显著提高账号被限制的概率。确认要继续吗？</string>
+</resources>

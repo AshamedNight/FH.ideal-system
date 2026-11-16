@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 代码里动态创建的 RadioButton 需要一个稳定 id，才能回读用户选了哪档。 -->
+    <item name="rb_level_0" type="id" />
+    <item name="rb_level_1" type="id" />
+    <item name="rb_level_2" type="id" />
+</resources>
