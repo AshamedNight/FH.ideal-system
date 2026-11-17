@@ -75,6 +75,15 @@ class CaptureService : AccessibilityService() {
     /** 一次只跑一个判定，避免通知连发时并发调模型。 */
     private var autoRunning = false
 
+    /**
+     * [autoRunning] 的开始时刻。
+     *
+     * 兜底用：判定链的回调万一丢了（异常、线程被系统冻结），
+     * autoRunning 会永远停在 true，而连点就靠它来防重入 ——
+     * 结果就是界面上一直显示"连点剩 N 个"却再也不动。
+     */
+    private var autoStartedAt = 0L
+
     /** 同一条通知可能被系统更新多次（已读回执、时间刷新），用它去重。 */
     private var lastHitKey: String = ""
 
@@ -156,6 +165,7 @@ class CaptureService : AccessibilityService() {
     private fun runAuto(notifyText: String?, onDone: (() -> Unit)? = null) {
         val cfg = config ?: return
         autoRunning = true
+        autoStartedAt = SystemClock.elapsedRealtime()
         ReplyRunner(this, cfg).runOnce(notifyText) { result ->
             autoRunning = false
             val hhmm = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
@@ -193,6 +203,8 @@ class CaptureService : AccessibilityService() {
         batchLeft = 0
         batchWatchdog?.let { mainHandler.removeCallbacks(it) }
         batchWatchdog = null
+        // 没发完的断句一起丢掉：停下来了就不该再往任何会话里填东西
+        com.autoreply.app.core.guard.DraftQueue.clear()
         lastAutoNote = note
     }
 
@@ -203,7 +215,15 @@ class CaptureService : AccessibilityService() {
             stopBatch("连点结束：这一轮处理完了")
             return
         }
-        if (autoRunning) return
+        if (autoRunning) {
+            // 回调丢了就强制复位，别让整条连点死在这里
+            if (SystemClock.elapsedRealtime() - autoStartedAt > 40_000L) {
+                autoRunning = false
+                lastAutoNote = "上一步超时，已强制复位"
+            } else {
+                return
+            }
+        }
 
         val root = targetRoot() ?: run {
             stopBatch("连点停止：目标界面不在前台")
@@ -236,11 +256,15 @@ class CaptureService : AccessibilityService() {
             return
         }
 
+        // 换会话了，上一段没发完的断句必须丢掉，
+        // 否则会把 A 会话的第二句发给 B
+        com.autoreply.app.core.guard.DraftQueue.clear()
+
         // 等会话渲染完再读。太短会读到上一个会话的残留节点
         mainHandler.postDelayed({
             if (!batchActive) return@postDelayed
             runAuto(null) { armBatchWatchdog() }
-        }, 1500L + kotlin.random.Random.nextLong(1200))
+        }, 1000L + kotlin.random.Random.nextLong(700))
     }
 
     /**
@@ -266,8 +290,24 @@ class CaptureService : AccessibilityService() {
         batchWatchdog?.let { mainHandler.removeCallbacks(it) }
         batchWatchdog = null
         batchLeft--
-        // 等新气泡渲染完再切，否则读到的还是上一屏
-        mainHandler.postDelayed({ batchStep() }, 1200L + kotlin.random.Random.nextLong(900))
+        // 等新气泡渲染完再切，否则读到的还是上一屏。
+        // 600~1300ms 而不是原来的 1200~2100：实测那个间隔让人明显感觉"卡了一下"，
+        // 而渲染其实几百毫秒就完成了。
+        mainHandler.postDelayed({ batchStep() }, 600L + kotlin.random.Random.nextLong(700))
+    }
+
+    /**
+     * 断句的下一段：填进去，不切会话。
+     *
+     * @return true 表示还有下一段要发，调用方应当停下（别急着切会话）
+     */
+    private fun fillNextSegment(root: AccessibilityNodeInfo, profile: PlatformProfile): Boolean {
+        val next = com.autoreply.app.core.guard.DraftQueue.poll() ?: return false
+        com.autoreply.app.platform.TextWriter.write(this, profile, next)
+        lastAutoNote = "上一句已发，接着填：${next.take(16)}"
+        // 新的一段等于重新开始等发送，看门狗要重新计时
+        if (batchActive) armBatchWatchdog()
+        return true
     }
 
     /**
@@ -302,6 +342,8 @@ class CaptureService : AccessibilityService() {
         val nowWall = System.currentTimeMillis()
         if (SentTracker(this).detectNewSent(messages, peer, nowWall)) {
             PacerGuard(this, cfg).recordSent(nowWall)
+            // 断句：这句话如果是拆开发的，先接着填下一句 —— 不切会话
+            if (fillNextSegment(root, profile)) return
             // 连点模式下，"你点了发送"就是推进信号
             onBatchSent()
         }

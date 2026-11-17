@@ -14,9 +14,11 @@ import android.widget.Toast
 import com.autoreply.app.R
 import com.autoreply.app.capture.CaptureService
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.core.guard.DraftQueue
 import com.autoreply.app.core.guard.PacerGuard
 import com.autoreply.app.core.guard.ReplyDedup
 import com.autoreply.app.core.guard.ReplyFlow
+import com.autoreply.app.core.guard.SentenceSplitter
 import com.autoreply.app.core.guard.SentTracker
 import com.autoreply.app.core.llm.ReplyEngine
 import com.autoreply.app.core.llm.Turn
@@ -244,8 +246,14 @@ class MainActivity : Activity() {
                 when (outcome) {
                     is ReplyFlow.Outcome.Fill -> {
                         val sink = AccessibilityReplySink(service, profile)
+                        // 断句：拆成 2~3 条发，只填第一段，其余排队等你发完再填。
+                        // 和 ReplyRunner 里是同一套逻辑 —— 手动/自动两条路必须一致，
+                        // 否则"手动能拆、自动不拆"这种差异查起来最费劲。
+                        val parts = SentenceSplitter.split(outcome.text)
+                        DraftQueue.reset(parts.drop(1))
+
                         // 两条通道：无障碍优先，失败自动落到输入法
-                        val write = TextWriter.write(service, profile, outcome.text)
+                        val write = TextWriter.write(service, profile, parts.first())
                         val copied = if (write.written || write.pending) {
                             false
                         } else {
@@ -255,13 +263,17 @@ class MainActivity : Activity() {
                         if (write.written) {
                             dedup.mark(peer, lastOther.text, now)
                             // 记下"已填、待确认发出"：消息列表里出现这条时才计配额
-                            SentTracker(this@MainActivity).markPending(peer, outcome.text, now)
+                            SentTracker(this@MainActivity).markPending(peer, parts.first(), now)
                         }
                         if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
                         output.text = buildString {
                             append(head)
                             append("\n草稿：").append(outcome.text)
+                            if (parts.size > 1) {
+                                append("\n（拆成 ").append(parts.size)
+                                append(" 段：发完这段会自动填下一段）")
+                            }
                             append("\n\n填入：").append(write.note)
                             if (copied) {
                                 append("\n已复制到剪贴板：点一下输入框 → 长按 → 粘贴")

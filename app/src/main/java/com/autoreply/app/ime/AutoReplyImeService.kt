@@ -35,6 +35,8 @@ class AutoReplyImeService : InputMethodService() {
 
     private var statusView: TextView? = null
 
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -118,7 +120,11 @@ class AutoReplyImeService : InputMethodService() {
      */
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
-        flushPending()
+        // 延时 350ms 再写，不是立刻写。
+        // 有些 App 在输入框获得焦点的同一帧里会先清空内容（`setText("")`），
+        // 立刻 commit 进去的内容会被那次清空吞掉 —— 表现就是
+        // 界面提示"已写入"，但输入框里空的，偶尔发生、很难复现。
+        mainHandler.postDelayed({ flushPending() }, 350L)
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
@@ -135,6 +141,17 @@ class AutoReplyImeService : InputMethodService() {
      */
     private fun flushPending() {
         val pending = pendingText ?: return
+
+        // 过期就丢弃。这一行修的是一个真实事故：
+        // 会话 A 里排了一份草稿但输入框没绑上；用户切到会话 B 点输入框，
+        // B 的 onStartInput 一触发就把 A 的话写了进去 ——
+        // 看起来像"粘贴到了另一个会话"，实际上是残留的 pending。
+        if (System.currentTimeMillis() - pendingAt > PENDING_TTL_MS) {
+            pendingText = null
+            statusView?.text = "草稿已过期（换过会话），丢弃"
+            return
+        }
+
         val ic = currentInputConnection ?: return
         ic.commitText(pending, 1)
         pendingText = null
@@ -151,6 +168,7 @@ class AutoReplyImeService : InputMethodService() {
         val ic = currentInputConnection
         if (ic == null) {
             pendingText = text
+            pendingAt = System.currentTimeMillis()
             return false
         }
         ic.commitText(text, 1)
@@ -166,6 +184,18 @@ class AutoReplyImeService : InputMethodService() {
         /** 挂起待写入的文本。没有绑定输入框时先放这里。 */
         @Volatile
         var pendingText: String? = null
+
+        /** 挂起时刻。用来判断这份草稿是不是已经属于上一个会话了。 */
+        @Volatile
+        var pendingAt: Long = 0L
+
+        /**
+         * 挂起草稿的有效期。
+         *
+         * 90 秒足够用户从"切回目标 App"走到"点开输入框"；
+         * 再久基本可以断定他换了会话，那份草稿不该再写出来。
+         */
+        private const val PENDING_TTL_MS = 90_000L
 
         fun hasPending(): Boolean = pendingText != null
     }

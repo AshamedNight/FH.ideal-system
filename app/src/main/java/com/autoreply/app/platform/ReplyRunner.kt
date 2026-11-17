@@ -5,8 +5,10 @@ import android.os.Handler
 import android.os.Looper
 import com.autoreply.app.capture.CaptureService
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.core.guard.DraftQueue
 import com.autoreply.app.core.guard.ReplyDedup
 import com.autoreply.app.core.guard.ReplyFlow
+import com.autoreply.app.core.guard.SentenceSplitter
 import com.autoreply.app.core.guard.SentTracker
 import com.autoreply.app.core.llm.Turn
 
@@ -97,12 +99,25 @@ class ReplyRunner(
         }
 
         Thread {
-            // 构造要读 assets/persona.json，属于 IO；每次新建还能让改完人设立即生效
-            val flow = ReplyFlow(service, config)
-            val outcome = flow.decide(turns, selfSaidAgoSeconds = selfAgo, now = now)
-            val trace = flow.lastTrace
-            mainHandler.post {
-                deliver(outcome, trace, profile, peer, lastOther.text, now, dedup, onDone)
+            // 整段包 try：这里抛任何异常都会让 onDone 永远不回调，
+            // 而连点的推进就靠 onDone —— 一次网络抖动就能把整条连点卡死，
+            // 界面上还显示"连点剩 5 个"，用户完全不知道卡在哪。
+            try {
+                // 构造要读 assets/persona.json，属于 IO；每次新建还能让改完人设立即生效
+                val flow = ReplyFlow(service, config)
+                val outcome = flow.decide(turns, selfSaidAgoSeconds = selfAgo, now = now)
+                val trace = flow.lastTrace
+                mainHandler.post {
+                    deliver(outcome, trace, profile, peer, lastOther.text, now, dedup, onDone)
+                }
+            } catch (e: Throwable) {
+                mainHandler.post {
+                    finish(
+                        emptyList(), "",
+                        "判定过程出错：${e.message?.take(60) ?: e.javaClass.simpleName}",
+                        false, false, onDone,
+                    )
+                }
             }
         }.start()
     }
@@ -122,9 +137,17 @@ class ReplyRunner(
 
         when (outcome) {
             is ReplyFlow.Outcome.Fill -> {
+                // 断句：一句话拆成 2~3 条发，模仿真人"想到一句发一句"。
+                // 只填第一段，剩下的排队 —— 每段都要你单独点一次发送。
+                val parts = SentenceSplitter.split(outcome.text)
+                DraftQueue.reset(parts.drop(1))
+
                 // 两条通道按顺序试：无障碍 → 输入法 → 复制到剪贴板
-                val write = TextWriter.write(service, profile, outcome.text)
-                val copied = if (write.written || write.pending) {
+                val write = TextWriter.write(service, profile, parts.first())
+                // 只要没真写进去，就把草稿放剪贴板兜底 ——
+                // 包括"排队中"的情况：排队可能因为超时被丢弃，
+                // 那时用户手里至少还有一份可以粘。
+                val copied = if (write.written) {
                     false
                 } else {
                     runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
@@ -134,11 +157,19 @@ class ReplyRunner(
                     dedup.mark(peer, messageText, now)
                     // 记下"已填、待确认发出"。之后消息列表里只要出现这条，
                     // 就说明用户点了发送 —— 那时才计一次平台配额。
-                    SentTracker(service).markPending(peer, outcome.text, now)
+                    SentTracker(service).markPending(peer, parts.first(), now)
                 }
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
-                val note = if (copied) "${write.note}（草稿已复制到剪贴板）" else write.note
+                val segHint = if (parts.size > 1) {
+                    "（拆成 ${parts.size} 段，发完这段自动填下一段）"
+                } else {
+                    ""
+                }
+                val note = when {
+                    copied -> "${write.note}（草稿已复制到剪贴板）"
+                    else -> write.note + segHint
+                }
                 finish(trace, outcome.text, note, write.written, copied, onDone)
             }
 
