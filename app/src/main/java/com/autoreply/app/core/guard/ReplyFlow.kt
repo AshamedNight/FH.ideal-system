@@ -135,7 +135,9 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
             NecessityJudge.Action.WAIT -> {
                 step("② 该不该回：想回但先等（${judgment.reasons.joinToString("；")}）")
                 return Outcome.Wait(
-                    delayMs(baseMinutes = 12, now = now),
+                    // 6 分钟而不是 12：交友平台上"等 34 分钟"的代价是对方已经走了。
+                    // 再乘精力倍数（累了最多 3 倍）和抖动，实际落点约 4~23 分钟。
+                    delayMs(baseMinutes = 6, now = now),
                     "想回但先等等：" + judgment.reasons.joinToString("；"),
                 )
             }

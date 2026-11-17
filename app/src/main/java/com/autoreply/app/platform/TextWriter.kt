@@ -97,6 +97,22 @@ object TextWriter {
     private fun tapInputBox(service: CaptureService, profile: PlatformProfile): Boolean {
         val root = service.targetRoot() ?: return false
         val node = NodeQuery.firstMatch(root, profile.input) ?: return false
+        return tapNode(service, node)
+    }
+
+    /**
+     * 用坐标手势点一个节点。
+     *
+     * 为什么需要它：`performAction(ACTION_CLICK)` 只对「声明了可点击、而且真的
+     * 处理了点击事件」的 View 有效。很多 App 的自定义控件（输入框容器、
+     * 列表里的"下一个未读"按钮）用自己的触摸逻辑，`ACTION_CLICK` 会**返回 true
+     * 但界面上什么都没发生** —— 表现就是"点了没反应"，而且日志里看不出问题。
+     * 一次真实的按下-抬起走完整触摸分发，这类控件才认。
+     */
+    fun tapNode(
+        service: CaptureService,
+        node: android.view.accessibility.AccessibilityNodeInfo,
+    ): Boolean {
         val r = Rect()
         node.getBoundsInScreen(r)
         if (r.width() <= 0 || r.height() <= 0) return false

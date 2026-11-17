@@ -86,11 +86,14 @@ class ReplyRunner(
         }
 
         val turns = messages.map { Turn(it.text, it.fromOther) }
-        val lastAt = dedup.lastHandledAt
-        val selfAgo = if (lastAt <= 0L) {
+        // 「我上一句是多久之前说的」只认**确认发出**的时间。
+        // 之前用的是"上次生成草稿"的时间，后果是：连着试几次生成（一条都没真发出去），
+        // 判定链就以为你刚跟对方说完话，每条都扣 0.25 分、一路掉进「先等等」。
+        val lastSent = SentTracker(service).lastConfirmedAt
+        val selfAgo = if (lastSent <= 0L) {
             Int.MAX_VALUE
         } else {
-            ((now - lastAt) / 1000L).toInt().coerceAtLeast(0)
+            ((now - lastSent) / 1000L).toInt().coerceAtLeast(0)
         }
 
         Thread {

@@ -206,13 +206,14 @@ class MainActivity : Activity() {
 
         output.text = "正在判定…（对方最后一句：${lastOther.text.take(24)}）"
 
-        // 「我上一句是多久之前说的」用上次真正处理的时刻估算。
-        // 判定链拿它算"刚说过话"的抢话惩罚 —— 精确值拿不到，这个估算够用。
-        val lastAt = dedup.lastHandledAt
-        val selfAgo = if (lastAt <= 0L) {
+        // 「我上一句是多久之前说的」只认**确认发出**的时间。
+        // 之前用的是"上次生成草稿"的时间，导致连点几次测试（一条都没发）就被判成
+        // 「20 秒前刚说过话 -0.25」，分数一路往下掉，最后每条都判"不回"。
+        val lastSent = SentTracker(this).lastConfirmedAt
+        val selfAgo = if (lastSent <= 0L) {
             Int.MAX_VALUE
         } else {
-            ((now - lastAt) / 1000L).toInt().coerceAtLeast(0)
+            ((now - lastSent) / 1000L).toInt().coerceAtLeast(0)
         }
 
         Thread {
@@ -434,7 +435,12 @@ class MainActivity : Activity() {
                 "（不同平台入口不同，有的在会话列表里，没有统一名字）"
             return
         }
-        if (!NodeQuery.clickNextUnread(root, profile)) {
+        // 先 ACTION_CLICK；无效就退回坐标手势 —— 这类按钮常是自定义 View，
+        // ACTION_CLICK 会返回 true 但界面不动（"点了没反应"就是这个原因）
+        val clicked = NodeQuery.clickNextUnread(root, profile) { node ->
+            TextWriter.tapNode(service, node)
+        }
+        if (!clicked) {
             output.text = "没点到「下一个未读」。可能被弹窗挡住，或当前不在聊天页。"
             return
         }

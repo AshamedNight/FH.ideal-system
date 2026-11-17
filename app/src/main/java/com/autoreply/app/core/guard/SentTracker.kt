@@ -50,6 +50,17 @@ class SentTracker(context: Context) {
     }
 
     /**
+     * 上次**确认发出**的时间戳。从没发过返回 0。
+     *
+     * 判定链拿它算「我上一句是多久之前说的」（说太近会扣分、触发"先等等"）。
+     * 这个值必须来自"真的发出去了"，不能拿"生成了草稿"充数 ——
+     * 否则连着试几次生成（一条都没发），判定链会以为你刚跟对方说完话，
+     * 于是把接下来每一条都判成"刚说过话，缓一缓"。
+     */
+    val lastConfirmedAt: Long
+        get() = sp.getLong(KEY_LAST_SENT, 0L)
+
+    /**
      * 检查消息列表里有没有「我发的那条」。
      *
      * @return true 表示确认已经发出去了（并清掉 pending）
@@ -74,7 +85,10 @@ class SentTracker(context: Context) {
         // 只认「靠右 + 内容一致」：机器人不会自己发自己的话，
         // 出现这样的气泡只可能是那条草稿被发出去了。
         val hit = messages.any { m -> !m.fromOther && squash(m.text) == target }
-        if (hit) clear()
+        if (hit) {
+            sp.edit().putLong(KEY_LAST_SENT, now).apply()
+            clear()
+        }
         return hit
     }
 
@@ -95,6 +109,7 @@ class SentTracker(context: Context) {
         const val KEY_PEER = "peer"
         const val KEY_TEXT = "text"
         const val KEY_AT = "at"
+        const val KEY_LAST_SENT = "last_sent"
 
         /** 10 分钟：够用户从容地点发送，又不会把很久以前的残留当成本次。 */
         const val WINDOW_MS = 10 * 60_000L

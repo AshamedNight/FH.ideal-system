@@ -273,16 +273,23 @@ object NodeQuery {
     /**
      * 点一下平台自带的「下一个未读」。
      *
-     * **这是整个项目里唯一会主动点击的方法。** 刻意单独放在这里、命名直白，
-     * 就是为了让"哪里有自动点击"这件事一眼可见，不需要翻整棵树才发现。
+     * **这是整个项目里唯一会主动点击业务按钮的方法。** 刻意单独放在这里、
+     * 命名直白，就是为了让"哪里有自动点击"一眼可见，不需要翻整棵树才发现。
      *
-     * 用 `ACTION_CLICK` 而不是 `dispatchGesture`：前者不产生触摸事件流，
-     * 在系统层面是可访问性操作；后者要模拟完整手势，更像"注入"。
-     * 两者都有痕迹，但前者与本 App 的身份（无障碍工具）一致。
+     * 先用 `ACTION_CLICK`（不产生触摸事件流，与本 App 的无障碍工具身份一致），
+     * 失败再走坐标手势。**必须有这个兜底**：这类列表里的按钮常常是自定义 View，
+     * `ACTION_CLICK` 返回 true 但界面纹丝不动 —— 用户看到的就是"点了没反应"。
+     *
+     * @param tap 坐标点击的实现（由调用方注入，避免 platform 层直接依赖服务）
      */
-    fun clickNextUnread(root: AccessibilityNodeInfo, profile: PlatformProfile): Boolean {
+    fun clickNextUnread(
+        root: AccessibilityNodeInfo,
+        profile: PlatformProfile,
+        tap: ((AccessibilityNodeInfo) -> Boolean)? = null,
+    ): Boolean {
         if (profile.nextUnread.isEmpty()) return false
         val node = firstMatch(root, profile.nextUnread) ?: return false
-        return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+        return tap?.invoke(node) ?: false
     }
 }

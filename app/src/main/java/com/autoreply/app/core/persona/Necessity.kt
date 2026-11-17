@@ -23,8 +23,18 @@ object NecessityJudge {
         val reasons: List<String>,
     )
 
-    private const val THRESHOLD_REPLY = 0.60
-    private const val THRESHOLD_WAIT = 0.30
+    /**
+     * 阈值为什么是 0.45 / 0.25 而不是 0.60 / 0.30：
+     *
+     * 「私聊 +0.40」和「有一定长度 +0.10」加起来正好 0.50 —— 这是最常见的场景
+     * （对方在私聊里说了一句正常话）。按 0.60 的门槛它永远回不了，只能一直"先等等"。
+     * 真机实测就是这样：对方说「约一下放松放松」，总分 0.50，被判"等 34 分钟"。
+     *
+     * 该沉默的情况不靠这条线拦：「嗯」「哦」这类纯语气词在上面就短路了，
+     * 单字另有 -0.20。阈值只负责决定"一句正常话要不要回"。
+     */
+    private const val THRESHOLD_REPLY = 0.45
+    private const val THRESHOLD_WAIT = 0.25
 
     /** 一对一场景里，对方叫你就必须应声。 */
     private val SUMMON = listOf("在吗", "在不在", "在么", "hello", "hi", "你好", "有人吗", "说句话")
