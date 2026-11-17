@@ -88,18 +88,22 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
      *   但用户明确点了「生成并填入」就是他的意志，此时程序再替他判断"你累了"
      *   就变成了碍事 —— 连点两次就被压 27 分钟，而人自己明明清醒。
      *
-     *   平台闸门（每小时上限）不受这个开关影响：那是真风险护栏，不是拟人。
+     * @param respectCooldown 是否理会「程序自己歇的那段」长冷却。**手动时同样传 false。**
+     *   同理：冷却属于拟人，不属于平台风险。
+     *
+     *   **两个开关都不影响平台闸门的核心部分**（每小时上限、熔断）—— 那才是真护栏。
      */
     fun decide(
         turns: List<Turn>,
         selfSaidAgoSeconds: Int = Int.MAX_VALUE,
         now: Long = System.currentTimeMillis(),
         respectEnergy: Boolean = true,
+        respectCooldown: Boolean = true,
     ): Outcome {
         traceBuffer.clear()
 
         // ---- 1. 平台风险闸门 ----
-        when (val d = pacer.check(now)) {
+        when (val d = pacer.check(now, respectCooldown)) {
             is PacerGuard.Decision.Block -> {
                 step("① 平台闸门：拦截 — ${d.reason}")
                 return Outcome.Wait(d.retryAfterMs, d.reason)

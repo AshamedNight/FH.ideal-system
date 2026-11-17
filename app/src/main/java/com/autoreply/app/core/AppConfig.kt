@@ -19,20 +19,37 @@ class AppConfig(context: Context) {
         get() = sp.getInt(KEY_LEVEL, LEVEL_NOTIFY)
         set(value) = sp.edit().putInt(KEY_LEVEL, value).apply()
 
-    /** 每小时最多处理几条。超过就停到下个小时，不做"攒着补发"。 */
+    /**
+     * 每小时最多处理几条。超过就停到下个小时，不做"攒着补发"。
+     *
+     * 15 而不是最初的 6：交友平台的活跃时段，一个人一小时回十几条是常态
+     * （刚匹配一批人，逐个打招呼）。按 6 算等于把正常使用判成异常，
+     * 一被拦就是几十分钟，反而不像真人 —— 真人不会因为回了 6 条就消失。
+     */
     var hourlyCap: Int
-        get() = sp.getInt(KEY_HOURLY_CAP, 6)
+        get() = sp.getInt(KEY_HOURLY_CAP, 15)
         set(value) = sp.edit().putInt(KEY_HOURLY_CAP, value).apply()
 
-    /** 连续处理几条后强制长冷却。 */
+    /**
+     * 连续处理几条后强制长冷却。
+     *
+     * 8 而不是 3：3 条就断，用起来就是"点三下被锁 20 分钟"。
+     * 8 条之后再歇，更接近"聊了一阵子，放下手机喝口水"。
+     */
     var burstLimit: Int
-        get() = sp.getInt(KEY_BURST, 3)
+        get() = sp.getInt(KEY_BURST, 8)
         set(value) = sp.edit().putInt(KEY_BURST, value).apply()
 
-    /** 长冷却时长（分钟），下限 10。 */
+    /**
+     * 长冷却时长（分钟），下限 3。
+     *
+     * 下限从 10 降到 3：下限 10 意味着哪怕只想歇一下也要停十分钟，
+     * 测试时基本用不下去。真正需要长停的场景是平台提示限流，
+     * 那是 [PacerGuard.trip] 的整段熔断（默认 30 分钟），不用这个值。
+     */
     var cooldownMinutes: Int
-        get() = sp.getInt(KEY_COOLDOWN_MIN, 20)
-        set(value) = sp.edit().putInt(KEY_COOLDOWN_MIN, value.coerceAtLeast(10)).apply()
+        get() = sp.getInt(KEY_COOLDOWN_MIN, 5)
+        set(value) = sp.edit().putInt(KEY_COOLDOWN_MIN, value.coerceAtLeast(3)).apply()
 
     /** 每条之间的基础间隔（秒），实际会乘一个 0.7~1.8 的随机系数。 */
     var minGapSeconds: Int

@@ -57,9 +57,16 @@ class SettingsActivity : Activity() {
         root.addView(section("节奏护栏"))
         root.addView(field("hourlyCap", "每小时最多处理（条）", config.hourlyCap.toString(), InputType.TYPE_CLASS_NUMBER))
         root.addView(field("burstLimit", "连续处理多少条后长冷却", config.burstLimit.toString(), InputType.TYPE_CLASS_NUMBER))
-        root.addView(field("cooldownMinutes", "长冷却时长（分钟，≥10）", config.cooldownMinutes.toString(), InputType.TYPE_CLASS_NUMBER))
+        root.addView(field("cooldownMinutes", "长冷却时长（分钟，≥3）", config.cooldownMinutes.toString(), InputType.TYPE_CLASS_NUMBER))
         root.addView(field("minGapSeconds", "两条之间最短间隔（秒，≥30）", config.minGapSeconds.toString(), InputType.TYPE_CLASS_NUMBER))
-        root.addView(note("实际间隔会在最短值上乘 0.7~1.8 的随机系数，不要设成整齐数字。"))
+        root.addView(note("实际间隔会在最短值上乘 0.7~1.8 的随机系数，不要设成整齐数字。\n这几个值只在「自动触发」时起作用；手动点「生成并填入」只受每小时上限约束，不会被冷却或精力拦住。\n平台报警后的熔断（30 分钟）任何时候都生效，那才是真正需要等的东西。"))
+        root.addView(Button(this).apply {
+            text = "清除冷却（程序自己歇的那段）"
+            setOnClickListener {
+                com.autoreply.app.core.guard.PacerGuard(this@SettingsActivity, config).clearCooldown()
+                Toast.makeText(this@SettingsActivity, "冷却已清除，可以继续了", Toast.LENGTH_SHORT).show()
+            }
+        })
 
         root.addView(section("模型"))
         root.addView(field("llmBaseUrl", "接口地址", config.llmBaseUrl, InputType.TYPE_TEXT_VARIATION_URI))

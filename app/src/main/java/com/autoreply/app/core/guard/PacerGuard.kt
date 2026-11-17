@@ -36,15 +36,26 @@ class PacerGuard(context: Context, private val config: AppConfig) {
         val haltedUntil: Long,
     )
 
-    fun check(now: Long = System.currentTimeMillis()): Decision {
+    /**
+     * @param respectCooldown 是否理会「程序自己歇的那段」。
+     *   手动点按钮时传 false —— 冷却是拟人机制，不是平台风险；
+     *   用户明确要求动手时还拿它拦人，就变成碍事。
+     *   **熔断（trip）不受这个开关影响**：那是平台已经报警了，必须等。
+     */
+    fun check(
+        now: Long = System.currentTimeMillis(),
+        respectCooldown: Boolean = true,
+    ): Decision {
         val halted = haltedUntil()
         if (halted > now) {
             return Decision.Block("已熔断：${minutesOf(halted - now)} 分钟后恢复", halted - now)
         }
 
-        val cooling = coolingUntil()
-        if (cooling > now) {
-            return Decision.Block("长冷却中：${minutesOf(cooling - now)} 分钟后恢复", cooling - now)
+        if (respectCooldown) {
+            val cooling = coolingUntil()
+            if (cooling > now) {
+                return Decision.Block("长冷却中：${minutesOf(cooling - now)} 分钟后恢复", cooling - now)
+            }
         }
 
         val used = usedInCurrentHour(now)
@@ -92,6 +103,20 @@ class PacerGuard(context: Context, private val config: AppConfig) {
     /** 用户手动解除熔断。只在确认平台已经恢复正常后使用。 */
     fun clearHalt() {
         sp.edit().putLong(KEY_HALTED_UNTIL, 0L).remove(KEY_HALT_REASON).apply()
+    }
+
+    /**
+     * 只清冷却，不动熔断。
+     *
+     * 两者性质不同：熔断是"平台已经报警了"，必须等；
+     * 冷却是"程序自己歇一下"，参数不合适时不该把人锁死。
+     * 测试阶段这个按钮会经常用 —— 连点几次就到连续上限，等 5 分钟纯属浪费。
+     */
+    fun clearCooldown() {
+        sp.edit()
+            .putLong(KEY_COOLING_UNTIL, 0L)
+            .putInt(KEY_BURST_COUNT, 0)
+            .apply()
     }
 
     /** 下一条动作建议等多久：基础间隔 × [0.7, 1.8]。 */

@@ -214,9 +214,10 @@ class MainActivity : Activity() {
                 turns,
                 selfSaidAgoSeconds = selfAgo,
                 now = now,
-                // 手动点击 = 用户明确要求，精力不该拦他。
-                // 平台闸门（每小时上限）仍然生效 —— 那是风险护栏，不是拟人。
+                // 手动点击 = 用户明确要求。精力和长冷却都是拟人机制，此时该让路；
+                // 每小时上限与熔断仍然生效（那是真风险护栏）。
                 respectEnergy = false,
+                respectCooldown = false,
             )
             // trace 必须在这里取：下一次 decide 会清空它
             val trace = flow.lastTrace
