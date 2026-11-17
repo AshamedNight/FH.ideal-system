@@ -50,8 +50,17 @@ class LlmClient(
      * `http://127.0.0.1:8080/v1/chat/completions`），再拼一次就成了
      * `/v1/chat/completions/chat/completions`，报 404 还很难看出来。
      * 这里统一剥掉，两种写法都能用。
+     *
+     * 另外把 `0.0.0.0` 换成 `127.0.0.1`：服务端启动日志打的是
+     * "listening on 0.0.0.0:8021"，那个地址的意思是"监听所有网卡"，
+     * **不能当客户端目标**。抄进设置里就会得到
+     * `Failed to connect to /0.0.0.0:8021` —— 报错看起来像服务没起，
+     * 实际上服务好好的，只是目标地址写错了。
      */
-    private val endpointBase: String = baseUrl.trim().trimEnd('/').removeSuffix("/chat/completions")
+    private val endpointBase: String = baseUrl.trim()
+        .trimEnd('/')
+        .removeSuffix("/chat/completions")
+        .replace("://0.0.0.0", "://127.0.0.1")
 
     fun chat(system: String, user: String, maxTokens: Int = 400): Result {
         // mock 必须排在"未配置"检查之前 —— 假模型本来就不需要 Key
@@ -114,10 +123,29 @@ class LlmClient(
 
             if (text.isEmpty()) Result.Err("返回里没有 content") else Result.Ok(text, inTok, outTok)
         } catch (e: Exception) {
-            Result.Err("请求失败：${e.javaClass.simpleName} ${e.message.orEmpty().take(120)}")
+            Result.Err("请求失败：${explain(e)}")
         } finally {
             conn?.disconnect()
         }
+    }
+
+    /**
+     * 把网络异常翻译成"该去查什么"。
+     *
+     * 原始的 `ConnectException: Failed to connect to /0.0.0.0:8021` 对用户
+     * 几乎没有信息量 —— 它看起来像"服务挂了"，而最常见的原因其实是
+     * 地址抄错了（比如把服务端日志里的 `0.0.0.0` 当成连接地址）。
+     */
+    private fun explain(e: Exception): String = when (e) {
+        is java.net.ConnectException ->
+            "连不上 $endpointBase —— 服务没在跑，或地址/端口写错了"
+        is java.net.UnknownHostException ->
+            "解析不了域名：$endpointBase（检查拼写，或当前网络能不能解析它）"
+        is java.net.SocketTimeoutException ->
+            "连上了但 ${timeoutMs / 1000} 秒没响应 —— 网络太慢，或代理没通"
+        is javax.net.ssl.SSLException ->
+            "TLS 握手失败 —— 地址是 https 但服务其实是 http？"
+        else -> "${e.javaClass.simpleName} ${e.message.orEmpty().take(120)}"
     }
 
     /**
