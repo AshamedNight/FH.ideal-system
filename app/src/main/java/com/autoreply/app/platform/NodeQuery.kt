@@ -226,6 +226,19 @@ object NodeQuery {
         firstEditable(root, profile.input)?.text?.toString()
 
     /**
+     * 当前会话的对方昵称。
+     *
+     * 用来区分"同一句文本在不同会话里" —— 交友平台大量新会话第一句都是「你好」，
+     * 只按文本去重会把第二个会话直接锁死。读不到就返回空串，
+     * 调用方要能接受（退回纯文本指纹）。
+     */
+    fun peerName(root: AccessibilityNodeInfo, profile: PlatformProfile): String {
+        if (profile.peerName.isEmpty()) return ""
+        val node = firstMatch(root, profile.peerName) ?: return ""
+        return node.text?.toString()?.trim().orEmpty()
+    }
+
+    /**
      * 输入框不听话时，用一句话说清「卡在哪」。
      *
      * 填字失败有且只有三种原因，对应的处置完全不同，混在一起就会瞎试：

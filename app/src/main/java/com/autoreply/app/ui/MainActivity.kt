@@ -180,13 +180,15 @@ class MainActivity : Activity() {
         val turns = messages.map { Turn(it.text, it.fromOther) }
 
         // ---- 去重：同一条消息 5 分钟内只处理一次 ----
-        // 没有这一层，点两次按钮就生成两次草稿；等接了自动触发，
-        // 就变成对同一条消息反复回 —— 那比什么都不做更像机器人。
+        // 指纹带对方昵称 —— 交友平台大量新会话第一句都是「你好」，
+        // 只按文本去重会把第二个会话直接锁死（这个坑踩过）。
         val now = System.currentTimeMillis()
+        val peer = NodeQuery.peerName(root, profile)
         val dedup = ReplyDedup(this)
-        if (dedup.isDuplicate(lastOther.text, now)) {
+        if (dedup.isDuplicate(peer, lastOther.text, now)) {
+            val who = peer.ifEmpty { "这个会话" }
             output.text = buildString {
-                append("这条已经处理过（5 分钟内同一句），不重复生成。\n\n")
+                append("「$who」这条已经处理过（5 分钟内同一句），不重复生成。\n\n")
                 append("内容：").append(lastOther.text.take(40))
                 append("\n\n（要重来就等 5 分钟，或等对方发新消息）")
             }
@@ -231,7 +233,7 @@ class MainActivity : Activity() {
                             runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
                         }
                         // 只有真进了输入框才记"已处理"
-                        if (write.written) dedup.mark(lastOther.text, now)
+                        if (write.written) dedup.mark(peer, lastOther.text, now)
                         if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
                         output.text = buildString {
@@ -506,20 +508,20 @@ class MainActivity : Activity() {
         // 前缀留着反而碍事 —— 真要发的时候还得先手动删掉。
         // 所以前缀去掉，改由按钮文案自己说明它是复读。
         val draft = lastOther.text
-        val sink = AccessibilityReplySink(service, profile)
-        val result = sink.fill(draft)
+        // 走和正式流程同一条路（无障碍 → 输入法 → 自动点输入框），
+        // 否则试填只能验无障碍那一条，验不出用户在正式流程里会看到什么。
+        val write = TextWriter.write(service, profile, draft)
         sb.append("\n草稿：").append(draft)
         sb.append("\n（原文复读，只验链路。要模型生成请点右侧「生成并填入」）")
-        sb.append("\n填字：").append(
-            when (result) {
-                is FillResult.Ok -> "成功，已写入输入框（未发送）"
-                is FillResult.Unavailable -> "失败 — ${result.reason}"
-                is FillResult.Mismatch -> "回读不一致 — ${result.actual}"
-            }
-        )
+        sb.append("\n填字：").append(write.note)
+        if (write.pending) {
+            sb.append("\n（输入法会把草稿挂起，切回去点一下输入框就会写入）")
+        }
 
         // 输入框诊断：这个项目的填字失败几乎全集中在这一层。
-        sb.append("\n\n").append(NodeQuery.diagnoseInput(root, profile))
+        if (!write.written) {
+            sb.append("\n\n").append(NodeQuery.diagnoseInput(root, profile))
+        }
 
         // 人设到底有没有进提示词，是这个项目最容易"以为改了其实没生效"的地方。
         // 所以试填顺带把来源、条数、提示词开头都打出来 —— 不配 Key、不联网也能自查。

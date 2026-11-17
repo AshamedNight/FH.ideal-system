@@ -75,8 +75,12 @@ class ReplyRunner(
 
         val now = System.currentTimeMillis()
         val dedup = ReplyDedup(service)
-        if (dedup.isDuplicate(lastOther.text, now)) {
-            finish(emptyList(), "", "这条已经处理过（5 分钟内同一句）", false, false, onDone)
+        // 指纹带昵称：交友平台大量新会话第一句都是「你好」，
+        // 只按文本去重会把第二个会话直接锁死
+        val peer = NodeQuery.peerName(root, profile)
+        if (dedup.isDuplicate(peer, lastOther.text, now)) {
+            val who = peer.ifEmpty { "这个会话" }
+            finish(emptyList(), "", "「$who」这条已经处理过（5 分钟内同一句）", false, false, onDone)
             return
         }
 
@@ -94,7 +98,7 @@ class ReplyRunner(
             val outcome = flow.decide(turns, selfSaidAgoSeconds = selfAgo, now = now)
             val trace = flow.lastTrace
             mainHandler.post {
-                deliver(outcome, trace, profile, lastOther.text, now, dedup, onDone)
+                deliver(outcome, trace, profile, peer, lastOther.text, now, dedup, onDone)
             }
         }.start()
     }
@@ -104,6 +108,7 @@ class ReplyRunner(
         outcome: ReplyFlow.Outcome,
         trace: List<String>,
         profile: PlatformProfile,
+        peer: String,
         messageText: String,
         now: Long,
         dedup: ReplyDedup,
@@ -121,7 +126,7 @@ class ReplyRunner(
                     runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
                 }
                 // 只有真进了输入框才算"处理过"：排队和复制都还要用户再动一下手
-                if (write.written) dedup.mark(messageText, now)
+                if (write.written) dedup.mark(peer, messageText, now)
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
                 val note = if (copied) "${write.note}（草稿已复制到剪贴板）" else write.note

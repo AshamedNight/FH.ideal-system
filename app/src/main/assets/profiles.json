@@ -103,6 +103,10 @@
 
     "nextUnread": [
       { "by": "viewId", "value": "tv_next" }
+    ],
+
+    "peerName": [
+      { "by": "viewId", "value": "txt_top_center" }
     ]
   },
 

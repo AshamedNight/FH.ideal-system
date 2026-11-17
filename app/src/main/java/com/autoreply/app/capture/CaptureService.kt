@@ -183,7 +183,13 @@ class CaptureService : AccessibilityService() {
 
         val messages = NodeQuery.readMessages(root, profile)
         val last = messages.lastOrNull { it.fromOther } ?: return
-        val fingerprint = "${messages.size}|${last.text.trim()}"
+        // 指纹必须带昵称。交友平台大量新会话第一句都是「你好」，
+        // 只按「条数 + 文本」判断的话，从 A 会话切到 B 会话，
+        // 两边都是 1 条「你好」→ 指纹相同 → 判定成"消息没变"，那条招呼就被漏掉。
+        //
+        // 分隔符用 U+241F：昵称或消息里都可能出现竖线，撞上会把两个会话粘成一个。
+        val peer = NodeQuery.peerName(root, profile)
+        val fingerprint = "$peer\u241F${messages.size}\u241F${last.text.trim()}"
         if (fingerprint == lastSeenFingerprint) return
         lastSeenFingerprint = fingerprint
 

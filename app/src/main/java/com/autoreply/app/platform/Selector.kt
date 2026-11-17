@@ -79,6 +79,18 @@ data class PlatformProfile(
      * 配置里留空就等于这个平台没有这个能力。
      */
     val nextUnread: List<Selector> = emptyList(),
+
+    /**
+     * 对方昵称（聊天页顶栏的标题）。
+     *
+     * **只用于区分会话，不用于内容判断。** 为什么必须有它：
+     * 交友平台大量新会话的第一句都是「你好」—— 如果去重只看消息文本，
+     * 第二个会话的「你好」会被当成"已经处理过"直接锁掉，那条招呼就永远不回。
+     * 加上昵称后指纹变成「谁 + 说了什么」，跨会话才不会互相干扰。
+     *
+     * 读不到时退回纯文本指纹（有误判风险，但比完全不能用强）。
+     */
+    val peerName: List<Selector> = emptyList(),
 ) {
     val isConfigured: Boolean get() = input.isNotEmpty() || message.isNotEmpty()
 }
@@ -122,6 +134,7 @@ object Profiles {
                     pageHint = o.selectors("pageHint"),
                     exclude = o.strings("exclude"),
                     nextUnread = o.selectors("nextUnread"),
+                    peerName = o.selectors("peerName"),
                 )
             }
         } catch (e: Exception) {
