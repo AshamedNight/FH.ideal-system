@@ -38,3 +38,6 @@ _legacy/gateway/recordings/
 # 而 dump 文件名五花八门（dump.txt、pkg=xxx.txt、新dump.txt…），逐个列必然漏。
 /*.txt
 /dumps/
+
+# 从手机导出的安装包（体积大，不入库）
+_apk/
