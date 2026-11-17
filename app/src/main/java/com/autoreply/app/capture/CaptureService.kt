@@ -189,11 +189,15 @@ class CaptureService : AccessibilityService() {
         runAuto(hit.text)
     }
 
-    private fun runAuto(notifyText: String?, onDone: (() -> Unit)? = null) {
+    private fun runAuto(
+        notifyText: String?,
+        manual: Boolean = false,
+        onDone: (() -> Unit)? = null,
+    ) {
         val cfg = config ?: return
         autoRunning = true
         autoStartedAt = SystemClock.elapsedRealtime()
-        ReplyRunner(this, cfg).runOnce(notifyText) { result ->
+        ReplyRunner(this, cfg).runOnce(notifyText, manual) { result ->
             autoRunning = false
             logAuto(result.note)
             onDone?.invoke()
@@ -249,19 +253,16 @@ class CaptureService : AccessibilityService() {
     /**
      * 把目标应用弄到前台。返回 null 表示成功，否则是失败原因。
      *
-     * 两条路，按可靠性排序：
+     * **只用 `startActivity`，绝不能用返回键。** 上一版用 `GLOBAL_ACTION_BACK`
+     * 想"退出自己、回到上一个应用"，但 AutoReply 是从桌面图标启动的全屏
+     * Activity —— 按 BACK 直接退到桌面，把用户的界面整个关掉了，
+     * 而且并没有切到目标应用。这是实测出来的错误，别再改回去。
      *
-     *  1. **按返回键退出本应用**（首选）。用户是从目标 App 切过来点按钮的，
-     *     按一次 BACK 就回到那个 App —— 不需要权限，也不会被系统拦。
-     *  2. `startActivity` 显式拉起。这条在 Android 10+ 上**大概率被拒**：
-     *     后台应用不能启动 Activity，无障碍服务不算"前台"。
-     *     所以它只是兜底，不能当主路径。
+     * `startActivity` 在 Android 10+ 后台会被限制，但**有悬浮窗
+     * （SYSTEM_ALERT_WINDOW）权限就豁免**。没权限时它会失败，
+     * 那就让用户自己切 —— 反正他本来就要回到目标应用里点发送。
      */
     private fun bringTargetToFront(): String? {
-        if (rootInActiveWindow?.packageName?.toString() == packageName) {
-            if (performGlobalAction(GLOBAL_ACTION_BACK)) return null
-        }
-
         val candidates = buildList {
             addAll(config?.targetPackages.orEmpty())
             lastTargetPkg?.let { add(it) }
@@ -311,16 +312,26 @@ class CaptureService : AccessibilityService() {
         }
 
         // 本应用在前台时，手势全落在自己身上，对目标 App 的操作必然无效。
-        // 这里主动切回去；连续切不回去（系统限制了后台启动）就停下来明说。
         if (rootInActiveWindow?.packageName?.toString() == packageName) {
             frontFailCount++
-            if (frontFailCount > 3) {
-                stopBatch("连点停止：切不回目标应用（系统可能限制了后台启动）")
+            // 16 秒（20 次 × 800ms）还没切回去才放弃。
+            // 给这么宽是因为"切过去"这一步可能得用户自己动手。
+            if (frontFailCount > 20) {
+                stopBatch("连点停止：一直停在本应用里。请先切到目标应用再点连点")
                 return
             }
-            val err = bringTargetToFront()
-            logAuto(if (err == null) "正在切回目标应用" else "切回失败：$err")
-            mainHandler.postDelayed({ batchStep() }, 1500L)
+            // 只在第一次尝试拉起，之后纯等待 —— 反复 startActivity 会让屏幕来回闪
+            if (frontFailCount == 1) {
+                val err = bringTargetToFront()
+                logAuto(
+                    if (err == null) "正在切到目标应用…（没跳过去的话请手动切）"
+                    else "请手动切到目标应用：$err"
+                )
+            } else if (frontFailCount % 5 == 0) {
+                // 定期报一次进度。不然用户看到的就是"什么都不发生"
+                logAuto("等待切回目标应用…还剩约 ${(20 - frontFailCount) * 8 / 10} 秒")
+            }
+            mainHandler.postDelayed({ batchStep() }, 800L)
             return
         }
         frontFailCount = 0
@@ -344,7 +355,7 @@ class CaptureService : AccessibilityService() {
             !dedup.isDuplicate(peer, lastOther.text, System.currentTimeMillis())
 
         if (pendingHere) {
-            runAuto(null) { armBatchWatchdog() }
+            runAuto(null, manual = true) { armBatchWatchdog() }
             return
         }
 
@@ -364,7 +375,7 @@ class CaptureService : AccessibilityService() {
         // 800~1200ms 是实测能稳定读到新会话内容的区间。
         mainHandler.postDelayed({
             if (!batchActive) return@postDelayed
-            runAuto(null) { armBatchWatchdog() }
+            runAuto(null, manual = true) { armBatchWatchdog() }
         }, 800L + kotlin.random.Random.nextLong(400))
     }
 

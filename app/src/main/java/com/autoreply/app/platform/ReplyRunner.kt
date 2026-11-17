@@ -47,7 +47,17 @@ class ReplyRunner(
      *   他趣那种整棵树被 `importantForAccessibility=no` 摘掉的平台，
      *   树里一个节点都没有，但通知里有「谁说了什么」，够生成一句回复。
      */
-    fun runOnce(notifyText: String? = null, onDone: ((Result) -> Unit)? = null) {
+    /**
+     * @param manual true 表示这是用户主动发起的（点了连点/生成按钮），
+     *   此时精力和长冷却都该让路 —— 它们是拟人机制，不是风险护栏。
+     *   连点模式必须传 true：用户点一次要处理好几个会话，
+     *   按"每会话扣一次精力"算，第三个开始就全被拦了。
+     */
+    fun runOnce(
+        notifyText: String? = null,
+        manual: Boolean = false,
+        onDone: ((Result) -> Unit)? = null,
+    ) {
         val root = service.targetRoot()
         if (root == null) {
             finish(emptyList(), "", "目标界面不在前台", false, false, onDone)
@@ -105,7 +115,14 @@ class ReplyRunner(
             try {
                 // 构造要读 assets/persona.json，属于 IO；每次新建还能让改完人设立即生效
                 val flow = ReplyFlow(service, config)
-                val outcome = flow.decide(turns, selfSaidAgoSeconds = selfAgo, now = now)
+                val outcome = flow.decide(
+                    turns,
+                    selfSaidAgoSeconds = selfAgo,
+                    now = now,
+                    // 手动/连点 → 拟人机制让路；自动触发 → 照常约束
+                    respectEnergy = !manual,
+                    respectCooldown = !manual,
+                )
                 val trace = flow.lastTrace
                 mainHandler.post {
                     deliver(outcome, trace, profile, peer, lastOther.text, now, dedup, onDone)
