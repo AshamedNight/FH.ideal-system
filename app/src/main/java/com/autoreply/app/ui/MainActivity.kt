@@ -273,8 +273,39 @@ class MainActivity : Activity() {
                     left--
                     uiHandler.postDelayed(this, 1000)
                 } else {
-                    output.text = "执行中…"
-                    runGenerate()
+                    // 读不到消息的平台（他趣：整棵树被 noimp 摘掉）在这里会走不动正式流程。
+                    // 但"填字能不能成"是独立的问题，值得单独验一次 ——
+                    // 否则这类平台连"能不能做"都判断不了。
+                    val svc = CaptureService.instance
+                    val root = svc?.targetRoot()
+                    val prof = root?.let { Profiles.forPackage(it.packageName?.toString()) }
+                    val msgs = if (root != null && prof != null) {
+                        NodeQuery.readMessages(root, prof)
+                    } else {
+                        emptyList()
+                    }
+
+                    if (svc != null && root != null && prof != null && msgs.isEmpty()) {
+                        val probeSink = AccessibilityReplySink(svc, prof)
+                        val probeText = "测试填写"
+                        val fr = probeSink.fill(probeText)
+                        output.text = buildString {
+                            append("读不到消息（整棵树被隐藏），改测填字。\n\n")
+                            append("写入「$probeText」：")
+                            append(
+                                when (fr) {
+                                    is FillResult.Ok -> "成功 ✓ 这个平台能填，只差消息来源"
+                                    is FillResult.Unavailable -> "失败 — ${fr.reason}"
+                                    is FillResult.Mismatch -> "回读不一致 — ${fr.actual}"
+                                }
+                            )
+                            append("\n\n").append(NodeQuery.diagnoseInput(root, prof))
+                            append("\n\n（切回去把输入框里那句删掉）")
+                        }
+                    } else {
+                        output.text = "执行中…"
+                        runGenerate()
+                    }
                 }
             }
         }
