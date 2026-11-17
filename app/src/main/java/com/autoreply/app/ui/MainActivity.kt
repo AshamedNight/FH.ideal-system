@@ -187,9 +187,9 @@ class MainActivity : Activity() {
         val now = System.currentTimeMillis()
         val peer = NodeQuery.peerName(root, profile)
 
-        // 先确认上一份草稿到底发出去没有。发出去了才计一次平台配额 ——
-        // 生成不算、填进去也不算，对方真收到才算。
-        if (SentTracker(this).confirmIfSent(messages, peer, now)) {
+        // 先看是不是又发出去了一条（同会话里我发的最后一条变了）。
+        // 不依赖"草稿被原样发出"：改几个字、自己手打，都是真实发送。
+        if (SentTracker(this).detectNewSent(messages, peer, now)) {
             PacerGuard(this, config).recordSent(now)
         }
 

@@ -61,7 +61,51 @@ class SentTracker(context: Context) {
         get() = sp.getLong(KEY_LAST_SENT, 0L)
 
     /**
-     * 检查消息列表里有没有「我发的那条」。
+     * 判断是不是又发出了一条消息。
+     *
+     * ## 为什么不能用「pending 文本匹配」来计数
+     *
+     * 最初的做法是：填草稿时记下文本，之后在消息列表里找一模一样的。
+     * 真机一测就不对 —— 用户可能**改了草稿的几个字**再发，或者**干脆自己手动打字**。
+     * 那些都是真实发送，平台都看到了，可判据全都匹配不上，于是配额永远不涨。
+     * dump 里 `#tv_content "你好啊"` 和 `"怎么了"` 都在右侧，读得到，是判据的锅。
+     *
+     * ## 现在的判据
+     *
+     * 「同一个会话里，最后一条我发的消息变了」= 又发了一条。
+     * 不管内容来自草稿还是手打，不管改没改字，只要右侧多了一条新的就算。
+     *
+     * 换会话时**重建基线且不计数**：另一个会话的最后一条本来就不同，
+     * 那不代表你刚发了消息。
+     */
+    fun detectNewSent(messages: List<ChatMessage>, peer: String, now: Long): Boolean {
+        val lastSelf = messages.lastOrNull { !it.fromOther } ?: return false
+        val text = squash(lastSelf.text)
+        if (text.isEmpty()) return false
+
+        val baselinePeer = sp.getString(KEY_BASE_PEER, "") ?: ""
+        val baselineText = sp.getString(KEY_BASE_TEXT, "") ?: ""
+
+        // 换会话：重建基线，不计数
+        if (peer != baselinePeer) {
+            sp.edit()
+                .putString(KEY_BASE_PEER, peer)
+                .putString(KEY_BASE_TEXT, text)
+                .apply()
+            return false
+        }
+
+        if (text == baselineText) return false
+
+        sp.edit()
+            .putString(KEY_BASE_TEXT, text)
+            .putLong(KEY_LAST_SENT, now)
+            .apply()
+        return true
+    }
+
+    /**
+     * 检查消息列表里有没有「我发的那条」（只判断 pending 草稿的命运）。
      *
      * @return true 表示确认已经发出去了（并清掉 pending）
      */
@@ -110,6 +154,8 @@ class SentTracker(context: Context) {
         const val KEY_TEXT = "text"
         const val KEY_AT = "at"
         const val KEY_LAST_SENT = "last_sent"
+        const val KEY_BASE_PEER = "base_peer"
+        const val KEY_BASE_TEXT = "base_text"
 
         /** 10 分钟：够用户从容地点发送，又不会把很久以前的残留当成本次。 */
         const val WINDOW_MS = 10 * 60_000L

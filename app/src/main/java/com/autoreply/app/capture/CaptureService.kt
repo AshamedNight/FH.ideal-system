@@ -186,10 +186,11 @@ class CaptureService : AccessibilityService() {
         val messages = NodeQuery.readMessages(root, profile)
         val peer = NodeQuery.peerName(root, profile)
 
-        // 先看上一份草稿到底发出去没有。确认发出才计一次平台配额 ——
-        // 生成不算、填进去也不算，对方真收到才算。
+        // 先看是不是又发出去了一条。判据是「同一个会话里，我发的最后一条变了」——
+        // 不依赖"草稿被原样发出"，因为用户可能改几个字再发，也可能干脆自己手打。
+        // 那些都是真实发送，平台都看到了，都该计入配额。
         val nowWall = System.currentTimeMillis()
-        if (SentTracker(this).confirmIfSent(messages, peer, nowWall)) {
+        if (SentTracker(this).detectNewSent(messages, peer, nowWall)) {
             PacerGuard(this, cfg).recordSent(nowWall)
         }
 
