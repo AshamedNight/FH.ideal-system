@@ -208,8 +208,17 @@ class MainActivity : Activity() {
                             if (!mockMode) {
                                 // 真实用量：估算在"到底花多少钱"上能差一倍，
                                 // 而余额是实扣的，所以只认服务端返回的 usage。
-                                append("\n\n本次：输入 ${result.inputTokens} / 输出 ${result.outputTokens} token")
-                                append("（重写计入同一条）")
+                                append("\n\n本次：输入 ${result.inputTokens} / 输出 ${result.outputTokens} token（服务端口径）")
+                                append("\n本地估算：约 ${result.estimatedInputTokens} token 输入")
+                                // 差三倍以上基本可以确定不是我们发的东西变多了，
+                                // 而是接口这一层往请求里加料（自带的 system、工具定义）
+                                // 或者直接改写了 usage —— 那种数字不能用来估成本。
+                                if (result.estimatedInputTokens > 0 &&
+                                    result.inputTokens > result.estimatedInputTokens * 3 + 50
+                                ) {
+                                    append("\n⚠ 两者差很多：多半是接口/中转改写了 usage，或往请求里加了自带的提示词。")
+                                    append("算钱时以「本地估算」为准。")
+                                }
                                 append("\n累计：${config.llmCalls} 次调用，输入 ${config.llmTokensIn} / 输出 ${config.llmTokensOut} token")
                             }
                         }

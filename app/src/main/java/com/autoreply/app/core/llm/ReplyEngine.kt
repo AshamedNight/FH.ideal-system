@@ -32,12 +32,19 @@ class ReplyEngine(
 ) {
 
     sealed class Result {
-        /** [inputTokens]/[outputTokens] 是这一条**累计**（重写也算钱），网关不返回时为 0。 */
+        /**
+         * [inputTokens]/[outputTokens] 是这一次**累计**（重写也算钱），来自服务端 usage，网关不返回时为 0。
+         *
+         * [estimatedInputTokens] 是本地按字符估的，只用来和服务端的数字做对照 ——
+         * 中转/网关有可能改写 usage（把自带的 system prompt、工具定义一起算进去），
+         * 那时 4301 这种数字就跟"我们发了多少"没关系了，成本判断也就失真。
+         */
         data class Draft(
             val text: String,
             val attempts: Int,
             val inputTokens: Int = 0,
             val outputTokens: Int = 0,
+            val estimatedInputTokens: Int = 0,
         ) : Result()
         /** 不该回：要么没有对方的消息，要么触了输入侧边界。 */
         data class Blocked(val reason: String) : Result()
@@ -68,6 +75,7 @@ class ReplyEngine(
         var lastHit = ""
         var inTokens = 0
         var outTokens = 0
+        var estIn = 0
         for (attempt in 1..MAX_ATTEMPTS) {
             val user = if (attempt == 1) {
                 baseUser
@@ -75,6 +83,9 @@ class ReplyEngine(
                 baseUser + "\n\n# 上一次的回答有问题\n" +
                     "上一次用了「$lastHit」这种不该出现的表达。换一种说法重写，不要重复同样的内容。"
             }
+
+            // 每轮都要把 system 一起发，所以估算也每轮累加
+            estIn += estimateTokens(system) + estimateTokens(user)
 
             val resp = client.chat(system, user)
             if (resp is LlmClient.Result.Err) return Result.Failed(resp.reason)
@@ -90,7 +101,7 @@ class ReplyEngine(
             }
 
             val hit = (persona.tabooWords + userBanned).firstOrNull { text.contains(it) }
-            if (hit == null) return Result.Draft(text, attempt, inTokens, outTokens)
+            if (hit == null) return Result.Draft(text, attempt, inTokens, outTokens, estIn)
             lastHit = hit
         }
 
@@ -163,6 +174,23 @@ class ReplyEngine(
         }
         appendLine()
         append("请回最后这一条。")
+    }
+
+    // ------------------------------------------------------------------ 用量
+
+    /**
+     * 粗估 token：中文按 0.6、其余按 0.3（DeepSeek 口径下一个汉字约 0.6 token）。
+     *
+     * 纯粹用来和服务端返回的数字做对照 —— 它不参与计费，也不该被当成精确值。
+     * 但"我们明明只发了 500 token，网关却报 4301"这种落差，只有估算能看出来。
+     */
+    private fun estimateTokens(text: String): Int {
+        var cjk = 0
+        var other = 0
+        for (c in text) {
+            if (c.code in 0x4E00..0x9FFF) cjk++ else other++
+        }
+        return (cjk * 0.6 + other * 0.3).toInt()
     }
 
     // ------------------------------------------------------------------ 清洗
