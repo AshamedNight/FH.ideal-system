@@ -71,9 +71,18 @@ for f in app/src/main/assets/*.json; do
 done
 [ "$json_fail" -eq 0 ] && say "  ✓ 通过"
 
+say "== 6. 项目内的类有没有漏 import =="
+# 这一项是补上"类型错误只能靠 CI"的缺口里最容易命中的那类：
+# 用了 PlatformProfile 却没 import，本地零成本可查，CI 上要跑几分钟才发现。
+if command -v python >/dev/null 2>&1; then
+    python tools/check_imports.py || fail=1
+else
+    say "  （没有 python，跳过）"
+fi
+
 echo
 if [ $fail -ne 0 ]; then
     say "自检未通过 —— 修掉再 push，否则 CI 会白跑一轮。"
     exit 1
 fi
-say "自检全部通过。注意：这只覆盖「必现失败」，类型错误仍只能靠 CI。"
+say "自检全部通过。注意：这只覆盖「必现失败」和「漏 import」，其余类型错误仍只能靠 CI。"
