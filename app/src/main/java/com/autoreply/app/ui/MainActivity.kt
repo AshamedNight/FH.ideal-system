@@ -14,6 +14,8 @@ import android.widget.Toast
 import com.autoreply.app.R
 import com.autoreply.app.capture.CaptureService
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.core.guard.ReplyDedup
+import com.autoreply.app.core.guard.ReplyFlow
 import com.autoreply.app.core.llm.ReplyEngine
 import com.autoreply.app.core.llm.Turn
 import com.autoreply.app.core.persona.PersonaLoader
@@ -175,39 +177,68 @@ class MainActivity : Activity() {
         }
 
         val turns = messages.map { Turn(it.text, it.fromOther) }
-        output.text = "正在生成…（对方最后一句：${lastOther.text.take(24)}）"
 
-        val engine = ReplyEngine(config, PersonaLoader.load(this, config))
+        // ---- 去重：同一条消息 5 分钟内只处理一次 ----
+        // 没有这一层，点两次按钮就生成两次草稿；等接了自动触发，
+        // 就变成对同一条消息反复回 —— 那比什么都不做更像机器人。
+        val now = System.currentTimeMillis()
+        val dedup = ReplyDedup(this)
+        if (dedup.isDuplicate(lastOther.text, now)) {
+            output.text = buildString {
+                append("这条已经处理过（5 分钟内同一句），不重复生成。\n\n")
+                append("内容：").append(lastOther.text.take(40))
+                append("\n\n（要重来就等 5 分钟，或等对方发新消息）")
+            }
+            return
+        }
+
+        output.text = "正在判定…（对方最后一句：${lastOther.text.take(24)}）"
+
+        // 「我上一句是多久之前说的」用上次真正处理的时刻估算。
+        // 判定链拿它算"刚说过话"的抢话惩罚 —— 精确值拿不到，这个估算够用。
+        val lastAt = dedup.lastHandledAt
+        val selfAgo = if (lastAt <= 0L) {
+            Int.MAX_VALUE
+        } else {
+            ((now - lastAt) / 1000L).toInt().coerceAtLeast(0)
+        }
+
         Thread {
-            val result = engine.generate(turns)
+            // ReplyFlow 构造时会读 assets/persona.json，属于 IO，放主线程是 StrictMode 隐患。
+            // 而且每点一次都重建，改完人设能立刻生效（不用重启 App）。
+            val flow = ReplyFlow(this@MainActivity, config)
+            val outcome = flow.decide(turns, selfSaidAgoSeconds = selfAgo, now = now)
+            // trace 必须在这里取：下一次 decide 会清空它
+            val trace = flow.lastTrace
             runOnUiThread {
-                // 生成要几秒，这期间用户可能已经退出页面
+                // 判定要几秒，这期间用户可能已经退出页面
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                when (result) {
-                    is ReplyEngine.Result.Blocked -> {
-                        output.text = "不回复：${result.reason}"
-                    }
-                    is ReplyEngine.Result.Failed -> {
-                        output.text = "生成失败：${result.reason}"
-                    }
-                    is ReplyEngine.Result.Draft -> {
+
+                val head = buildString {
+                    append("判定链：\n")
+                    trace.forEach { append("  ").append(it).append('\n') }
+                }
+
+                when (outcome) {
+                    is ReplyFlow.Outcome.Fill -> {
                         val sink = AccessibilityReplySink(service, profile)
-                        val fill = sink.fill(result.text)
-                        // 填不进去时不能只报一句"失败" —— 把草稿放进剪贴板，
-                        // 长按输入框粘贴即可。这是"输入框对无障碍不可见"的平台上
-                        // 唯一可行的路，而且比自动填更安全：全程零自动点击。
+                        val fill = sink.fill(outcome.text)
+                        // 填不进去时把草稿放进剪贴板：长按粘贴即可。
+                        // 这是"输入框对无障碍不可见"的平台上唯一可行的路，
+                        // 而且比自动填更安全 —— 全程零自动点击。
                         val copied = if (fill is FillResult.Ok) {
                             false
                         } else {
-                            runCatching { sink.copyToClipboard(result.text) }.isSuccess
+                            runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
                         }
-                        // 假模型不计入用量，否则统计会被"测管道"的那几次污染
-                        if (!mockMode) config.recordUsage(result.inputTokens, result.outputTokens)
+                        // 只有真填进去才记"已处理"：填失败了用户还要自己动手，
+                        // 不该把这条消息标成处理过。
+                        if (fill is FillResult.Ok) dedup.mark(lastOther.text, now)
+                        if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
+
                         output.text = buildString {
-                            // 假模型必须标出来，否则会被当成"模型就写成这样"，
-                            // 转头去调人设 —— 那是白费功夫。
-                            append(if (mockMode) "草稿（本地假模型，非真实生成）：\n" else "草稿（第 ${result.attempts} 次生成）：\n")
-                            append(result.text)
+                            append(head)
+                            append("\n草稿：").append(outcome.text)
                             append("\n\n填入：")
                             val tail = if (copied) "\n已复制到剪贴板：点一下输入框 → 长按 → 粘贴" else ""
                             append(
@@ -217,33 +248,80 @@ class MainActivity : Activity() {
                                     is FillResult.Mismatch -> "回读不一致 — ${fill.actual}$tail"
                                 }
                             )
-                            // 失败时把诊断附在后面：否则用户只知道"填不进去"，
-                            // 不知道是没节点、没焦点，还是 SET_TEXT 不被接受。
                             if (fill !is FillResult.Ok) {
                                 val diagRoot = service.targetRoot() ?: root
                                 append("\n\n").append(NodeQuery.diagnoseInput(diagRoot, profile))
                             }
                             if (!mockMode) {
-                                // 真实用量：估算在"到底花多少钱"上能差一倍，
-                                // 而余额是实扣的，所以只认服务端返回的 usage。
-                                append("\n\n本次：输入 ${result.inputTokens} / 输出 ${result.outputTokens} token（服务端口径）")
-                                append("\n本地估算：约 ${result.estimatedInputTokens} token 输入")
-                                // 差三倍以上基本可以确定不是我们发的东西变多了，
-                                // 而是接口这一层往请求里加料（自带的 system、工具定义）
-                                // 或者直接改写了 usage —— 那种数字不能用来估成本。
-                                if (result.estimatedInputTokens > 0 &&
-                                    result.inputTokens > result.estimatedInputTokens * 3 + 50
-                                ) {
-                                    append("\n⚠ 两者差很多：多半是接口/中转改写了 usage，或往请求里加了自带的提示词。")
-                                    append("算钱时以「本地估算」为准。")
-                                }
-                                append("\n累计：${config.llmCalls} 次调用，输入 ${config.llmTokensIn} / 输出 ${config.llmTokensOut} token")
+                                appendUsage(
+                                    outcome.inputTokens,
+                                    outcome.outputTokens,
+                                    outcome.estimatedInputTokens,
+                                )
                             }
+                        }
+                    }
+
+                    is ReplyFlow.Outcome.Hold -> {
+                        // 风险太高：草稿给你看，但不替你填。
+                        // 填进输入框的话人多半顺手就发了 —— 那是用界面诱导犯错。
+                        val sink = AccessibilityReplySink(service, profile)
+                        val copied = runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
+                        if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
+                        output.text = buildString {
+                            append(head)
+                            append("\n草稿（不自动填）：").append(outcome.text)
+                            append("\n\n为什么没填：").append(outcome.reason)
+                            if (copied) append("\n\n已复制到剪贴板，你要用就自己粘贴。")
+                        }
+                    }
+
+                    is ReplyFlow.Outcome.Wait -> {
+                        val minutes = (outcome.afterMs / 60_000L).coerceAtLeast(1L)
+                        output.text = buildString {
+                            append(head)
+                            append("\n等 $minutes 分钟再回：").append(outcome.reason)
+                            append("\n\n（现在填也不合适 —— 判定链认为时机不对）")
+                        }
+                    }
+
+                    is ReplyFlow.Outcome.Silent -> {
+                        output.text = buildString {
+                            append(head)
+                            append("\n这条不参与：").append(outcome.reason)
+                        }
+                    }
+
+                    is ReplyFlow.Outcome.Error -> {
+                        output.text = buildString {
+                            append(head)
+                            append("\n生成失败：").append(outcome.reason)
                         }
                     }
                 }
             }
         }.start()
+    }
+
+    /**
+     * 用量三行。抽出来是因为「生成并填入」的几个分支都要写同一段，
+     * 而"服务端口径 vs 本地估算"的对照以后可能还要调。
+     */
+    private fun StringBuilder.appendUsage(
+        inputTokens: Int,
+        outputTokens: Int,
+        estimatedInputTokens: Int,
+    ) {
+        append("\n\n本次：输入 $inputTokens / 输出 $outputTokens token（服务端口径）")
+        append("\n本地估算：约 $estimatedInputTokens token 输入")
+        // 差三倍以上基本可以确定不是我们发的东西变多了，
+        // 而是接口这一层往请求里加料（自带的 system、工具定义），
+        // 或者直接改写了 usage —— 那种数字不能用来估成本。
+        if (estimatedInputTokens > 0 && inputTokens > estimatedInputTokens * 3 + 50) {
+            append("\n⚠ 两者差很多：多半是接口/中转改写了 usage，或往请求里加了自带的提示词。")
+            append("算钱时以「本地估算」为准。")
+        }
+        append("\n累计：${config.llmCalls} 次调用，输入 ${config.llmTokensIn} / 输出 ${config.llmTokensOut} token")
     }
 
     /**

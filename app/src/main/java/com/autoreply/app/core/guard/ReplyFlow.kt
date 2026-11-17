@@ -34,11 +34,29 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
     private val engine = ReplyEngine(config, persona)
 
     sealed class Outcome {
-        /** 可以填。risk 只用于界面标注，不影响填充。 */
-        data class Fill(val text: String, val risk: DraftRisk.Verdict) : Outcome()
+        /**
+         * 可以填。risk 只用于界面标注，不影响填充。
+         *
+         * token 字段一路带出来，是为了让界面还能显示真实用量 ——
+         * 判定链包了一层，不该把"花了多少钱"这个信息吃掉。
+         */
+        data class Fill(
+            val text: String,
+            val risk: DraftRisk.Verdict,
+            val attempts: Int = 1,
+            val inputTokens: Int = 0,
+            val outputTokens: Int = 0,
+            val estimatedInputTokens: Int = 0,
+        ) : Outcome()
 
         /** 生成了，但风险太高不自动填。只把内容摆出来让人自己决定。 */
-        data class Hold(val text: String, val risk: DraftRisk.Verdict, val reason: String) : Outcome()
+        data class Hold(
+            val text: String,
+            val risk: DraftRisk.Verdict,
+            val reason: String,
+            val inputTokens: Int = 0,
+            val outputTokens: Int = 0,
+        ) : Outcome()
 
         /** 现在不该动，等 afterMs 之后再说。 */
         data class Wait(val afterMs: Long, val reason: String) : Outcome()
@@ -49,20 +67,44 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
         data class Error(val reason: String) : Outcome()
     }
 
+    /**
+     * 最近一次 [decide] 的逐层判定记录。
+     *
+     * 存在的理由：五层链任何一层都能拦下这条消息，但用户只看到"没填"。
+     * 没有这份记录，"为什么没填"就只能靠猜 —— 是平台限流、还是判定不该回、
+     * 还是精力低、还是风险太高？四种原因的处置完全不同。
+     */
+    private val traceBuffer = ArrayList<String>(6)
+    val lastTrace: List<String> get() = traceBuffer.toList()
+
+    private fun step(line: String) {
+        traceBuffer.add(line)
+    }
+
     fun decide(
         turns: List<Turn>,
         selfSaidAgoSeconds: Int = Int.MAX_VALUE,
         now: Long = System.currentTimeMillis(),
     ): Outcome {
+        traceBuffer.clear()
 
         // ---- 1. 平台风险闸门 ----
         when (val d = pacer.check(now)) {
-            is PacerGuard.Decision.Block -> return Outcome.Wait(d.retryAfterMs, d.reason)
-            is PacerGuard.Decision.Allow -> Unit
+            is PacerGuard.Decision.Block -> {
+                step("① 平台闸门：拦截 — ${d.reason}")
+                return Outcome.Wait(d.retryAfterMs, d.reason)
+            }
+            is PacerGuard.Decision.Allow -> {
+                val st = pacer.status(now)
+                step("① 平台闸门：通过（本小时 ${st.usedThisHour}/${st.hourlyCap}）")
+            }
         }
 
         val last = turns.lastOrNull { it.fromOther }
-            ?: return Outcome.Silent("没有对方发来的消息")
+            ?: run {
+                step("② 该不该回：不参与（没有对方发来的消息）")
+                return Outcome.Silent("没有对方发来的消息")
+            }
 
         // ---- 2. 该不该开口 ----
         val judgment = NecessityJudge.judge(
@@ -72,30 +114,48 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
             selfSaidAgoSeconds = selfSaidAgoSeconds,
         )
         when (judgment.action) {
-            NecessityJudge.Action.SILENT -> return Outcome.Silent(
-                judgment.reasons.joinToString("；")
+            NecessityJudge.Action.SILENT -> {
+                step("② 该不该回：沉默（${judgment.reasons.joinToString("；")}）")
+                return Outcome.Silent(judgment.reasons.joinToString("；"))
+            }
+            NecessityJudge.Action.WAIT -> {
+                step("② 该不该回：想回但先等（${judgment.reasons.joinToString("；")}）")
+                return Outcome.Wait(
+                    delayMs(baseMinutes = 12, now = now),
+                    "想回但先等等：" + judgment.reasons.joinToString("；"),
+                )
+            }
+            NecessityJudge.Action.REPLY -> step(
+                "② 该不该回：该回（${"%.2f".format(judgment.score)}）" +
+                    judgment.reasons.take(3).joinToString(" ")
             )
-            NecessityJudge.Action.WAIT -> return Outcome.Wait(
-                delayMs(baseMinutes = 12, now = now),
-                "想回但先等等：" + judgment.reasons.joinToString("；"),
-            )
-            NecessityJudge.Action.REPLY -> Unit
         }
 
         // ---- 3. 累不累 ----
         if (energy.isTired(now)) {
+            step("③ 精力：${"%.2f".format(energy.current(now))} 偏低，压一压")
             return Outcome.Wait(
                 delayMs(baseMinutes = 8, now = now),
                 "精力低（${"%.2f".format(energy.current(now))}），压一压再回",
             )
         }
+        step("③ 精力：${"%.2f".format(energy.current(now))} 正常")
 
         // ---- 4. 生成（内部已过输入边界与禁忌词） ----
         val result = engine.generate(turns)
-        val draft = when (result) {
-            is ReplyEngine.Result.Blocked -> return Outcome.Silent(result.reason)
-            is ReplyEngine.Result.Failed -> return Outcome.Error(result.reason)
-            is ReplyEngine.Result.Draft -> result.text
+        val draftRes = when (result) {
+            is ReplyEngine.Result.Blocked -> {
+                step("④ 生成：拦下 — ${result.reason}")
+                return Outcome.Silent(result.reason)
+            }
+            is ReplyEngine.Result.Failed -> {
+                step("④ 生成：失败 — ${result.reason.take(60)}")
+                return Outcome.Error(result.reason)
+            }
+            is ReplyEngine.Result.Draft -> {
+                step("④ 生成：第 ${result.attempts} 次成稿")
+                result
+            }
         }
 
         // 生成过一次就算消耗：无论后面填不填，模型调用和判断都发生了
@@ -103,14 +163,25 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
         energy.consume(now)
 
         // ---- 5. 这句话说错代价大不大 ----
+        val draft = draftRes.text
         val risk = DraftRisk.classify(draft)
         return if (risk.fillable) {
-            Outcome.Fill(draft, risk)
+            step("⑤ 风险：${risk.level} → 可填")
+            Outcome.Fill(
+                draft, risk,
+                attempts = draftRes.attempts,
+                inputTokens = draftRes.inputTokens,
+                outputTokens = draftRes.outputTokens,
+                estimatedInputTokens = draftRes.estimatedInputTokens,
+            )
         } else {
+            step("⑤ 风险：${risk.level}（${risk.hits.joinToString("、")}）→ 不填")
             Outcome.Hold(
                 draft,
                 risk,
                 "涉及" + risk.hits.joinToString("、") + "，这类话不替你填，你看着改",
+                inputTokens = draftRes.inputTokens,
+                outputTokens = draftRes.outputTokens,
             )
         }
     }
