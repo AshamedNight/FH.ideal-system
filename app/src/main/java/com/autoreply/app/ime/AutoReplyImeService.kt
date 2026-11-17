@@ -156,6 +156,40 @@ class AutoReplyImeService : InputMethodService() {
         ic.commitText(pending, 1)
         pendingText = null
         statusView?.text = "已写入：${pending.take(16)}"
+        verifyWritten(pending)
+    }
+
+    /**
+     * 写完 250ms 回读一次，确认内容真的留在输入框里。
+     *
+     * `commitText` 不抛异常只代表"调用成功"，不代表内容留住了 ——
+     * 有些 App 在焦点建立的那一帧会清空输入框，我们写进去的就被吞掉。
+     * 界面显示"已写入"但框里空的，就是这么来的。
+     *
+     * 回读用 `getTextBeforeCursor`：输入法这条通道**能读到自己写的内容**，
+     * 这是它比无障碍强的地方（那边输入框压根不在无障碍树里）。
+     *
+     * 确认被清空时把草稿放进剪贴板 —— 至少用户手里有一份能粘。
+     */
+    private fun verifyWritten(text: String) {
+        mainHandler.postDelayed({
+            val ic = currentInputConnection ?: return@postDelayed
+            val before = try {
+                ic.getTextBeforeCursor(text.length + 4, 0)?.toString()
+            } catch (_: Exception) {
+                null
+            }
+            when {
+                // null = 这个输入框不支持回读，没法验证。不报错，只说明情况
+                before == null -> statusView?.text = "已写入（无法回读验证）"
+                before.isEmpty() -> {
+                    val cm = getSystemService(android.content.ClipboardManager::class.java)
+                    cm?.setPrimaryClip(android.content.ClipData.newPlainText("AutoReply", text))
+                    statusView?.text = "被 App 清空了 · 草稿已放剪贴板"
+                }
+                else -> statusView?.text = "已写入 ${text.take(12)}"
+            }
+        }, 250L)
     }
 
     /**
@@ -173,6 +207,7 @@ class AutoReplyImeService : InputMethodService() {
         }
         ic.commitText(text, 1)
         pendingText = null
+        verifyWritten(text)
         return true
     }
 

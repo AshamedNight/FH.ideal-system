@@ -191,12 +191,37 @@ class CaptureService : AccessibilityService() {
 
     private var batchWatchdog: Runnable? = null
 
+    /** 连续几次发现"本应用在前台"。用来避免切不回去时无限重试。 */
+    private var frontFailCount = 0
+
     fun startBatch(count: Int = config?.batchSize ?: 5) {
         if (batchActive) return
         batchActive = true
         batchLeft = count
-        lastAutoNote = "连点开始：$count 个，每条约你点发送后自动切下一个"
-        mainHandler.post { batchStep() }
+        lastAutoNote = "连点开始：$count 个，正在切到目标应用…"
+
+        // **必须先把目标应用拉到前台。**
+        // 无障碍能拿到目标 App 的节点（它在 windows 列表里，哪怕是分屏的另一半），
+        // 但 dispatchGesture 的手势会落在**有焦点的那个窗口**上。
+        // AutoReply 自己在前台时，每一记点击都被自己接走了 ——
+        // 表现就是"在本应用里点按钮完全没反应，切到目标 App 里才有用"。
+        bringTargetToFront()
+
+        // 给系统一点时间切过去，切完再开始第一步
+        mainHandler.postDelayed({ batchStep() }, 1200L)
+    }
+
+    /** 把配置里的目标应用拉到前台。失败就算了，batchStep 会再检查一次。 */
+    private fun bringTargetToFront(): Boolean {
+        val pkg = config?.targetPackages?.firstOrNull() ?: return false
+        return try {
+            val intent = packageManager.getLaunchIntentForPackage(pkg) ?: return false
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            startActivity(intent)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     fun stopBatch(note: String = "连点已停止") {
@@ -225,6 +250,21 @@ class CaptureService : AccessibilityService() {
                 return
             }
         }
+
+        // 本应用在前台时，手势全落在自己身上，对目标 App 的操作必然无效。
+        // 这里主动切回去；连续切不回去（系统限制了后台启动）就停下来明说。
+        if (rootInActiveWindow?.packageName?.toString() == packageName) {
+            frontFailCount++
+            if (frontFailCount > 3) {
+                stopBatch("连点停止：切不回目标应用（系统可能限制了后台启动）")
+                return
+            }
+            lastAutoNote = "本应用在前台，点击不会生效 —— 正在切回目标应用"
+            bringTargetToFront()
+            mainHandler.postDelayed({ batchStep() }, 1500L)
+            return
+        }
+        frontFailCount = 0
 
         val root = targetRoot() ?: run {
             stopBatch("连点停止：目标界面不在前台")
