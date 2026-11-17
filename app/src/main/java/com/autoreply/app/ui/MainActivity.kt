@@ -402,7 +402,7 @@ class MainActivity : Activity() {
         // 把「树里有没有可编辑节点」「当前焦点在哪」直接打出来，
         // 就不必再抓一次 dump 才能判断该走哪条路。
         sb.append("\n\n输入框诊断：")
-        val editable = NodeQuery.firstEditable(root, profile)
+        val editable = NodeQuery.firstEditable(root, profile.input)
         if (editable == null) {
             sb.append("\n  可编辑节点：无（树里找不到，SET_TEXT 无从下手）")
         } else {
