@@ -67,11 +67,7 @@ class AutoReplyImeService : InputMethodService() {
         val switchBtn = android.widget.Button(this).apply {
             text = "切换键盘"
             textSize = 12f
-            setOnClickListener {
-                // 系统的"切到下一个输入法"。用户平时想打字就点这里，
-                // 不用去设置里翻。
-                switchToNextInputMethod(false)
-            }
+            setOnClickListener { pickAnotherKeyboard() }
         }
 
         return LinearLayout(this).apply {
@@ -84,6 +80,33 @@ class AutoReplyImeService : InputMethodService() {
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
             )
             addView(switchBtn)
+        }
+    }
+
+    /**
+     * 让用户换一个键盘。
+     *
+     * **不能只用 `switchToNextInputMethod`**：它依赖"系统里确实还存在下一个已启用的
+     * 输入法"，条件不成立时返回 false 且什么也不做 —— 表现就是"点了没反应"。
+     *
+     * 所以先试切换，失败就弹系统的输入法选择器。选择器是系统 UI，
+     * 只要系统里启用了两个以上输入法就一定列得出来，比"切下一个"可靠得多。
+     */
+    private fun pickAnotherKeyboard() {
+        val switched = try {
+            switchToNextInputMethod(false)
+        } catch (_: Exception) {
+            false
+        }
+        if (switched) return
+
+        try {
+            val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                as android.view.inputmethod.InputMethodManager
+            imm.showInputMethodPicker()
+        } catch (_: Exception) {
+            // 连选择器都弹不出来（极少数 ROM），至少给用户一句解释
+            statusView?.text = "这台机器不允许程序切换输入法，请去系统设置里改"
         }
     }
 

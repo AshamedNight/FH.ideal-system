@@ -38,6 +38,18 @@ class Energy(context: Context) {
     }
 
     /**
+     * 把精力回满。语义是「我休息好了」，不是「作弊」——
+     * 连续测几次就会掉到 0.28，之后连自动触发都被压住，
+     * 而用户明明刚坐下、精神很好。给一个明确的复位入口比让他等半小时合理。
+     */
+    fun reset(now: Long = System.currentTimeMillis()) {
+        sp.edit()
+            .putFloat(KEY_VALUE, MAX.toFloat())
+            .putLong(KEY_LAST_AT, now)
+            .apply()
+    }
+
+    /**
      * 精力对应的等待倍数。
      *
      * 精力高 → 1.0（按基础间隔走）

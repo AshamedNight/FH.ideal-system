@@ -210,7 +210,14 @@ class MainActivity : Activity() {
             // ReplyFlow 构造时会读 assets/persona.json，属于 IO，放主线程是 StrictMode 隐患。
             // 而且每点一次都重建，改完人设能立刻生效（不用重启 App）。
             val flow = ReplyFlow(this@MainActivity, config)
-            val outcome = flow.decide(turns, selfSaidAgoSeconds = selfAgo, now = now)
+            val outcome = flow.decide(
+                turns,
+                selfSaidAgoSeconds = selfAgo,
+                now = now,
+                // 手动点击 = 用户明确要求，精力不该拦他。
+                // 平台闸门（每小时上限）仍然生效 —— 那是风险护栏，不是拟人。
+                respectEnergy = false,
+            )
             // trace 必须在这里取：下一次 decide 会清空它
             val trace = flow.lastTrace
             runOnUiThread {

@@ -102,6 +102,16 @@ class SettingsActivity : Activity() {
         })
         root.addView(note("只有「输入框对无障碍不可见」的平台才需要它（同城夜聊这类）。抖音、moyi 不需要。\n切过去之后，AutoReply 的草稿会通过输入法上屏 —— 和真键盘打字是同一条通道。\n平时想正常打字，用键盘上的地球图标即可切回你自己的输入法。"))
 
+        root.addView(section("状态复位"))
+        root.addView(Button(this).apply {
+            text = "重置精力（我休息好了）"
+            setOnClickListener {
+                com.autoreply.app.core.guard.Energy(this@SettingsActivity).reset()
+                Toast.makeText(this@SettingsActivity, "精力已回满", Toast.LENGTH_SHORT).show()
+            }
+        })
+        root.addView(note("精力只影响「自动」回复的节奏：越低越拖，低到 0.30 以下就完全不自动动。连续测几次会掉到 0.28，那时自动触发会被压住 —— 点这个按钮相当于「我休息好了」。\n手动点「生成并填入」不受精力影响。"))
+
         root.addView(Button(this).apply {
             text = "保存"
             setOnClickListener { save() }

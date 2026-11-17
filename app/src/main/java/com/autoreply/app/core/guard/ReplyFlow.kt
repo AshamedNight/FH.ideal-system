@@ -81,10 +81,20 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
         traceBuffer.add(line)
     }
 
+    /**
+     * @param respectEnergy 是否让「精力」这一层拦人。**手动点按钮时传 false。**
+     *
+     *   精力模型存在的意义是让*自动*回复别太像机器（不秒回、会累、会拖）。
+     *   但用户明确点了「生成并填入」就是他的意志，此时程序再替他判断"你累了"
+     *   就变成了碍事 —— 连点两次就被压 27 分钟，而人自己明明清醒。
+     *
+     *   平台闸门（每小时上限）不受这个开关影响：那是真风险护栏，不是拟人。
+     */
     fun decide(
         turns: List<Turn>,
         selfSaidAgoSeconds: Int = Int.MAX_VALUE,
         now: Long = System.currentTimeMillis(),
+        respectEnergy: Boolean = true,
     ): Outcome {
         traceBuffer.clear()
 
@@ -132,14 +142,21 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
         }
 
         // ---- 3. 累不累 ----
-        if (energy.isTired(now)) {
-            step("③ 精力：${"%.2f".format(energy.current(now))} 偏低，压一压")
+        val tired = energy.isTired(now)
+        val energyNow = "%.2f".format(energy.current(now))
+        if (tired && respectEnergy) {
+            step("③ 精力：$energyNow 偏低，压一压")
             return Outcome.Wait(
                 delayMs(baseMinutes = 8, now = now),
-                "精力低（${"%.2f".format(energy.current(now))}），压一压再回",
+                "精力低（$energyNow），压一压再回",
             )
         }
-        step("③ 精力：${"%.2f".format(energy.current(now))} 正常")
+        if (tired) {
+            // 手动放行：说出来而不是悄悄放过，用户才知道"如果这是自动的，它本来会等"
+            step("③ 精力：$energyNow 偏低，但你是手动点的，不拦")
+        } else {
+            step("③ 精力：$energyNow 正常")
+        }
 
         // ---- 4. 生成（内部已过输入边界与禁忌词） ----
         val result = engine.generate(turns)
