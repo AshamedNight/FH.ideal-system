@@ -46,8 +46,14 @@ class CaptureService : AccessibilityService() {
         /** 自动触发的检查间隔。比 dump 更密一点，但仍然远低于事件频率。 */
         private const val AUTO_CHECK_INTERVAL_MS = 900L
 
-        /** 连点时等用户点发送的时限。超时就当他想跳过这一条。 */
-        private const val BATCH_SEND_TIMEOUT_MS = 45_000L
+        /**
+         * 连点时等用户点发送的时限。
+         *
+         * 20 秒而不是 45：实测"发完第一段、第二段迟迟不出现"是用户最难受的状态，
+         * 而这一条超时后会先检查断句队列（见 [armBatchWatchdog]），
+         * 所以缩短等于让"检测漏了"的情况更快自愈。
+         */
+        private const val BATCH_SEND_TIMEOUT_MS = 20_000L
     }
 
     private var config: AppConfig? = null
@@ -213,6 +219,16 @@ class CaptureService : AccessibilityService() {
     /** 连续几次发现"本应用在前台"。用来避免切不回去时无限重试。 */
     private var frontFailCount = 0
 
+    /**
+     * 最近一次成功读到的目标包名。
+     *
+     * 兜底用：用户很可能在设置里填了应用名（「同城夜聊」）而不是包名
+     * （`com.huwei.fox`），那时 `getLaunchIntentForPackage` 直接返回 null，
+     * 回退到"上一个能读到的目标"往往就是对的。
+     */
+    @Volatile
+    private var lastTargetPkg: String? = null
+
     fun startBatch(count: Int = config?.batchSize ?: 5) {
         if (batchActive) return
         batchActive = true
@@ -224,23 +240,47 @@ class CaptureService : AccessibilityService() {
         // 但 dispatchGesture 的手势会落在**有焦点的那个窗口**上。
         // AutoReply 自己在前台时，每一记点击都被自己接走了 ——
         // 表现就是"在本应用里点按钮完全没反应，切到目标 App 里才有用"。
-        bringTargetToFront()
+        bringTargetToFront()?.let { logAuto("切到目标应用失败：$it") }
 
         // 给系统一点时间切过去，切完再开始第一步
         mainHandler.postDelayed({ batchStep() }, 1200L)
     }
 
-    /** 把配置里的目标应用拉到前台。失败就算了，batchStep 会再检查一次。 */
-    private fun bringTargetToFront(): Boolean {
-        val pkg = config?.targetPackages?.firstOrNull() ?: return false
-        return try {
-            val intent = packageManager.getLaunchIntentForPackage(pkg) ?: return false
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-            startActivity(intent)
-            true
-        } catch (_: Exception) {
-            false
+    /**
+     * 把目标应用弄到前台。返回 null 表示成功，否则是失败原因。
+     *
+     * 两条路，按可靠性排序：
+     *
+     *  1. **按返回键退出本应用**（首选）。用户是从目标 App 切过来点按钮的，
+     *     按一次 BACK 就回到那个 App —— 不需要权限，也不会被系统拦。
+     *  2. `startActivity` 显式拉起。这条在 Android 10+ 上**大概率被拒**：
+     *     后台应用不能启动 Activity，无障碍服务不算"前台"。
+     *     所以它只是兜底，不能当主路径。
+     */
+    private fun bringTargetToFront(): String? {
+        if (rootInActiveWindow?.packageName?.toString() == packageName) {
+            if (performGlobalAction(GLOBAL_ACTION_BACK)) return null
         }
+
+        val candidates = buildList {
+            addAll(config?.targetPackages.orEmpty())
+            lastTargetPkg?.let { add(it) }
+        }.distinct().filter { it.isNotBlank() }
+
+        if (candidates.isEmpty()) return "设置里没填目标应用包名"
+
+        for (pkg in candidates) {
+            val intent = packageManager.getLaunchIntentForPackage(pkg) ?: continue
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            return try {
+                startActivity(intent)
+                null
+            } catch (e: Exception) {
+                "启动 $pkg 失败：${e.javaClass.simpleName}"
+            }
+        }
+        // 一个都启动不了 —— 最常见的原因是设置里填的是应用名而不是包名
+        return "启动不了 ${candidates.joinToString("/")}：设置里要填包名（如 com.huwei.fox），不是应用名"
     }
 
     fun stopBatch(note: String = "连点已停止") {
@@ -278,8 +318,8 @@ class CaptureService : AccessibilityService() {
                 stopBatch("连点停止：切不回目标应用（系统可能限制了后台启动）")
                 return
             }
-            logAuto("本应用在前台，点击不会生效 —— 正在切回目标应用")
-            bringTargetToFront()
+            val err = bringTargetToFront()
+            logAuto(if (err == null) "正在切回目标应用" else "切回失败：$err")
             mainHandler.postDelayed({ batchStep() }, 1500L)
             return
         }
@@ -337,6 +377,13 @@ class CaptureService : AccessibilityService() {
         batchWatchdog?.let { mainHandler.removeCallbacks(it) }
         val task = Runnable {
             if (!batchActive) return@Runnable
+            // 队列里还有没发的段 → 说明用户其实发了，只是"发送检测"没命中
+            //（消息列表刷新有延迟，或者 App 把内容改写了一点）。
+            // 这时直接填下一段，别让整轮卡死在这里。
+            val root = targetRoot()
+            val profile = root?.let { Profiles.forPackage(it.packageName?.toString() ?: "") }
+            if (root != null && profile != null && fillNextSegment(root, profile)) return@Runnable
+
             batchLeft--
             batchStep()
         }
@@ -537,14 +584,21 @@ class CaptureService : AccessibilityService() {
     fun targetRoot(): AccessibilityNodeInfo? {
         val active = rootInActiveWindow
         val activePkg = active?.packageName?.toString()
-        if (isTarget(activePkg)) return active
+        if (isTarget(activePkg)) {
+            lastTargetPkg = activePkg
+            return active
+        }
 
         val list = windows ?: return null
         for (w in list) {
             if (w == null) continue
             if (!isAppWindow(w)) continue
             val r = w.root ?: continue
-            if (isTarget(r.packageName?.toString())) return r
+            val pkg = r.packageName?.toString()
+            if (isTarget(pkg)) {
+                lastTargetPkg = pkg
+                return r
+            }
         }
         return null
     }

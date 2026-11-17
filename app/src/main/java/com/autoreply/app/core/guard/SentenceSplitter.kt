@@ -73,7 +73,20 @@ object SentenceSplitter {
             merged
         }
 
-        return result.map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf(text) }
+        // 段尾的逗号/分号要去掉：真人断句时不会留一个悬空的逗号
+        //（「你好啊，」看起来像话没说完）。句号、问号、感叹号保留 ——
+        // 那是句子收尾，留着更像随手打的。
+        return result
+            .map { seg ->
+                val t = seg.trim()
+                if (t.count { !it.isWhitespace() } > 1) {
+                    t.trimEnd('，', ',', '；', ';', '、', ' ')
+                } else {
+                    t
+                }
+            }
+            .filter { it.isNotEmpty() }
+            .ifEmpty { listOf(text) }
     }
 
     /** 只数实际字符，不算标点和空白 —— "好的。" 其实只有 2 个字。 */

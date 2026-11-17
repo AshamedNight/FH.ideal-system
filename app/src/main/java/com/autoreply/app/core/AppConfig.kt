@@ -28,7 +28,9 @@ class AppConfig(context: Context) {
      */
     var hourlyCap: Int
         get() = sp.getInt(KEY_HOURLY_CAP, 15)
-        set(value) = sp.edit().putInt(KEY_HOURLY_CAP, value).apply()
+        // 下限 1：用户把输入框清空时 intOf 会得到 0，界面上就显示「本小时 0/0」
+        // 并且永久拦截 —— 看起来像程序坏了，其实只是那个字段空着。
+        set(value) = sp.edit().putInt(KEY_HOURLY_CAP, value.coerceAtLeast(1)).apply()
 
     /**
      * 连续处理几条后强制长冷却。
