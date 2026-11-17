@@ -3,11 +3,19 @@ package com.autoreply.app.capture
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.notify.MessageNotificationListener
+import com.autoreply.app.platform.NodeQuery
 import com.autoreply.app.platform.Profiles
+import com.autoreply.app.platform.ReplyRunner
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * 读屏服务。
@@ -46,6 +54,35 @@ class CaptureService : AccessibilityService() {
 
     private var lastDumpElapsed: Long = 0L
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * 收到了通知，但当时目标 App 不在聊天页 —— 先挂着，等用户点进会话再处理。
+     *
+     * 这是 L1 档唯一的"待办"。不做自动点开会话：那是一次主动点击，
+     * 而"人自己点开、程序准备草稿"这个形态里根本不需要它。
+     */
+    private var pendingHit: MessageNotificationListener.Hit? = null
+
+    /** 一次只跑一个判定，避免通知连发时并发调模型。 */
+    private var autoRunning = false
+
+    /** 同一条通知可能被系统更新多次（已读回执、时间刷新），用它去重。 */
+    private var lastHitKey: String = ""
+
+    /** 最近一次自动处理的结果，首页会显示这一句。 */
+    @Volatile
+    var lastAutoNote: String = ""
+        private set
+
+    /**
+     * 监听器要留引用：`removeListener { }` 传的是个新 lambda，
+     * 起不到解除作用，会在服务重建后叠加多份回调。
+     */
+    private val hitListener: (MessageNotificationListener.Hit) -> Unit = { hit ->
+        onNotification(hit)
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         config = AppConfig(this)
@@ -53,6 +90,52 @@ class CaptureService : AccessibilityService() {
         // 而改动配置本来就是发版行为，不做热加载。
         Profiles.load(this)
         instance = this
+
+        // 通知 → 自动处理的接线。listener 只负责"听到"，判断和动作都在这里。
+        MessageNotificationListener.addListener(hitListener)
+    }
+
+    override fun onDestroy() {
+        MessageNotificationListener.removeListener(hitListener)
+        super.onDestroy()
+    }
+
+    private fun onNotification(hit: MessageNotificationListener.Hit) {
+        // L0 档不自动：那个档位的定义就是"人自己停在页面里，程序只负责填"
+        if ((config?.level ?: AppConfig.LEVEL_FILL_ONLY) < AppConfig.LEVEL_NOTIFY) return
+
+        val key = "${hit.postedAt}|${hit.text.orEmpty()}"
+        if (key == lastHitKey) return
+        lastHitKey = key
+
+        pendingHit = hit
+        mainHandler.post { tryAutoReply() }
+    }
+
+    /**
+     * 尝试把挂起的通知处理掉。
+     *
+     * **只在"目标 App 就在前台、而且停在聊天页"时动手。** 否则什么也不做，
+     * 等用户自己点进去 —— 那样的话这一次处理就完全发生在后台，
+     * 用户看到的只是"草稿已经在了"。
+     */
+    private fun tryAutoReply() {
+        if (autoRunning) return
+        val hit = pendingHit ?: return
+        val cfg = config ?: return
+
+        val root = targetRoot() ?: return
+        if (root.packageName?.toString() != hit.packageName) return
+        val profile = Profiles.forPackage(hit.packageName) ?: return
+        if (!NodeQuery.isChatPage(root, profile)) return
+
+        pendingHit = null
+        autoRunning = true
+        ReplyRunner(this, cfg).runOnce(hit.text) { result ->
+            autoRunning = false
+            val hhmm = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+            lastAutoNote = "[$hhmm] ${result.note}"
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -63,6 +146,10 @@ class CaptureService : AccessibilityService() {
         if (pkg == packageName) return
 
         if (!isTarget(pkg)) return
+
+        // 有挂起的通知时，目标 App 的每一次界面变化都试一次。
+        // 用户点开会话的那一刻就是这个时机，抓不到就只能等他再点。
+        if (pendingHit != null) tryAutoReply()
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastDumpElapsed < MIN_DUMP_INTERVAL_MS) return

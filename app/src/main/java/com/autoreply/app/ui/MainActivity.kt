@@ -594,6 +594,13 @@ class MainActivity : Activity() {
             AppConfig.LEVEL_POLL -> getString(R.string.level_2)
             else -> getString(R.string.level_1)
         }
+
+        // 自动处理的结果只写在服务里（它跑在后台，界面上没人看），
+        // 回到首页时把最近一次带出来 —— 否则用户根本不知道刚才发生了什么。
+        val auto = CaptureService.instance?.lastAutoNote.orEmpty()
+        if (auto.isNotEmpty()) {
+            statusLevel.text = statusLevel.text.toString() + "\n最近自动：" + auto
+        }
     }
 
     /**
