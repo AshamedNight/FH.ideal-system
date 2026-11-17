@@ -48,6 +48,31 @@ object NodeQuery {
         return null
     }
 
+    /**
+     * 找**真正能接收文字**的节点。
+     *
+     * 输入框在无障碍树里常常是"套娃"：外层 LinearLayout 有 id、有尺寸
+     * （`#et_content_container`、`#all_et_content_container` 就是这种），
+     * 真正的 EditText 在里面，或者干脆没暴露出来。
+     *
+     * 直接对外层容器 `ACTION_SET_TEXT` 会返回 true 但什么也不发生；
+     * 更糟的是某些实现返回 false，让人以为"App 禁止写入"。
+     * 所以命中后一律往里找可编辑节点，找不到才退回原节点。
+     */
+    fun firstEditable(root: AccessibilityNodeInfo, selectors: List<Selector>): AccessibilityNodeInfo? {
+        for (sel in selectors) {
+            val hits = collect(root) { sel.matches(it) }
+            for (hit in hits) {
+                if (hit.isEditable) return hit
+                val inner = collect(hit, maxDepth = 8) {
+                    it.isEditable || it.className?.toString() == "android.widget.EditText"
+                }
+                if (inner.isNotEmpty()) return inner.first()
+            }
+        }
+        return null
+    }
+
     /** 页面是不是聊天页。pageHint 为空时视为"不做判断"。 */
     fun isChatPage(root: AccessibilityNodeInfo, profile: PlatformProfile): Boolean {
         if (profile.pageHint.isEmpty()) return true
@@ -158,8 +183,10 @@ object NodeQuery {
         profile: PlatformProfile,
         text: String,
     ): FillResult {
-        val input = firstMatch(root, profile.input)
-            ?: return FillResult.Unavailable("找不到输入框（选择器可能失效）")
+        val input = firstEditable(root, profile.input)
+            ?: return FillResult.Unavailable(
+                "找不到可写入的输入框（命中的节点是容器，里面没有 EditText）"
+            )
 
         val existing = input.text?.toString()?.trim().orEmpty()
         // 提示文案（"发消息..."）不算用户内容：EditText 的 hint 在部分实现里
@@ -183,5 +210,5 @@ object NodeQuery {
 
     /** 回读输入框当前内容，用于填完之后校验。 */
     fun inputText(root: AccessibilityNodeInfo, profile: PlatformProfile): String? =
-        firstMatch(root, profile.input)?.text?.toString()
+        firstEditable(root, profile.input)?.text?.toString()
 }

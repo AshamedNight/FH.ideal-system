@@ -62,5 +62,43 @@
       "匹配度较高",
       "别错过缘分"
     ]
+  },
+
+  "com.huwei.fox": {
+    "_note": "2026-11-17 真机 dump（测试账号）。结构规范程度介于 moyi 和抖音之间：id 是语义化全名，但消息文本和快捷回复都叫 tv_content —— 必须靠 messageList 作用域隔离，#recyclerview 外面的 #quick_replies_recyclerview 里有同名 id。注意输入框：dump 里只有 #et_content_container / #all_et_content_container 两层容器，真正的 EditText 没暴露（NodeQuery.firstEditable 会在容器内下探 8 层找可编辑节点）。",
+
+    "messageList": [
+      { "by": "viewId", "value": "recyclerview" },
+      { "by": "className", "value": "androidx.recyclerview.widget.RecyclerView" }
+    ],
+
+    "message": [
+      { "by": "viewId", "value": "tv_content" },
+      { "by": "viewId", "value": "cl_container" },
+      { "by": "viewId", "value": "ccv_content" }
+    ],
+
+    "input": [
+      { "by": "viewId", "value": "et_content_container" },
+      { "by": "viewId", "value": "all_et_content_container" },
+      { "by": "viewId", "value": "ll_edit_input" },
+      { "by": "className", "value": "android.widget.EditText", "pick": "last" }
+    ],
+
+    "pageHint": [
+      { "by": "viewId", "value": "chat_input" },
+      { "by": "viewId", "value": "recyclerview" }
+    ],
+
+    "exclude": [
+      "一切以刷单",
+      "做任务、抢单",
+      "均为诈",
+      "丘比特牵线",
+      "录制语音签名",
+      "下拉可以刷新",
+      "上次更新",
+      "下一个未读"
+    ]
   }
 }

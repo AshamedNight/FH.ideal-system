@@ -19,7 +19,7 @@ class AccessibilityReplySink(
 
     override fun boxState(): BoxState {
         val root = service.targetRoot() ?: return BoxState.MISSING
-        val input = NodeQuery.firstMatch(root, profile.input) ?: return BoxState.MISSING
+        val input = NodeQuery.firstEditable(root, profile.input) ?: return BoxState.MISSING
         val text = input.text?.toString()?.trim().orEmpty()
         val hint = input.hintText?.toString()?.trim().orEmpty()
         return if (text.isEmpty() || text == hint) BoxState.EMPTY else BoxState.HAS_TEXT
