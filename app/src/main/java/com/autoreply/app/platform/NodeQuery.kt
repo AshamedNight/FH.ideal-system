@@ -222,6 +222,38 @@ object NodeQuery {
         firstEditable(root, profile.input)?.text?.toString()
 
     /**
+     * 输入框不听话时，用一句话说清「卡在哪」。
+     *
+     * 填字失败有且只有三种原因，对应的处置完全不同，混在一起就会瞎试：
+     *   1. 树里没有可编辑节点  → 输入框被排除在无障碍树外，只能走输入法或粘贴
+     *   2. 有节点但焦点拿不到  → 切前台丢了焦点，需要"人停在页面里"的时机
+     *   3. 有节点也有焦点      → 只是 SET_TEXT 不被接受，改用粘贴/输入法
+     */
+    fun diagnoseInput(root: AccessibilityNodeInfo, profile: PlatformProfile): String = buildString {
+        append("输入框诊断")
+        val editable = firstEditable(root, profile.input)
+        if (editable == null) {
+            append("\n  可编辑节点：无（整棵树里找不到，SET_TEXT 无从下手）")
+        } else {
+            append("\n  可编辑节点：")
+            append(editable.className?.toString()?.substringAfterLast('.') ?: "?")
+            append(" editable=").append(editable.isEditable)
+        }
+        val focus = try {
+            root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        } catch (_: Exception) {
+            null
+        }
+        append("\n  当前输入焦点：")
+        if (focus == null) {
+            append("无（本 App 在前台时焦点会丢，这是测法的限制）")
+        } else {
+            append(focus.className?.toString()?.substringAfterLast('.') ?: "?")
+            append(" editable=").append(focus.isEditable)
+        }
+    }
+
+    /**
      * 点一下平台自带的「下一个未读」。
      *
      * **这是整个项目里唯一会主动点击的方法。** 刻意单独放在这里、命名直白，

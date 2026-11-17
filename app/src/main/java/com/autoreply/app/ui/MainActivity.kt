@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.view.accessibility.AccessibilityNodeInfo
 import android.app.Activity
 import android.widget.Button
 import android.widget.TextView
@@ -218,6 +217,12 @@ class MainActivity : Activity() {
                                     is FillResult.Mismatch -> "回读不一致 — ${fill.actual}$tail"
                                 }
                             )
+                            // 失败时把诊断附在后面：否则用户只知道"填不进去"，
+                            // 不知道是没节点、没焦点，还是 SET_TEXT 不被接受。
+                            if (fill !is FillResult.Ok) {
+                                val diagRoot = service.targetRoot() ?: root
+                                append("\n\n").append(NodeQuery.diagnoseInput(diagRoot, profile))
+                            }
                             if (!mockMode) {
                                 // 真实用量：估算在"到底花多少钱"上能差一倍，
                                 // 而余额是实扣的，所以只认服务端返回的 usage。
@@ -398,30 +403,8 @@ class MainActivity : Activity() {
             }
         )
 
-        // 输入框诊断：这个项目的填字失败几乎全集中在这一层，
-        // 把「树里有没有可编辑节点」「当前焦点在哪」直接打出来，
-        // 就不必再抓一次 dump 才能判断该走哪条路。
-        sb.append("\n\n输入框诊断：")
-        val editable = NodeQuery.firstEditable(root, profile.input)
-        if (editable == null) {
-            sb.append("\n  可编辑节点：无（树里找不到，SET_TEXT 无从下手）")
-        } else {
-            sb.append("\n  可编辑节点：")
-            sb.append(editable.className?.toString()?.substringAfterLast('.') ?: "?")
-            sb.append(" editable=").append(editable.isEditable)
-        }
-        val focusNode = try {
-            root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-        } catch (_: Exception) {
-            null
-        }
-        sb.append("\n  当前输入焦点：")
-        if (focusNode == null) {
-            sb.append("无（切回本 App 会丢焦点，这是测试方式的限制）")
-        } else {
-            sb.append(focusNode.className?.toString()?.substringAfterLast('.') ?: "?")
-            sb.append(" editable=").append(focusNode.isEditable)
-        }
+        // 输入框诊断：这个项目的填字失败几乎全集中在这一层。
+        sb.append("\n\n").append(NodeQuery.diagnoseInput(root, profile))
 
         // 人设到底有没有进提示词，是这个项目最容易"以为改了其实没生效"的地方。
         // 所以试填顺带把来源、条数、提示词开头都打出来 —— 不配 Key、不联网也能自查。
