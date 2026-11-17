@@ -360,10 +360,23 @@ class MainActivity : Activity() {
 
         val messages = NodeQuery.readMessages(root, profile)
         if (messages.isEmpty()) {
+            // 整棵树被 noimp 摘掉的平台（他趣：根节点 View [0,0,0]，全树 1 个节点），
+            // 消息读不到，但输入焦点可能仍拿得到那个 EditText。
+            // 这种情况仍然值得单独验一次填字：能填就说明只差"从哪拿消息"这一步。
+            val probeSink = AccessibilityReplySink(service, profile)
+            val probeDraft = "测试填写"
+            val probeFill = probeSink.fill(probeDraft)
             output.text = buildString {
-                append("没读到消息，消息选择器可能失效了。\n\n")
-                append("# ---- 当前窗口 ----\n")
-                append(service.describeWindows())
+                append("没读到消息 —— 整棵树可能被 importantForAccessibility=no 摘掉了。\n\n")
+                append("单独试一次填字（写入「$probeDraft」，切回去记得删掉）：\n  ")
+                append(
+                    when (probeFill) {
+                        is FillResult.Ok -> "成功 ✓ 这个平台能做，只差消息来源"
+                        is FillResult.Unavailable -> "失败 — ${probeFill.reason}"
+                        is FillResult.Mismatch -> "回读不一致 — ${probeFill.actual}"
+                    }
+                )
+                append("\n\n").append(NodeQuery.diagnoseInput(root, profile))
             }
             return
         }

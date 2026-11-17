@@ -104,5 +104,23 @@
     "nextUnread": [
       { "by": "viewId", "value": "tv_next" }
     ]
+  },
+
+  "com.xingjiabi.shengsheng": {
+    "_note": "他趣 8.7.3.1（网易易盾加固）。2026-11-17 真机 dump：根节点 View [0,0,0] noimp，全树只有 1 个节点 —— 整棵树被 importantForAccessibility=no 摘掉了，所以**消息读不到**（不是自绘，是主动关闭无障碍）。但输入焦点仍能拿到：EditText #editContent editable=true，所以填字有戏（靠 NodeQuery.firstEditable 的 findFocus 兜底，不靠遍历）。读消息要靠通知监听，下一步再接。",
+
+    "messageList": [],
+    "message": [],
+
+    "input": [
+      { "by": "viewId", "value": "editContent" },
+      { "by": "className", "value": "android.widget.EditText" }
+    ],
+
+    "pageHint": [
+      { "by": "viewId", "value": "editContent" }
+    ],
+
+    "exclude": []
   }
 }

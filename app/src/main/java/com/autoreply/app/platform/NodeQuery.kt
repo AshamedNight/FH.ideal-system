@@ -85,7 +85,11 @@ object NodeQuery {
     /** 页面是不是聊天页。pageHint 为空时视为"不做判断"。 */
     fun isChatPage(root: AccessibilityNodeInfo, profile: PlatformProfile): Boolean {
         if (profile.pageHint.isEmpty()) return true
-        return firstMatch(root, profile.pageHint) != null
+        if (firstMatch(root, profile.pageHint) != null) return true
+        // 有的平台把整棵树标成 importantForAccessibility=no（他趣就是这样，
+        // 根节点 View [0,0,0] noimp，全树只剩 1 个节点），pageHint 永远找不到。
+        // 但输入焦点仍能拿到那个 EditText —— 能拿到就说明在聊天页。
+        return firstEditable(root, profile.input) != null
     }
 
     fun messageScope(root: AccessibilityNodeInfo, profile: PlatformProfile): AccessibilityNodeInfo =
