@@ -1,5 +1,8 @@
 package com.autoreply.app.platform
 
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
+import android.graphics.Rect
 import android.provider.Settings
 import com.autoreply.app.capture.CaptureService
 import com.autoreply.app.ime.AutoReplyImeService
@@ -54,12 +57,58 @@ object TextWriter {
         val ime = AutoReplyImeService.instance
             ?: return Outcome(false, true, "输入法服务没在运行：去系统设置里重新勾选一次 AutoReply 输入法")
 
-        return if (ime.commit(text)) {
-            Outcome(true, true, "已通过输入法写入（未发送）")
-        } else {
-            // 没有绑定输入框（用户还没点输入框）：文本已排队，
-            // 等 onStartInput 时自动写入 —— 所以这里不算失败
-            Outcome(false, true, "已排队：点一下目标 App 的输入框，草稿会自动出现", pending = true)
+        if (ime.commit(text)) {
+            return Outcome(true, true, "已通过输入法写入（未发送）")
+        }
+
+        // ---- 第三条：替用户点一下输入框，把焦点建立起来 ----
+        //
+        // 为什么必须点：输入法只能往「当前有焦点的输入框」写字，
+        // 没有焦点就没有 InputConnection，系统不允许输入法凭空上屏。
+        // 但这一下**可以由程序来点** —— `dispatchGesture` 是无障碍服务的
+        // 合法能力；点的是输入框本身，不改任何状态、不发送、不通知对方。
+        //
+        // 所以用起来的效果是：你一次都不用点。
+        if (tapInputBox(service, profile)) {
+            return Outcome(
+                false, true,
+                "正在替你点一下输入框，草稿随即写入（焦点会闪一下）",
+                pending = true,
+            )
+        }
+
+        return Outcome(
+            false, true,
+            "已排队，但没点到输入框：手动点一下输入框，草稿会自动出现",
+            pending = true,
+        )
+    }
+
+    /**
+     * 点一下输入框区域，让它获得焦点。
+     *
+     * 点的节点是**容器**（`#et_content_container` 这类），不是 EditText ——
+     * 因为 EditText 本来就不在无障碍树里。容器有 id、有尺寸，够定位了。
+     *
+     * 用 `dispatchGesture` 而不是 `performAction(ACTION_CLICK)`：
+     * 容器的点击事件未必转给内部的编辑控件，而一次真实的按下-抬起
+     * 会走完整的触摸分发，效果和用户手指点一下一样。
+     */
+    private fun tapInputBox(service: CaptureService, profile: PlatformProfile): Boolean {
+        val root = service.targetRoot() ?: return false
+        val node = NodeQuery.firstMatch(root, profile.input) ?: return false
+        val r = Rect()
+        node.getBoundsInScreen(r)
+        if (r.width() <= 0 || r.height() <= 0) return false
+
+        val path = Path().apply { moveTo(r.exactCenterX(), r.exactCenterY()) }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 60))
+            .build()
+        return try {
+            service.dispatchGesture(gesture, null, null)
+        } catch (_: Exception) {
+            false
         }
     }
 
