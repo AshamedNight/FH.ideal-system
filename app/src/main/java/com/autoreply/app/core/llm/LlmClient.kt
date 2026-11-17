@@ -42,6 +42,16 @@ class LlmClient(
     /** 地址填 mock 时走本地假回复：不联网、不花钱，用来验证管道。 */
     val isMock: Boolean get() = baseUrl.trim().equals(MOCK, ignoreCase = true)
 
+    /**
+     * 拼请求用的 base。
+     *
+     * 用户很可能把**完整接口**贴进来（Termux 日志里常直接打印
+     * `http://127.0.0.1:8080/v1/chat/completions`），再拼一次就成了
+     * `/v1/chat/completions/chat/completions`，报 404 还很难看出来。
+     * 这里统一剥掉，两种写法都能用。
+     */
+    private val endpointBase: String = baseUrl.trim().trimEnd('/').removeSuffix("/chat/completions")
+
     fun chat(system: String, user: String, maxTokens: Int = 400): Result {
         // mock 必须排在"未配置"检查之前 —— 假模型本来就不需要 Key
         if (isMock) return Result.Ok(mockReply(user))
@@ -63,7 +73,7 @@ class LlmClient(
                 put("temperature", 0.8)
             }.toString()
 
-            val url = URL(baseUrl.trim().trimEnd('/') + "/chat/completions")
+            val url = URL(endpointBase + "/chat/completions")
             conn = openConnection(url).apply {
                 requestMethod = "POST"
                 connectTimeout = timeoutMs
@@ -80,7 +90,9 @@ class LlmClient(
             val raw = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
 
             if (code !in 200..299) {
-                return Result.Err("HTTP $code：${raw.take(180)}")
+                // 把实际请求的地址带出来：404 最常见的原因是 /v1 少写或重复，
+                // 不给地址的话用户只能靠猜。
+                return Result.Err("HTTP $code（请求了 $url）：${raw.take(180)}")
             }
 
             val text = JSONObject(raw)
