@@ -39,6 +39,9 @@ class CaptureService : AccessibilityService() {
 
         /** 事件风暴很密（列表滚动一次几十个事件），1.2 秒一次足够。 */
         private const val MIN_DUMP_INTERVAL_MS = 1200L
+
+        /** 自动触发的检查间隔。比 dump 更密一点，但仍然远低于事件频率。 */
+        private const val AUTO_CHECK_INTERVAL_MS = 900L
     }
 
     private var config: AppConfig? = null
@@ -69,6 +72,19 @@ class CaptureService : AccessibilityService() {
 
     /** 同一条通知可能被系统更新多次（已读回执、时间刷新），用它去重。 */
     private var lastHitKey: String = ""
+
+    /**
+     * 上一次处理过的「最后一条对方消息」的指纹。
+     *
+     * 这是**不依赖通知**的触发依据：交友类 App 大多不发系统通知
+     * （未读只在 App 内显示红点），所以通知驱动对它们不成立。
+     * 但界面会变 —— 消息一到，RecyclerView 就多一条，无障碍事件必然触发。
+     * 用「条数 + 文本」当指纹，条数变化能覆盖"切了会话但最后一句碰巧一样"。
+     */
+    private var lastSeenFingerprint: String = ""
+
+    /** 自动检查的节流。读消息要遍历树，不必每个事件都读。 */
+    private var lastAutoCheckElapsed: Long = 0L
 
     /** 最近一次自动处理的结果，首页会显示这一句。 */
     @Volatile
@@ -122,7 +138,6 @@ class CaptureService : AccessibilityService() {
     private fun tryAutoReply() {
         if (autoRunning) return
         val hit = pendingHit ?: return
-        val cfg = config ?: return
 
         val root = targetRoot() ?: return
         if (root.packageName?.toString() != hit.packageName) return
@@ -130,12 +145,49 @@ class CaptureService : AccessibilityService() {
         if (!NodeQuery.isChatPage(root, profile)) return
 
         pendingHit = null
+        runAuto(hit.text)
+    }
+
+    private fun runAuto(notifyText: String?) {
+        val cfg = config ?: return
         autoRunning = true
-        ReplyRunner(this, cfg).runOnce(hit.text) { result ->
+        ReplyRunner(this, cfg).runOnce(notifyText) { result ->
             autoRunning = false
             val hhmm = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
             lastAutoNote = "[$hhmm] ${result.note}"
         }
+    }
+
+    /**
+     * 界面驱动的自动触发 —— 不依赖通知。
+     *
+     * 为什么需要这个：同城夜聊和他趣都**不发系统通知**，未读只在 App 内显示红点
+     * （用户实测两个平台都收不到通知）。但消息一到，列表就多一条，
+     * 无障碍事件必然触发 —— 这是比通知更可靠的信号。
+     *
+     * 而且它比通知信息更全：通知只有一句摘要，这里能拿到整段对话。
+     */
+    private fun maybeAutoReplyOnChange() {
+        if (autoRunning) return
+        val cfg = config ?: return
+        // L0 档不自动：那个档位的定义就是"人自己停在页面里，程序只负责填"
+        if (cfg.level < AppConfig.LEVEL_NOTIFY) return
+
+        val root = targetRoot() ?: return
+        val pkg = root.packageName?.toString() ?: return
+        val profile = Profiles.forPackage(pkg) ?: return
+        // 读不到消息的平台（他趣：整棵树被 noimp 摘掉）只能等通知，
+        // 而它们偏偏不发通知 —— 这类平台只能手动，或者靠输入法方案
+        if (profile.message.isEmpty()) return
+        if (!NodeQuery.isChatPage(root, profile)) return
+
+        val messages = NodeQuery.readMessages(root, profile)
+        val last = messages.lastOrNull { it.fromOther } ?: return
+        val fingerprint = "${messages.size}|${last.text.trim()}"
+        if (fingerprint == lastSeenFingerprint) return
+        lastSeenFingerprint = fingerprint
+
+        runAuto(null)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -150,6 +202,14 @@ class CaptureService : AccessibilityService() {
         // 有挂起的通知时，目标 App 的每一次界面变化都试一次。
         // 用户点开会话的那一刻就是这个时机，抓不到就只能等他再点。
         if (pendingHit != null) tryAutoReply()
+
+        // 界面驱动的自动触发。节流 900ms：读消息要遍历树，
+        // 而列表滚动一次能发几十个事件，不节流会把主线程拖住。
+        val elapsed = SystemClock.elapsedRealtime()
+        if (elapsed - lastAutoCheckElapsed >= AUTO_CHECK_INTERVAL_MS) {
+            lastAutoCheckElapsed = elapsed
+            maybeAutoReplyOnChange()
+        }
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastDumpElapsed < MIN_DUMP_INTERVAL_MS) return
