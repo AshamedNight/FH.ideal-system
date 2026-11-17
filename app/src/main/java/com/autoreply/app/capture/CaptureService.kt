@@ -311,35 +311,40 @@ class CaptureService : AccessibilityService() {
             }
         }
 
-        // 本应用在前台时，手势全落在自己身上，对目标 App 的操作必然无效。
-        if (rootInActiveWindow?.packageName?.toString() == packageName) {
+        // 统一处理「看不到目标界面」的所有情况：
+        //   1. AutoReply 自己在前台（手势会被它接走）
+        //   2. 系统的「AutoReply 想要打开同城夜聊」确认框在最上层
+        //   3. 应用切换动画还没结束
+        //
+        // **这三种都不该立刻 stop。** 之前只在第 1 种上等待，第 2 种
+        // （那个确认框）会直接落到下面的 targetRoot()==null → 停止，
+        // 日志表现就是"连点开始"后隔 1 秒"连点停止：目标界面不在前台"。
+        val root = targetRoot()
+        if (root == null) {
             frontFailCount++
-            // 16 秒（20 次 × 800ms）还没切回去才放弃。
-            // 给这么宽是因为"切过去"这一步可能得用户自己动手。
-            if (frontFailCount > 20) {
-                stopBatch("连点停止：一直停在本应用里。请先切到目标应用再点连点")
+            if (frontFailCount > 25) {
+                stopBatch("连点停止：16 秒内看不到目标界面。请确认目标应用在前台，或检查设置里的包名")
                 return
             }
-            // 只在第一次尝试拉起，之后纯等待 —— 反复 startActivity 会让屏幕来回闪
             if (frontFailCount == 1) {
                 val err = bringTargetToFront()
                 logAuto(
-                    if (err == null) "正在切到目标应用…（没跳过去的话请手动切）"
-                    else "请手动切到目标应用：$err"
+                    when {
+                        err == null -> "正在切到目标应用…（若弹出询问请选「始终允许」）"
+                        else -> "请手动切到目标应用：$err"
+                    }
                 )
-            } else if (frontFailCount % 5 == 0) {
-                // 定期报一次进度。不然用户看到的就是"什么都不发生"
-                logAuto("等待切回目标应用…还剩约 ${(20 - frontFailCount) * 8 / 10} 秒")
+            } else if (frontFailCount == 8) {
+                // 第 8 次（约 6 秒）还没看到，多半是那个确认框在等用户点
+                logAuto("还看不到目标界面 —— 如果屏幕上有「想要打开同城夜聊」的询问，请点打开并勾选始终允许")
+            } else if (frontFailCount % 8 == 0) {
+                logAuto("等待目标界面…还剩约 ${(25 - frontFailCount) * 8 / 10} 秒")
             }
             mainHandler.postDelayed({ batchStep() }, 800L)
             return
         }
         frontFailCount = 0
 
-        val root = targetRoot() ?: run {
-            stopBatch("连点停止：目标界面不在前台")
-            return
-        }
         val profile = Profiles.forPackage(root.packageName?.toString() ?: "") ?: run {
             stopBatch("连点停止：这个平台没有配置")
             return
