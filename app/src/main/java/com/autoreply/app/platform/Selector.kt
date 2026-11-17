@@ -70,6 +70,15 @@ data class PlatformProfile(
      * "对方说的话"喂给模型，回复内容直接跑偏。
      */
     val exclude: List<String> = emptyList(),
+
+    /**
+     * 「下一个未读」按钮。
+     *
+     * 这是平台自己给用户做的入口（`#tv_next`），真人天天点，所以点它的行为模式本身
+     * 不异常 —— 但它是全项目**唯一**会主动点击的东西，所以单独一个字段，
+     * 配置里留空就等于这个平台没有这个能力。
+     */
+    val nextUnread: List<Selector> = emptyList(),
 ) {
     val isConfigured: Boolean get() = input.isNotEmpty() || message.isNotEmpty()
 }
@@ -112,6 +121,7 @@ object Profiles {
                     input = o.selectors("input"),
                     pageHint = o.selectors("pageHint"),
                     exclude = o.strings("exclude"),
+                    nextUnread = o.selectors("nextUnread"),
                 )
             }
         } catch (e: Exception) {

@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.accessibility.AccessibilityNodeInfo
 import android.app.Activity
 import android.widget.Button
 import android.widget.TextView
@@ -21,6 +22,7 @@ import com.autoreply.app.platform.AccessibilityReplySink
 import com.autoreply.app.platform.FillResult
 import com.autoreply.app.platform.NodeQuery
 import com.autoreply.app.platform.Profiles
+import kotlin.random.Random
 
 /**
  * 首页。刻意只有状态 + 几个开关，不放任何"开始"主动作 ——
@@ -113,6 +115,7 @@ class MainActivity : Activity() {
 
         findViewById<Button>(R.id.btn_probe).setOnClickListener { runProbe() }
         findViewById<Button>(R.id.btn_generate).setOnClickListener { runGenerate() }
+        findViewById<Button>(R.id.btn_next).setOnClickListener { runNextAndFill() }
     }
 
     /**
@@ -238,6 +241,45 @@ class MainActivity : Activity() {
     }
 
     /**
+     * 点平台自带的「下一个未读」，等界面换过去，再走一遍完整的生成流程。
+     *
+     * **刻意做成一次一步，不做循环。** 节奏由人按，程序不负责"连续处理 N 个会话"：
+     * 一旦写成循环 + 定时器，行为就从"人点了一下"变成"机器按固定间隔跑"，
+     * 那是所有自动化特征里最容易被识别的一种。点多少个、隔多久，交给人决定。
+     */
+    private fun runNextAndFill() {
+        val service = CaptureService.instance
+        if (service == null) {
+            toast("读屏没开")
+            return
+        }
+        val root = service.targetRoot()
+        if (root == null) {
+            output.text = "目标界面不在前台。先切到聊天页，再点这个按钮。"
+            return
+        }
+        val profile = Profiles.forPackage(root.packageName?.toString())
+        if (profile == null) {
+            output.text = "「${root.packageName}」还没有界面配置。"
+            return
+        }
+        if (profile.nextUnread.isEmpty()) {
+            output.text = "这个平台没有配置「下一个未读」按钮，只能手动切会话。\n" +
+                "（不同平台入口不同，有的在会话列表里，没有统一名字）"
+            return
+        }
+        if (!NodeQuery.clickNextUnread(root, profile)) {
+            output.text = "没点到「下一个未读」。可能被弹窗挡住，或当前不在聊天页。"
+            return
+        }
+
+        output.text = "已切到下一个会话，等界面加载后自动生成…"
+        // 固定延迟会让"点开 → 填字"的间隔像定时器，加一点随机更像人在操作
+        val delay = 1400L + Random.nextLong(800)
+        uiHandler.postDelayed({ runGenerate() }, delay)
+    }
+
+    /**
      * 链路自检：读消息 → 拼一句测试草稿 → 填进输入框 → 回读校验。
      *
      * 刻意不接模型：这一步要证明的是「能不能读到、能不能写进去」，
@@ -319,6 +361,31 @@ class MainActivity : Activity() {
                 is FillResult.Mismatch -> "回读不一致 — ${result.actual}"
             }
         )
+
+        // 输入框诊断：这个项目的填字失败几乎全集中在这一层，
+        // 把「树里有没有可编辑节点」「当前焦点在哪」直接打出来，
+        // 就不必再抓一次 dump 才能判断该走哪条路。
+        sb.append("\n\n输入框诊断：")
+        val editable = NodeQuery.firstEditable(root, profile)
+        if (editable == null) {
+            sb.append("\n  可编辑节点：无（树里找不到，SET_TEXT 无从下手）")
+        } else {
+            sb.append("\n  可编辑节点：")
+            sb.append(editable.className?.toString()?.substringAfterLast('.') ?: "?")
+            sb.append(" editable=").append(editable.isEditable)
+        }
+        val focusNode = try {
+            root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        } catch (_: Exception) {
+            null
+        }
+        sb.append("\n  当前输入焦点：")
+        if (focusNode == null) {
+            sb.append("无（切回本 App 会丢焦点，这是测试方式的限制）")
+        } else {
+            sb.append(focusNode.className?.toString()?.substringAfterLast('.') ?: "?")
+            sb.append(" editable=").append(focusNode.isEditable)
+        }
 
         // 人设到底有没有进提示词，是这个项目最容易"以为改了其实没生效"的地方。
         // 所以试填顺带把来源、条数、提示词开头都打出来 —— 不配 Key、不联网也能自查。

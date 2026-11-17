@@ -19,6 +19,7 @@
     <string name="btn_copy">复制结果</string>
     <string name="btn_probe">试填（复读原文）</string>
     <string name="btn_generate">生成并填入</string>
+    <string name="btn_next">下一个未读（会切换会话）</string>
     <string name="btn_settings">设置</string>
     <string name="btn_stop">停止</string>
 

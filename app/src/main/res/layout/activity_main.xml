@@ -169,6 +169,14 @@
                 android:text="@string/btn_generate" />
         </LinearLayout>
 
+        <Button
+            android:id="@+id/btn_next"
+            style="@style/GhostButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:text="@string/btn_next" />
+
         <TextView
             android:id="@+id/output"
             android:layout_width="match_parent"

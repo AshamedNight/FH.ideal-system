@@ -99,6 +99,10 @@
       "下拉可以刷新",
       "上次更新",
       "下一个未读"
+    ],
+
+    "nextUnread": [
+      { "by": "viewId", "value": "tv_next" }
     ]
   }
 }

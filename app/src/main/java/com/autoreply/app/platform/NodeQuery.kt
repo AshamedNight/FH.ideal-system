@@ -220,4 +220,20 @@ object NodeQuery {
     /** 回读输入框当前内容，用于填完之后校验。 */
     fun inputText(root: AccessibilityNodeInfo, profile: PlatformProfile): String? =
         firstEditable(root, profile.input)?.text?.toString()
+
+    /**
+     * 点一下平台自带的「下一个未读」。
+     *
+     * **这是整个项目里唯一会主动点击的方法。** 刻意单独放在这里、命名直白，
+     * 就是为了让"哪里有自动点击"这件事一眼可见，不需要翻整棵树才发现。
+     *
+     * 用 `ACTION_CLICK` 而不是 `dispatchGesture`：前者不产生触摸事件流，
+     * 在系统层面是可访问性操作；后者要模拟完整手势，更像"注入"。
+     * 两者都有痕迹，但前者与本 App 的身份（无障碍工具）一致。
+     */
+    fun clickNextUnread(root: AccessibilityNodeInfo, profile: PlatformProfile): Boolean {
+        if (profile.nextUnread.isEmpty()) return false
+        val node = firstMatch(root, profile.nextUnread) ?: return false
+        return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    }
 }
