@@ -78,7 +78,13 @@ class PacerGuard(context: Context, private val config: AppConfig) {
         rollHourIfNeeded(now)
         sp.edit().putInt(KEY_USED, sp.getInt(KEY_USED, 0) + 1).apply()
 
-        val burst = sp.getInt(KEY_BURST_COUNT, 0) + 1
+        // 「连续」必须带时间窗。不加这个判断，跨小时的记录会一直累加：
+        // 真机出现过「本小时已发 2 条 · 连续 14/30」，2 和 14 对不上 ——
+        // 因为 used 跨小时清零而 burst 没有。人歇了十分钟就不算连续了。
+        val lastAt = sp.getLong(KEY_LAST_ACTION_AT, 0L)
+        val base = if (now - lastAt > BURST_WINDOW_MS) 0 else sp.getInt(KEY_BURST_COUNT, 0)
+
+        val burst = base + 1
         if (burst >= config.burstLimit) {
             // 达到连续上限 → 清零并进入长冷却。冷却时长带 ±30% 随机，
             // 固定 20 分钟这种整齐数字本身就是特征。
@@ -87,9 +93,13 @@ class PacerGuard(context: Context, private val config: AppConfig) {
             sp.edit()
                 .putInt(KEY_BURST_COUNT, 0)
                 .putLong(KEY_COOLING_UNTIL, until)
+                .putLong(KEY_LAST_ACTION_AT, now)
                 .apply()
         } else {
-            sp.edit().putInt(KEY_BURST_COUNT, burst).apply()
+            sp.edit()
+                .putInt(KEY_BURST_COUNT, burst)
+                .putLong(KEY_LAST_ACTION_AT, now)
+                .apply()
         }
     }
 
@@ -172,5 +182,14 @@ class PacerGuard(context: Context, private val config: AppConfig) {
         const val KEY_COOLING_UNTIL = "cooling_until"
         const val KEY_HALTED_UNTIL = "halted_until"
         const val KEY_HALT_REASON = "halt_reason"
+        const val KEY_LAST_ACTION_AT = "last_action_at"
+
+        /**
+         * 两次动作间隔超过这个时长，就算"重新开始"，连续计数归零。
+         *
+         * 10 分钟：一个人歇了十分钟再回来接着发，那已经是新一轮了，
+         * 不该还背着上一轮的连续性。
+         */
+        const val BURST_WINDOW_MS = 10 * 60_000L
     }
 }
