@@ -22,9 +22,20 @@ object NodeDumper {
         // 省掉让用户再去系统设置里翻包名这一步，也避免包名抄错一个字符。
         sb.append("# pkg=").append(root.packageName ?: "?").append('\n')
         val counter = intArrayOf(0)
-        appendNode(root, 0, sb, counter)
+        val stats = intArrayOf(0, 0, 0)   // 可编辑 / 可点击 / 被标不重要
+        appendNode(root, 0, sb, counter, stats)
         if (counter[0] >= MAX_NODES) {
             sb.append("\n…（节点超过 ").append(MAX_NODES).append(" 个，已截断）")
+        }
+        // 统计段：一眼就能回答"这个界面能不能自动化"
+        sb.append("\n# ---- 统计 ----\n")
+        sb.append("# 节点 ").append(counter[0])
+        sb.append("，可编辑 ").append(stats[0])
+        sb.append("，可点击 ").append(stats[1])
+        sb.append("，被标不重要 ").append(stats[2])
+        sb.append('\n')
+        if (stats[0] == 0) {
+            sb.append("# 全树没有可编辑节点 —— 输入框对无障碍不可见，只能走粘贴\n")
         }
         appendFocus(root, sb)
         return sb.toString()
@@ -66,9 +77,13 @@ object NodeDumper {
         depth: Int,
         sb: StringBuilder,
         counter: IntArray,
+        stats: IntArray,
     ) {
         if (node == null || depth > MAX_DEPTH || counter[0] >= MAX_NODES) return
         counter[0]++
+        if (node.isEditable) stats[0]++
+        if (node.isClickable) stats[1]++
+        if (!node.isImportantForAccessibility) stats[2]++
 
         repeat(depth) { sb.append("  ") }
 
@@ -91,11 +106,12 @@ object NodeDumper {
 
         if (node.isClickable) sb.append(" click")
         if (node.isEditable) sb.append(" edit")
+        if (!node.isImportantForAccessibility) sb.append(" noimp")
         if (!node.isVisibleToUser) sb.append(" hidden")
         sb.append('\n')
 
         for (i in 0 until node.childCount) {
-            appendNode(node.getChild(i), depth + 1, sb, counter)
+            appendNode(node.getChild(i), depth + 1, sb, counter, stats)
         }
     }
 
