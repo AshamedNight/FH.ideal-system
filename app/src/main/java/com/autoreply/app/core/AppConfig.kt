@@ -57,6 +57,16 @@ class AppConfig(context: Context) {
         set(value) = sp.edit().putInt(KEY_GAP_SEC, value.coerceAtLeast(30)).apply()
 
     /**
+     * 一次「连点」最多处理几个会话。
+     *
+     * 上限 20：连点是效率工具，但它同时是这套东西里最接近"批量操作"的行为。
+     * 限制单轮数量，等于强制你在每轮之间回来看一眼 —— 那一眼就是人的判断。
+     */
+    var batchSize: Int
+        get() = sp.getInt(KEY_BATCH_SIZE, 5)
+        set(value) = sp.edit().putInt(KEY_BATCH_SIZE, value.coerceIn(1, 20)).apply()
+
+    /**
      * 目标平台包名，可多个（一行一个）。
      *
      * 这个产品不是只服务一个平台，所以包名从一开始就是集合而不是单值。
@@ -172,6 +182,7 @@ class AppConfig(context: Context) {
         private const val KEY_BURST = "burst"
         private const val KEY_COOLDOWN_MIN = "cooldown_min"
         private const val KEY_GAP_SEC = "gap_sec"
+        private const val KEY_BATCH_SIZE = "batch_size"
         private const val KEY_TARGET_PKGS = "target_pkgs"
         private const val KEY_LLM_URL = "llm_url"
         private const val KEY_LLM_KEY = "llm_key"

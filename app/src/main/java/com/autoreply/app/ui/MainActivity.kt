@@ -121,6 +121,7 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.btn_generate).setOnClickListener { runGenerate() }
         findViewById<Button>(R.id.btn_next).setOnClickListener { runNextAndFill() }
         findViewById<Button>(R.id.btn_delayed).setOnClickListener { runDelayedFill() }
+        findViewById<Button>(R.id.btn_batch).setOnClickListener { toggleBatch() }
     }
 
     /**
@@ -339,6 +340,37 @@ class MainActivity : Activity() {
             append("算钱时以「本地估算」为准。")
         }
         append("\n累计：${config.llmCalls} 次调用，输入 ${config.llmTokensIn} / 输出 ${config.llmTokensOut} token")
+    }
+
+    /**
+     * 连点：切下一个未读 → 填草稿 → 你点发送 → 自动切下一个。
+     *
+     * **刻意不做成"自动发送"。** 发送是这条链上唯一有对外后果、且不可撤销的动作，
+     * 必须留在人手里；连点只自动化"切会话 + 写草稿"这些没有后果的部分。
+     *
+     * 也不用定时器：每一步的推进信号是"你真的发出去了"，
+     * 间隔来自你的手速，天然不规则 —— 固定间隔的循环是最容易被识别的行为。
+     */
+    private fun toggleBatch() {
+        val service = CaptureService.instance
+        if (service == null) {
+            toast("读屏没开")
+            return
+        }
+        if (service.batchActive) {
+            service.stopBatch()
+            output.text = "连点已停止。"
+        } else {
+            val n = config.batchSize
+            service.startBatch(n)
+            output.text = buildString {
+                append("连点开始：$n 个\n\n")
+                append("流程：切到下一个未读 → 生成草稿 → 等你点发送 → 自动切下一个\n")
+                append("（当前会话如果还有没回的，会先处理它）\n")
+                append("45 秒没发就跳过这个。随时可以点「停止连点」。")
+            }
+        }
+        refresh()
     }
 
     /**
@@ -629,10 +661,24 @@ class MainActivity : Activity() {
         // 否则反复调人设试十次就把额度用光了，而对方一条都没收到。
         val ps = PacerGuard(this, config).status()
         val sendLine = "已发 ${ps.usedThisHour}/${ps.hourlyCap} 条 · 连续 ${ps.burstCount}/${ps.burstLimit}"
+
+        // 连点按钮的文字要跟着服务里的状态走 —— 用户切回来看时得知道还在不在跑
+        val batchActive = CaptureService.instance?.batchActive == true
+        findViewById<Button>(R.id.btn_batch).text = if (batchActive) {
+            getString(R.string.btn_batch_stop)
+        } else {
+            getString(R.string.btn_batch, config.batchSize)
+        }
+
         statusLevel.text = buildString {
             append(statusLevel.text)
             append('\n').append(imeLine)
             append('\n').append(sendLine)
+            if (batchActive) {
+                append(" · 连点剩 ")
+                append(CaptureService.instance?.batchLeft ?: 0)
+                append(" 个")
+            }
             if (auto.isNotEmpty()) append("\n最近自动：").append(auto)
         }
     }

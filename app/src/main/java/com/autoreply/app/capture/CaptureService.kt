@@ -44,6 +44,9 @@ class CaptureService : AccessibilityService() {
 
         /** 自动触发的检查间隔。比 dump 更密一点，但仍然远低于事件频率。 */
         private const val AUTO_CHECK_INTERVAL_MS = 900L
+
+        /** 连点时等用户点发送的时限。超时就当他想跳过这一条。 */
+        private const val BATCH_SEND_TIMEOUT_MS = 45_000L
     }
 
     private var config: AppConfig? = null
@@ -150,14 +153,121 @@ class CaptureService : AccessibilityService() {
         runAuto(hit.text)
     }
 
-    private fun runAuto(notifyText: String?) {
+    private fun runAuto(notifyText: String?, onDone: (() -> Unit)? = null) {
         val cfg = config ?: return
         autoRunning = true
         ReplyRunner(this, cfg).runOnce(notifyText) { result ->
             autoRunning = false
             val hhmm = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
             lastAutoNote = "[$hhmm] ${result.note}"
+            onDone?.invoke()
         }
+    }
+
+    // ---- 连点：切下一个未读 → 填草稿 → 你点发送 → 再切下一个 ----
+    //
+    // 刻意**不用定时器**。每一步都由"你点了发送"驱动，间隔来自你的手速，
+    // 天然不规则。固定间隔的循环是这套东西里最容易被识别的行为：
+    // 一个人在半小时里以 20 秒的等距节奏给 40 个人发消息，没有第二种解释。
+
+    @Volatile
+    var batchActive: Boolean = false
+        private set
+
+    @Volatile
+    var batchLeft: Int = 0
+        private set
+
+    private var batchWatchdog: Runnable? = null
+
+    fun startBatch(count: Int = config?.batchSize ?: 5) {
+        if (batchActive) return
+        batchActive = true
+        batchLeft = count
+        lastAutoNote = "连点开始：$count 个，每条约你点发送后自动切下一个"
+        mainHandler.post { batchStep() }
+    }
+
+    fun stopBatch(note: String = "连点已停止") {
+        batchActive = false
+        batchLeft = 0
+        batchWatchdog?.let { mainHandler.removeCallbacks(it) }
+        batchWatchdog = null
+        lastAutoNote = note
+    }
+
+    private fun batchStep() {
+        if (!batchActive) return
+        val cfg = config ?: return
+        if (batchLeft <= 0) {
+            stopBatch("连点结束：这一轮处理完了")
+            return
+        }
+        if (autoRunning) return
+
+        val root = targetRoot() ?: run {
+            stopBatch("连点停止：目标界面不在前台")
+            return
+        }
+        val profile = Profiles.forPackage(root.packageName?.toString() ?: "") ?: run {
+            stopBatch("连点停止：这个平台没有配置")
+            return
+        }
+        val dedup = com.autoreply.app.core.guard.ReplyDedup(this)
+
+        // 当前会话如果还有对方没被回过的消息，先处理它，别急着切走 ——
+        // 否则一按连点就把眼前这条跳过去了
+        val messages = NodeQuery.readMessages(root, profile)
+        val peer = NodeQuery.peerName(root, profile)
+        val lastOther = messages.lastOrNull { it.fromOther }
+        val pendingHere = lastOther != null &&
+            !dedup.isDuplicate(peer, lastOther.text, System.currentTimeMillis())
+
+        if (pendingHere) {
+            runAuto(null) { armBatchWatchdog() }
+            return
+        }
+
+        val clicked = NodeQuery.clickNextUnread(root, profile) { n ->
+            com.autoreply.app.platform.TextWriter.tapNode(this, n)
+        }
+        if (!clicked) {
+            stopBatch("连点结束：没有更多未读了")
+            return
+        }
+
+        // 等会话渲染完再读。太短会读到上一个会话的残留节点
+        mainHandler.postDelayed({
+            if (!batchActive) return@postDelayed
+            runAuto(null) { armBatchWatchdog() }
+        }, 1500L + kotlin.random.Random.nextLong(1200))
+    }
+
+    /**
+     * 等用户点发送。
+     *
+     * 45 秒还没发，就当他不想发这一条（可能觉得内容不合适），跳到下一个。
+     * 没有这个看门狗，连点会永远卡在某一步 —— 而用户根本不知道卡在哪。
+     */
+    private fun armBatchWatchdog() {
+        batchWatchdog?.let { mainHandler.removeCallbacks(it) }
+        val task = Runnable {
+            if (!batchActive) return@Runnable
+            batchLeft--
+            batchStep()
+        }
+        batchWatchdog = task
+        mainHandler.postDelayed(task, BATCH_SEND_TIMEOUT_MS)
+    }
+
+    /** 检测到真的发了新消息时推进连点。 */
+    private fun onBatchSent() {
+        if (!batchActive) return
+        batchWatchdog?.let { mainHandler.removeCallbacks(it) }
+        batchWatchdog = null
+        batchLeft--
+        // 等新气泡渲染完再切，否则读到的还是上一屏
+        mainHandler.postDelayed({ batchStep() }, 1200L + kotlin.random.Random.nextLong(900))
     }
 
     /**
@@ -192,6 +302,8 @@ class CaptureService : AccessibilityService() {
         val nowWall = System.currentTimeMillis()
         if (SentTracker(this).detectNewSent(messages, peer, nowWall)) {
             PacerGuard(this, cfg).recordSent(nowWall)
+            // 连点模式下，"你点了发送"就是推进信号
+            onBatchSent()
         }
 
         val last = messages.lastOrNull { it.fromOther } ?: return

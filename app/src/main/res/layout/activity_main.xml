@@ -199,7 +199,15 @@
             android:text="@string/hint_delayed"
             android:textSize="11sp"
             android:textColor="@color/text_secondary"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btn_batch"
+            style="@style/GhostButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:text="@string/btn_batch_default" />
 
         <TextView
             android:id="@+id/output"

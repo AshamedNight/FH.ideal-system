@@ -59,6 +59,7 @@ class SettingsActivity : Activity() {
         root.addView(field("burstLimit", "连续处理多少条后长冷却", config.burstLimit.toString(), InputType.TYPE_CLASS_NUMBER))
         root.addView(field("cooldownMinutes", "长冷却时长（分钟，≥3）", config.cooldownMinutes.toString(), InputType.TYPE_CLASS_NUMBER))
         root.addView(field("minGapSeconds", "两条之间最短间隔（秒，≥30）", config.minGapSeconds.toString(), InputType.TYPE_CLASS_NUMBER))
+        root.addView(field("batchSize", "连点一次处理几个（≤20）", config.batchSize.toString(), InputType.TYPE_CLASS_NUMBER))
         root.addView(note("实际间隔会在最短值上乘 0.7~1.8 的随机系数，不要设成整齐数字。\n这几个值只在「自动触发」时起作用；手动点「生成并填入」只受每小时上限约束，不会被冷却或精力拦住。\n平台报警后的熔断（30 分钟）任何时候都生效，那才是真正需要等的东西。"))
         root.addView(Button(this).apply {
             text = "清除冷却（程序自己歇的那段）"
@@ -139,6 +140,7 @@ class SettingsActivity : Activity() {
         config.burstLimit = intOf("burstLimit", config.burstLimit).coerceAtLeast(1)
         config.cooldownMinutes = intOf("cooldownMinutes", config.cooldownMinutes)
         config.minGapSeconds = intOf("minGapSeconds", config.minGapSeconds)
+        config.batchSize = intOf("batchSize", config.batchSize)
         config.llmBaseUrl = textOf("llmBaseUrl")
         config.llmApiKey = textOf("llmApiKey")
         config.llmModel = textOf("llmModel")
