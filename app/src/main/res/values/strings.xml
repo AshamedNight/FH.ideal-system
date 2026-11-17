@@ -19,7 +19,9 @@
     <string name="btn_copy">复制结果</string>
     <string name="btn_probe">试填（复读原文）</string>
     <string name="btn_generate">生成并填入</string>
-    <string name="btn_next">下一个未读（会切换会话）</string>
+    <string name="btn_next">下一个未读</string>
+    <string name="btn_delayed">延时 5 秒填</string>
+    <string name="hint_delayed">「延时填」倒计时 5 秒后执行 —— 这段时间里切回目标 App、点一下输入框，让光标留在里面。切回来点按钮会让输入焦点丢失，这是本机唯一能保住焦点的方式。「下一个未读」会切换会话。</string>
     <string name="btn_settings">设置</string>
     <string name="btn_stop">停止</string>
 

@@ -116,6 +116,7 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.btn_probe).setOnClickListener { runProbe() }
         findViewById<Button>(R.id.btn_generate).setOnClickListener { runGenerate() }
         findViewById<Button>(R.id.btn_next).setOnClickListener { runNextAndFill() }
+        findViewById<Button>(R.id.btn_delayed).setOnClickListener { runDelayedFill() }
     }
 
     /**
@@ -238,6 +239,41 @@ class MainActivity : Activity() {
                 }
             }
         }.start()
+    }
+
+    /**
+     * 倒计时 5 秒后执行「读 → 生成 → 填」。
+     *
+     * 存在的理由很具体：点按钮必须切回本 App，而一旦本 App 回到前台，
+     * 目标 App 的输入焦点就丢了 —— 焦点一丢，那个本来就不在无障碍树里的输入框
+     * 更无从下手。所以给它 5 秒：用户切回去、点开输入框，程序在后台跑。
+     *
+     * 这也是最接近最终形态的用法：人停在会话里，程序在后台把草稿准备好。
+     */
+    private fun runDelayedFill() {
+        if (CaptureService.instance == null) {
+            toast("读屏没开")
+            return
+        }
+        var left = 5
+        val tick = object : Runnable {
+            override fun run() {
+                if (left > 0) {
+                    toast("$left 秒后执行：切回目标 App，点一下输入框")
+                    output.text = buildString {
+                        append("倒计时 $left 秒\n\n")
+                        append("现在切回目标 App，点一下输入框让光���留在里面。\n")
+                        append("执行结果会写在这里（完成后切回本 App 查看）。")
+                    }
+                    left--
+                    uiHandler.postDelayed(this, 1000)
+                } else {
+                    output.text = "执行中…"
+                    runGenerate()
+                }
+            }
+        }
+        uiHandler.postDelayed(tick, 0)
     }
 
     /**
