@@ -16,11 +16,15 @@ object NodeDumper {
     private const val MAX_NODES = 2000
     private const val MAX_TEXT = 40
 
-    fun dump(root: AccessibilityNodeInfo): String {
+    fun dump(root: AccessibilityNodeInfo, appLabel: String = ""): String {
         val sb = StringBuilder(8 * 1024)
-        // 第一行输出包名：抓一次就能同时拿到「这是哪个 App」和「界面长什么样」，
-        // 省掉让用户再去系统设置里翻包名这一步，也避免包名抄错一个字符。
-        sb.append("# pkg=").append(root.packageName ?: "?").append('\n')
+        // 第一行输出包名 + 应用名。
+        // 包名决定配置能不能命中；应用名决定"这到底是哪个 App" ——
+        // 用户装了几个同类交友软件时，光看包名根本分不清，
+        // 而去系统设置里翻应用信息又要多跑一趟。
+        sb.append("# pkg=").append(root.packageName ?: "?")
+        if (appLabel.isNotEmpty()) sb.append("   应用名=").append(appLabel)
+        sb.append('\n')
         val counter = intArrayOf(0)
         val stats = intArrayOf(0, 0, 0)   // 可编辑 / 可点击 / 被标不重要
         appendNode(root, 0, sb, counter, stats)

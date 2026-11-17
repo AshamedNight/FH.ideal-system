@@ -69,7 +69,7 @@ class CaptureService : AccessibilityService() {
 
         val root = targetRoot() ?: return
         lastDumpElapsed = now
-        cachedDump = NodeDumper.dump(root)
+        cachedDump = NodeDumper.dump(root, labelOf(pkg))
         cachedAtWall = System.currentTimeMillis()
         cachedPkg = pkg
     }
@@ -113,6 +113,23 @@ class CaptureService : AccessibilityService() {
         if (pkg.contains("permissioncontroller", ignoreCase = true)) return true
         if (pkg.startsWith("com.android.packageinstaller")) return true
         return false
+    }
+
+    /**
+     * 包名 → 应用名。拿不到就返回空，不影响 dump 的其他部分。
+     *
+     * 存在的理由很实际：用户装了多个同类 App 时，光看 `com.huwei.fox`
+     * 根本分不清是哪个软件，而去系统设置里翻应用信息又要多跑一趟。
+     * 抓一次就把「这是谁」和「界面长什么样」一起给出来。
+     */
+    private fun labelOf(pkg: String?): String {
+        if (pkg.isNullOrEmpty()) return ""
+        return try {
+            val pm = packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     fun isTarget(pkg: String?): Boolean {
@@ -221,7 +238,7 @@ class CaptureService : AccessibilityService() {
         val source: String
         val root = targetRoot()
         if (root != null) {
-            body = NodeDumper.dump(root)
+            body = NodeDumper.dump(root, labelOf(root.packageName?.toString()))
             cachedDump = body
             cachedAtWall = System.currentTimeMillis()
             cachedPkg = root.packageName?.toString() ?: ""
