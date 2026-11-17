@@ -100,7 +100,7 @@ jobs:
             echo "- SHA256：\`$FP\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Build debug APK
+      - name: Build release APK
         env:
           # 打 tag 出正式包时用 tag 名；平时每次构建都带 run_number。
           # run_number 必须进 versionName —— 否则手机上几个包版本号长得一样，
@@ -109,10 +109,15 @@ jobs:
           # versionCode 单调递增是关键：相同 versionCode 的包，系统只提示
           # 「已安装相同版本」而不当作升级，用户会以为装不上。
           APP_VERSION_CODE: ${{ github.run_number }}
-        # tee 存一份日志，供失败时提取错误；pipefail 保证 gradle 的退出码不被管道吞掉。
+        # 出 release 而不是 debug：debug 包带 android:debuggable，
+        # 别人装上等于给了一个可挂调试器的进程，也没必要。release 更小、
+        # 更接近"正常应用"。混淆是关的（isMinifyEnabled = false），
+        # 所以崩溃栈依然可读，不影响排查。
+        #
+        # tee 存一份日志，供失败时提取错误；pipefail 保证 gradle 退出码不被管道吞掉。
         run: |
           set -o pipefail
-          gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/build.log
+          gradle assembleRelease --no-daemon --stacktrace 2>&1 | tee /tmp/build.log
 
       # 把编译器真正的错误（e: 开头那几行）提到页面顶部。
       # 不加这一步，失败时要在几千行日志里往上翻，而且很容易翻错段落 ——
@@ -135,7 +140,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: autoreply-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
   release:

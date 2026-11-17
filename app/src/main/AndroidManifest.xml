@@ -15,6 +15,12 @@
         <!-- 抖音 -->
         <package android:name="com.ss.android.ugc.aweme" />
         <package android:name="com.ss.android.ugc.aweme.lite" />
+        <!-- moyi -->
+        <package android:name="com.netease.moyi" />
+        <!-- 同城夜聊 -->
+        <package android:name="com.huwei.fox" />
+        <!-- 他趣 -->
+        <package android:name="com.xingjiabi.shengsheng" />
     </queries>
 
     <!--
