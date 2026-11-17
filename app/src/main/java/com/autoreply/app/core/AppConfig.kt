@@ -85,6 +85,32 @@ class AppConfig(context: Context) {
         get() = sp.getString(KEY_LLM_PROXY, "") ?: ""
         set(value) = sp.edit().putString(KEY_LLM_PROXY, value.trim()).apply()
 
+    /** 模型调用累计次数。只增不清 —— 用来回答"这么测下去要花多少钱"。 */
+    val llmCalls: Int
+        get() = sp.getInt(KEY_LLM_CALLS, 0)
+
+    /** 累计输入 token（含重写那几次）。 */
+    val llmTokensIn: Int
+        get() = sp.getInt(KEY_LLM_TOKENS_IN, 0)
+
+    /** 累计输出 token。 */
+    val llmTokensOut: Int
+        get() = sp.getInt(KEY_LLM_TOKENS_OUT, 0)
+
+    /**
+     * 记一次用量。
+     *
+     * 数值来自服务端返回的 usage，不是估算 —— 估算在"到底花多少"这件事上
+     * 误差能有一倍，而免费额度/余额是实打实扣的。
+     */
+    fun recordUsage(inputTokens: Int, outputTokens: Int) {
+        sp.edit()
+            .putInt(KEY_LLM_CALLS, llmCalls + 1)
+            .putInt(KEY_LLM_TOKENS_IN, llmTokensIn + inputTokens)
+            .putInt(KEY_LLM_TOKENS_OUT, llmTokensOut + outputTokens)
+            .apply()
+    }
+
     var persona: String
         get() = sp.getString(KEY_PERSONA, DEFAULT_PERSONA) ?: DEFAULT_PERSONA
         set(value) = sp.edit().putString(KEY_PERSONA, value).apply()
@@ -134,6 +160,9 @@ class AppConfig(context: Context) {
         private const val KEY_LLM_KEY = "llm_key"
         private const val KEY_LLM_MODEL = "llm_model"
         private const val KEY_LLM_PROXY = "llm_proxy"
+        private const val KEY_LLM_CALLS = "llm_calls"
+        private const val KEY_LLM_TOKENS_IN = "llm_tok_in"
+        private const val KEY_LLM_TOKENS_OUT = "llm_tok_out"
         private const val KEY_PERSONA = "persona"
         private const val KEY_PERSONA_JSON = "persona_json"
         private const val KEY_BANNED = "banned"

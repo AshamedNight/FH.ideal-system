@@ -190,6 +190,8 @@ class MainActivity : Activity() {
                     is ReplyEngine.Result.Draft -> {
                         val sink = AccessibilityReplySink(service, profile)
                         val fill = sink.fill(result.text)
+                        // 假模型不计入用量，否则统计会被"测管道"的那几次污染
+                        if (!mockMode) config.recordUsage(result.inputTokens, result.outputTokens)
                         output.text = buildString {
                             // 假模型必须标出来，否则会被当成"模型就写成这样"，
                             // 转头去调人设 —— 那是白费功夫。
@@ -203,6 +205,13 @@ class MainActivity : Activity() {
                                     is FillResult.Mismatch -> "回读不一致 — ${fill.actual}"
                                 }
                             )
+                            if (!mockMode) {
+                                // 真实用量：估算在"到底花多少钱"上能差一倍，
+                                // 而余额是实扣的，所以只认服务端返回的 usage。
+                                append("\n\n本次：输入 ${result.inputTokens} / 输出 ${result.outputTokens} token")
+                                append("（重写计入同一条）")
+                                append("\n累计：${config.llmCalls} 次调用，输入 ${config.llmTokensIn} / 输出 ${config.llmTokensOut} token")
+                            }
                         }
                     }
                 }

@@ -32,7 +32,13 @@ class ReplyEngine(
 ) {
 
     sealed class Result {
-        data class Draft(val text: String, val attempts: Int) : Result()
+        /** [inputTokens]/[outputTokens] 是这一条**累计**（重写也算钱），网关不返回时为 0。 */
+        data class Draft(
+            val text: String,
+            val attempts: Int,
+            val inputTokens: Int = 0,
+            val outputTokens: Int = 0,
+        ) : Result()
         /** 不该回：要么没有对方的消息，要么触了输入侧边界。 */
         data class Blocked(val reason: String) : Result()
         data class Failed(val reason: String) : Result()
@@ -60,6 +66,8 @@ class ReplyEngine(
         val client = LlmClient(config.llmBaseUrl, config.llmApiKey, config.llmModel, config.llmProxy)
 
         var lastHit = ""
+        var inTokens = 0
+        var outTokens = 0
         for (attempt in 1..MAX_ATTEMPTS) {
             val user = if (attempt == 1) {
                 baseUser
@@ -68,18 +76,21 @@ class ReplyEngine(
                     "上一次用了「$lastHit」这种不该出现的表达。换一种说法重写，不要重复同样的内容。"
             }
 
-            val text = when (val r = client.chat(system, user)) {
-                is LlmClient.Result.Err -> return Result.Failed(r.reason)
-                is LlmClient.Result.Ok -> clear(r.text)
-            }
+            val resp = client.chat(system, user)
+            if (resp is LlmClient.Result.Err) return Result.Failed(resp.reason)
+            val ok = resp as LlmClient.Result.Ok
+            // 重写也要算钱，所以累加而不是覆盖
+            inTokens += ok.inputTokens
+            outTokens += ok.outputTokens
 
+            val text = clear(ok.text)
             if (text.isEmpty()) {
                 lastHit = "空回复"
                 continue
             }
 
             val hit = (persona.tabooWords + userBanned).firstOrNull { text.contains(it) }
-            if (hit == null) return Result.Draft(text, attempt)
+            if (hit == null) return Result.Draft(text, attempt, inTokens, outTokens)
             lastHit = hit
         }
 
@@ -119,14 +130,17 @@ class ReplyEngine(
         if (persona.fewShot.isNotEmpty()) {
             appendLine()
             appendLine("# 你平时说话的样例（模仿语感，不要照抄内容）")
-            // 全部给，而且每次打乱顺序。
+            // 全部给，**顺序固定**。
             //
             // 原先是 take(8)：用户填了 15 条，只有前 8 条生效 ——
             // 排在后面的（「加个微信吧」「有对象吗」）一次都用不上，
             // 而按顺序补充样例几乎是所有人都会踩的坑。
-            // 固定顺序还有个副作用：模型被开头几条的句式带偏，输出越来越像。
-            // 15 条约 300 token，这点成本可以忽略。
-            persona.fewShot.shuffled().forEach {
+            //
+            // 曾经改成 shuffled() 想让语气别太死板，后来撤回：
+            // 大模型的上下文缓存是**按前缀匹配**的，system 提示词只要变一个字，
+            // 整段都得按未命中重算 —— 打乱顺序等于每次主动放弃缓存，
+            // 输入成本翻好几倍。语气的变化交给 temperature 就够。
+            persona.fewShot.forEach {
                 appendLine("对方：${it.q}")
                 appendLine("你：${it.a}")
             }

@@ -35,7 +35,8 @@ class LlmClient(
 ) {
 
     sealed class Result {
-        data class Ok(val text: String) : Result()
+        /** [inputTokens]/[outputTokens] 来自服务端返回的 usage，网关不返回时为 0。 */
+        data class Ok(val text: String, val inputTokens: Int = 0, val outputTokens: Int = 0) : Result()
         data class Err(val reason: String) : Result()
     }
 
@@ -95,7 +96,8 @@ class LlmClient(
                 return Result.Err("HTTP $code（请求了 $url）：${raw.take(180)}")
             }
 
-            val text = JSONObject(raw)
+            val json = JSONObject(raw)
+            val text = json
                 .optJSONArray("choices")
                 ?.optJSONObject(0)
                 ?.optJSONObject("message")
@@ -103,7 +105,14 @@ class LlmClient(
                 ?.trim()
                 .orEmpty()
 
-            if (text.isEmpty()) Result.Err("返回里没有 content") else Result.Ok(text)
+            // 用量。OpenAI 兼容接口都会带 usage，带上它才能回答
+            // "这么测下去要花多少钱" —— 靠估算永远不如看真实数字。
+            // 部分自建网关不返回 usage，那就记 0，不编造。
+            val usage = json.optJSONObject("usage")
+            val inTok = usage?.optInt("prompt_tokens", 0) ?: 0
+            val outTok = usage?.optInt("completion_tokens", 0) ?: 0
+
+            if (text.isEmpty()) Result.Err("返回里没有 content") else Result.Ok(text, inTok, outTok)
         } catch (e: Exception) {
             Result.Err("请求失败：${e.javaClass.simpleName} ${e.message.orEmpty().take(120)}")
         } finally {
