@@ -101,10 +101,30 @@ class CaptureService : AccessibilityService() {
     /** 自动检查的节流。读消息要遍历树，不必每个事件都读。 */
     private var lastAutoCheckElapsed: Long = 0L
 
-    /** 最近一次自动处理的结果，首页会显示这一句。 */
+    /** 最近一次自动处理的结果，首页会显示。 */
     @Volatile
     var lastAutoNote: String = ""
         private set
+
+    /**
+     * 最近几条自动处理的记录（新的在前）。
+     *
+     * 只留一条时，用户反复说"卡住了"，但界面上只有最后那句话 ——
+     * 而"卡住"恰恰是一个过程：读了、判了、填了、然后就没了。
+     * 留 4 条就能看出它停在哪一步。
+     */
+    private val autoLog = ArrayDeque<String>(5)
+
+    @Synchronized
+    fun recentNotes(): List<String> = autoLog.toList()
+
+    @Synchronized
+    private fun logAuto(note: String) {
+        val hhmm = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        autoLog.addFirst("[$hhmm] $note")
+        while (autoLog.size > 4) autoLog.removeLast()
+        lastAutoNote = autoLog.first()
+    }
 
     /**
      * 监听器要留引用：`removeListener { }` 传的是个新 lambda，
@@ -169,8 +189,7 @@ class CaptureService : AccessibilityService() {
         autoStartedAt = SystemClock.elapsedRealtime()
         ReplyRunner(this, cfg).runOnce(notifyText) { result ->
             autoRunning = false
-            val hhmm = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-            lastAutoNote = "[$hhmm] ${result.note}"
+            logAuto(result.note)
             onDone?.invoke()
         }
     }
@@ -198,7 +217,7 @@ class CaptureService : AccessibilityService() {
         if (batchActive) return
         batchActive = true
         batchLeft = count
-        lastAutoNote = "连点开始：$count 个，正在切到目标应用…"
+        logAuto("连点开始：$count 个，正在切到目标应用…")
 
         // **必须先把目标应用拉到前台。**
         // 无障碍能拿到目标 App 的节点（它在 windows 列表里，哪怕是分屏的另一半），
@@ -231,7 +250,7 @@ class CaptureService : AccessibilityService() {
         batchWatchdog = null
         // 没发完的断句一起丢掉：停下来了就不该再往任何会话里填东西
         com.autoreply.app.core.guard.DraftQueue.clear()
-        lastAutoNote = note
+        logAuto(note)
     }
 
     private fun batchStep() {
@@ -245,7 +264,7 @@ class CaptureService : AccessibilityService() {
             // 回调丢了就强制复位，别让整条连点死在这里
             if (SystemClock.elapsedRealtime() - autoStartedAt > 40_000L) {
                 autoRunning = false
-                lastAutoNote = "上一步超时，已强制复位"
+                logAuto("上一步超时，已强制复位")
             } else {
                 return
             }
@@ -259,7 +278,7 @@ class CaptureService : AccessibilityService() {
                 stopBatch("连点停止：切不回目标应用（系统可能限制了后台启动）")
                 return
             }
-            lastAutoNote = "本应用在前台，点击不会生效 —— 正在切回目标应用"
+            logAuto("本应用在前台，点击不会生效 —— 正在切回目标应用")
             bringTargetToFront()
             mainHandler.postDelayed({ batchStep() }, 1500L)
             return
@@ -345,7 +364,7 @@ class CaptureService : AccessibilityService() {
     private fun fillNextSegment(root: AccessibilityNodeInfo, profile: PlatformProfile): Boolean {
         val next = com.autoreply.app.core.guard.DraftQueue.poll() ?: return false
         com.autoreply.app.platform.TextWriter.write(this, profile, next)
-        lastAutoNote = "上一句已发，接着填：${next.take(16)}"
+        logAuto("上一句已发，接着填：${next.take(16)}")
         // 新的一段等于重新开始等发送，看门狗要重新计时
         if (batchActive) armBatchWatchdog()
         return true

@@ -661,9 +661,10 @@ class MainActivity : Activity() {
             else -> getString(R.string.level_1)
         }
 
-        // 自动处理的结果只写在服务里（它跑在后台，界面上没人看），
-        // 回到首页时把最近一次带出来 —— 否则用户根本不知道刚才发生了什么。
-        val auto = CaptureService.instance?.lastAutoNote.orEmpty()
+        // 自动处理的记录写在服务里（它跑在后台，界面上没人看），
+        // 回到首页时带出最近几条 —— 只留一条时用户反复说"卡住了"，
+        // 而界面上只有最后那句，看不出它停在哪一步。留 4 条就能看出来。
+        val notes = CaptureService.instance?.recentNotes().orEmpty()
         val imeLine = if (TextWriter.isOurImeSelected(this)) {
             "输入法：AutoReply（可写入被隐藏的输入框）"
         } else {
@@ -691,7 +692,10 @@ class MainActivity : Activity() {
                 append(CaptureService.instance?.batchLeft ?: 0)
                 append(" 个")
             }
-            if (auto.isNotEmpty()) append("\n最近自动：").append(auto)
+            if (notes.isNotEmpty()) {
+                append("\n最近处理：")
+                notes.forEach { append("\n  ").append(it) }
+            }
         }
     }
 
