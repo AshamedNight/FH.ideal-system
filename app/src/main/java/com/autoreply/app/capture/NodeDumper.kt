@@ -26,7 +26,39 @@ object NodeDumper {
         if (counter[0] >= MAX_NODES) {
             sb.append("\n…（节点超过 ").append(MAX_NODES).append(" 个，已截断）")
         }
+        appendFocus(root, sb)
         return sb.toString()
+    }
+
+    /**
+     * 单独把「当前输入焦点」打出来。
+     *
+     * 意义在于：输入框经常对无障碍不可见（自绘、或设了 importantForAccessibility=no），
+     * 常规遍历里一个 edit 节点都没有 —— 但屏幕上明明能打字。
+     * 这时 findFocus 是唯一可能拿到它的途径，所以它的输出要单独看。
+     *
+     * 三种情况：
+     *   有焦点 + editable=true  → 能填
+     *   有焦点 + editable=false → 拿到的是外层容器，填字会静默失败
+     *   无焦点                  → 输入框对无障碍完全不可见，只能靠剪贴板粘贴
+     */
+    private fun appendFocus(root: AccessibilityNodeInfo, sb: StringBuilder) {
+        sb.append("\n# ---- 输入焦点 ----\n")
+        val f = try {
+            root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        } catch (_: Exception) {
+            null
+        }
+        if (f == null) {
+            sb.append("# 无（输入框对无障碍不可见，或当前没有焦点）\n")
+            return
+        }
+        val cls = f.className?.toString()?.substringAfterLast('.') ?: "?"
+        val id = f.viewIdResourceName?.substringAfterLast('/').orEmpty()
+        sb.append("# ").append(cls)
+        if (id.isNotEmpty()) sb.append(" #").append(id)
+        sb.append(" editable=").append(f.isEditable)
+        sb.append(" text=\"").append(clip(f.text?.toString().orEmpty())).append("\"\n")
     }
 
     private fun appendNode(

@@ -70,6 +70,15 @@ object NodeQuery {
                 if (inner.isNotEmpty()) return inner.first()
             }
         }
+        // 最后一道兜底：输入框常常对无障碍不可见（自绘，或 importantForAccessibility=no），
+        // 常规遍历里一个 edit 节点都没有，但屏幕上确实能打字。
+        // 这时"当前输入焦点"往往还拿得到 —— 用户点开过输入框就说明焦点在那儿。
+        val focused = try {
+            root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        } catch (_: Exception) {
+            null
+        }
+        if (focused != null && focused.isEditable) return focused
         return null
     }
 

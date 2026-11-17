@@ -190,6 +190,14 @@ class MainActivity : Activity() {
                     is ReplyEngine.Result.Draft -> {
                         val sink = AccessibilityReplySink(service, profile)
                         val fill = sink.fill(result.text)
+                        // 填不进去时不能只报一句"失败" —— 把草稿放进剪贴板，
+                        // 长按输入框粘贴即可。这是"输入框对无障碍不可见"的平台上
+                        // 唯一可行的路，而且比自动填更安全：全程零自动点击。
+                        val copied = if (fill is FillResult.Ok) {
+                            false
+                        } else {
+                            runCatching { sink.copyToClipboard(result.text) }.isSuccess
+                        }
                         // 假模型不计入用量，否则统计会被"测管道"的那几次污染
                         if (!mockMode) config.recordUsage(result.inputTokens, result.outputTokens)
                         output.text = buildString {
@@ -198,11 +206,12 @@ class MainActivity : Activity() {
                             append(if (mockMode) "草稿（本地假模型，非真实生成）：\n" else "草稿（第 ${result.attempts} 次生成）：\n")
                             append(result.text)
                             append("\n\n填入：")
+                            val tail = if (copied) "\n已复制到剪贴板：点一下输入框 → 长按 → 粘贴" else ""
                             append(
                                 when (fill) {
                                     is FillResult.Ok -> "成功，已写入输入框（未发送）"
-                                    is FillResult.Unavailable -> "失败 — ${fill.reason}"
-                                    is FillResult.Mismatch -> "回读不一致 — ${fill.actual}"
+                                    is FillResult.Unavailable -> "失败 — ${fill.reason}$tail"
+                                    is FillResult.Mismatch -> "回读不一致 — ${fill.actual}$tail"
                                 }
                             )
                             if (!mockMode) {
