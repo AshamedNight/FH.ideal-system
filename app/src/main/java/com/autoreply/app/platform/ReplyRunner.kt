@@ -7,6 +7,7 @@ import com.autoreply.app.capture.CaptureService
 import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.guard.ReplyDedup
 import com.autoreply.app.core.guard.ReplyFlow
+import com.autoreply.app.core.guard.SentTracker
 import com.autoreply.app.core.llm.Turn
 
 /**
@@ -126,7 +127,12 @@ class ReplyRunner(
                     runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
                 }
                 // 只有真进了输入框才算"处理过"：排队和复制都还要用户再动一下手
-                if (write.written) dedup.mark(peer, messageText, now)
+                if (write.written) {
+                    dedup.mark(peer, messageText, now)
+                    // 记下"已填、待确认发出"。之后消息列表里只要出现这条，
+                    // 就说明用户点了发送 —— 那时才计一次平台配额。
+                    SentTracker(service).markPending(peer, outcome.text, now)
+                }
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
                 val note = if (copied) "${write.note}（草稿已复制到剪贴板）" else write.note

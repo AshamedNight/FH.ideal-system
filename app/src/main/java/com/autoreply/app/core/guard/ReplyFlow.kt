@@ -179,8 +179,9 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
             }
         }
 
-        // 生成过一次就算消耗：无论后面填不填，模型调用和判断都发生了
-        pacer.recordAction(now)
+        // 生成本身不记入平台配额 —— 配额盯的是"真发出去几条"，
+        // 由 SentTracker 在确认发送时调 PacerGuard.recordSent()。
+        // 精力仍然在这里扣：那是"我打了多少字"的疲劳，和对外行为无关。
         energy.consume(now)
 
         // ---- 5. 这句话说错代价大不大 ----

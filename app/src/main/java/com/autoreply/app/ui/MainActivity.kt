@@ -14,8 +14,10 @@ import android.widget.Toast
 import com.autoreply.app.R
 import com.autoreply.app.capture.CaptureService
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.core.guard.PacerGuard
 import com.autoreply.app.core.guard.ReplyDedup
 import com.autoreply.app.core.guard.ReplyFlow
+import com.autoreply.app.core.guard.SentTracker
 import com.autoreply.app.core.llm.ReplyEngine
 import com.autoreply.app.core.llm.Turn
 import com.autoreply.app.core.persona.PersonaLoader
@@ -184,6 +186,13 @@ class MainActivity : Activity() {
         // 只按文本去重会把第二个会话直接锁死（这个坑踩过）。
         val now = System.currentTimeMillis()
         val peer = NodeQuery.peerName(root, profile)
+
+        // 先确认上一份草稿到底发出去没有。发出去了才计一次平台配额 ——
+        // 生成不算、填进去也不算，对方真收到才算。
+        if (SentTracker(this).confirmIfSent(messages, peer, now)) {
+            PacerGuard(this, config).recordSent(now)
+        }
+
         val dedup = ReplyDedup(this)
         if (dedup.isDuplicate(peer, lastOther.text, now)) {
             val who = peer.ifEmpty { "这个会话" }
@@ -241,7 +250,11 @@ class MainActivity : Activity() {
                             runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
                         }
                         // 只有真进了输入框才记"已处理"
-                        if (write.written) dedup.mark(peer, lastOther.text, now)
+                        if (write.written) {
+                            dedup.mark(peer, lastOther.text, now)
+                            // 记下"已填、待确认发出"：消息列表里出现这条时才计配额
+                            SentTracker(this@MainActivity).markPending(peer, outcome.text, now)
+                        }
                         if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
                         output.text = buildString {
@@ -606,9 +619,14 @@ class MainActivity : Activity() {
         } else {
             "输入法：未切换（输入框不可见的平台会填不进去）"
         }
+        // 只统计"对方真收到"的条数：生成和填字都不算，
+        // 否则反复调人设试十次就把额度用光了，而对方一条都没收到。
+        val ps = PacerGuard(this, config).status()
+        val sendLine = "已发 ${ps.usedThisHour}/${ps.hourlyCap} 条 · 连续 ${ps.burstCount}/${ps.burstLimit}"
         statusLevel.text = buildString {
             append(statusLevel.text)
             append('\n').append(imeLine)
+            append('\n').append(sendLine)
             if (auto.isNotEmpty()) append("\n最近自动：").append(auto)
         }
     }

@@ -67,8 +67,14 @@ class PacerGuard(context: Context, private val config: AppConfig) {
         return Decision.Allow
     }
 
-    /** 每次真正执行完一个动作（读+填，不含发送）后调用。 */
-    fun recordAction(now: Long = System.currentTimeMillis()) {
+    /**
+     * 确认一条**真的发出去了**之后调用（不是"生成了一次"）。
+     *
+     * 这个区别很关键：护栏盯的是对外行为。生成十次一条没发，平台什么也看不到；
+     * 生成一次发出去，平台就多一条消息。按"生成次数"限流会让护栏失真 ——
+     * 反复调人设试十次就把额度用光了，而对方一条都没收到。
+     */
+    fun recordSent(now: Long = System.currentTimeMillis()) {
         rollHourIfNeeded(now)
         sp.edit().putInt(KEY_USED, sp.getInt(KEY_USED, 0) + 1).apply()
 
