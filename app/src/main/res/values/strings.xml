@@ -5,6 +5,8 @@
 
     <string name="service_label">AutoReply 界面读取</string>
     <string name="service_notify_label">AutoReply 消息通知读取</string>
+    <string name="ime_label">AutoReply 输入</string>
+    <string name="ime_subtype_label">AutoReply 写入通道</string>
     <string name="accessibility_desc">在你开启自动回复后，读取当前聊天界面的消息内容并填入回复草稿。程序不会替你点发送，草稿是否发出始终由你决定。</string>
 
     <string name="status_service_off">读屏服务：未开启</string>

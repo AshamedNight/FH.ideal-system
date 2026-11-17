@@ -1,6 +1,7 @@
 package com.autoreply.app.ui
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
 import android.view.ViewGroup
@@ -81,6 +82,25 @@ class SettingsActivity : Activity() {
         root.addView(multi("bannedWords", config.bannedWords, 5))
         root.addView(note("一行一个词或短语。命中的草稿会被丢弃并重新生成，两次仍命中的话只显示给你看，不填入。"))
         root.addView(field("maxReplyChars", "回复最长字数", config.maxReplyChars.toString(), InputType.TYPE_CLASS_NUMBER))
+
+        root.addView(section("输入法（可选，但某些平台必须）"))
+        root.addView(Button(this).apply {
+            text = "去切换默认输入法"
+            setOnClickListener {
+                // 直接跳到系统输入法设置页。没有公开 API 能"自动切"，
+                // 那是 WRITE_SECURE_SETTINGS 才能做的事，普通 App 做不到。
+                runCatching {
+                    startActivity(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS))
+                }.onFailure {
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        "这台机器打不开输入法设置，手动去 设置 → 语言和输入法",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        })
+        root.addView(note("只有「输入框对无障碍不可见」的平台才需要它（同城夜聊这类）。抖音、moyi 不需要。\n切过去之后，AutoReply 的草稿会通过输入法上屏 —— 和真键盘打字是同一条通道。\n平时想正常打字，用键盘上的地球图标即可切回你自己的输入法。"))
 
         root.addView(Button(this).apply {
             text = "保存"

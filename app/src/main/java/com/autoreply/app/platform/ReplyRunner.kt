@@ -113,22 +113,19 @@ class ReplyRunner(
 
         when (outcome) {
             is ReplyFlow.Outcome.Fill -> {
-                val fill = sink.fill(outcome.text)
-                val copied = if (fill is FillResult.Ok) {
+                // 两条通道按顺序试：无障碍 → 输入法 → 复制到剪贴板
+                val write = TextWriter.write(service, profile, outcome.text)
+                val copied = if (write.written || write.pending) {
                     false
                 } else {
                     runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
                 }
-                // 只有真填进去才算"处理过"：填失败了用户还要自己动手
-                if (fill is FillResult.Ok) dedup.mark(messageText, now)
+                // 只有真进了输入框才算"处理过"：排队和复制都还要用户再动一下手
+                if (write.written) dedup.mark(messageText, now)
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
-                val note = when (fill) {
-                    is FillResult.Ok -> "草稿已填好，点发送即可"
-                    is FillResult.Unavailable -> if (copied) "填不进去，草稿已复制到剪贴板" else "填不进去：${fill.reason}"
-                    is FillResult.Mismatch -> if (copied) "回读不一致，草稿已复制" else "回读不一致：${fill.actual}"
-                }
-                finish(trace, outcome.text, note, fill is FillResult.Ok, copied, onDone)
+                val note = if (copied) "${write.note}（草稿已复制到剪贴板）" else write.note
+                finish(trace, outcome.text, note, write.written, copied, onDone)
             }
 
             is ReplyFlow.Outcome.Hold -> {

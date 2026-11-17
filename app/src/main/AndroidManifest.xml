@@ -79,6 +79,29 @@
             </intent-filter>
         </service>
 
+        <!--
+          输入法。存在的唯一理由是「输入框对无障碍不可见」的平台
+          （同城夜聊那种把 EditText 从无障碍树里摘掉的 App）。
+
+          它和读屏是两条不同的通道：
+            读屏 → 走无障碍树 → 树里没有输入框就写不进去
+            输入法 → 走 InputConnection → 只要有焦点就能上屏
+
+          所以不是"更强的读屏"，而是另一条路。代价是要占用默认输入法。
+        -->
+        <service
+            android:name=".ime.AutoReplyImeService"
+            android:exported="true"
+            android:label="@string/ime_label"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+
     </application>
 
 </manifest>

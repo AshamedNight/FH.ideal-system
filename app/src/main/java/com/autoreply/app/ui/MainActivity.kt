@@ -23,6 +23,7 @@ import com.autoreply.app.platform.AccessibilityReplySink
 import com.autoreply.app.platform.FillResult
 import com.autoreply.app.platform.NodeQuery
 import com.autoreply.app.platform.Profiles
+import com.autoreply.app.platform.TextWriter
 import kotlin.random.Random
 
 /**
@@ -222,33 +223,25 @@ class MainActivity : Activity() {
                 when (outcome) {
                     is ReplyFlow.Outcome.Fill -> {
                         val sink = AccessibilityReplySink(service, profile)
-                        val fill = sink.fill(outcome.text)
-                        // 填不进去时把草稿放进剪贴板：长按粘贴即可。
-                        // 这是"输入框对无障碍不可见"的平台上唯一可行的路，
-                        // 而且比自动填更安全 —— 全程零自动点击。
-                        val copied = if (fill is FillResult.Ok) {
+                        // 两条通道：无障碍优先，失败自动落到输入法
+                        val write = TextWriter.write(service, profile, outcome.text)
+                        val copied = if (write.written || write.pending) {
                             false
                         } else {
                             runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
                         }
-                        // 只有真填进去才记"已处理"：填失败了用户还要自己动手，
-                        // 不该把这条消息标成处理过。
-                        if (fill is FillResult.Ok) dedup.mark(lastOther.text, now)
+                        // 只有真进了输入框才记"已处理"
+                        if (write.written) dedup.mark(lastOther.text, now)
                         if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
                         output.text = buildString {
                             append(head)
                             append("\n草稿：").append(outcome.text)
-                            append("\n\n填入：")
-                            val tail = if (copied) "\n已复制到剪贴板：点一下输入框 → 长按 → 粘贴" else ""
-                            append(
-                                when (fill) {
-                                    is FillResult.Ok -> "成功，已写入输入框（未发送）"
-                                    is FillResult.Unavailable -> "失败 — ${fill.reason}$tail"
-                                    is FillResult.Mismatch -> "回读不一致 — ${fill.actual}$tail"
-                                }
-                            )
-                            if (fill !is FillResult.Ok) {
+                            append("\n\n填入：").append(write.note)
+                            if (copied) {
+                                append("\n已复制到剪贴板：点一下输入框 → 长按 → 粘贴")
+                            }
+                            if (!write.written && !write.pending) {
                                 val diagRoot = service.targetRoot() ?: root
                                 append("\n\n").append(NodeQuery.diagnoseInput(diagRoot, profile))
                             }
@@ -598,8 +591,15 @@ class MainActivity : Activity() {
         // 自动处理的结果只写在服务里（它跑在后台，界面上没人看），
         // 回到首页时把最近一次带出来 —— 否则用户根本不知道刚才发生了什么。
         val auto = CaptureService.instance?.lastAutoNote.orEmpty()
-        if (auto.isNotEmpty()) {
-            statusLevel.text = statusLevel.text.toString() + "\n最近自动：" + auto
+        val imeLine = if (TextWriter.isOurImeSelected(this)) {
+            "输入法：AutoReply（可写入被隐藏的输入框）"
+        } else {
+            "输入法：未切换（输入框不可见的平台会填不进去）"
+        }
+        statusLevel.text = buildString {
+            append(statusLevel.text)
+            append('\n').append(imeLine)
+            if (auto.isNotEmpty()) append("\n最近自动：").append(auto)
         }
     }
 
