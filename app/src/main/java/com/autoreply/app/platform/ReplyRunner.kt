@@ -147,10 +147,12 @@ class ReplyRunner(
                 // 只要没真写进去，就把草稿放剪贴板兜底 ——
                 // 包括"排队中"的情况：排队可能因为超时被丢弃，
                 // 那时用户手里至少还有一份可以粘。
+                // 剪贴板也只放**第一段**。整段塞进去的话，用户粘一次就发完了，
+                // 后面几段就再也没机会分开说 —— 而"分两条发"正是要的效果。
                 val copied = if (write.written) {
                     false
                 } else {
-                    runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
+                    runCatching { sink.copyToClipboard(parts.first()) }.isSuccess
                 }
                 // 只有真进了输入框才算"处理过"：排队和复制都还要用户再动一下手
                 if (write.written) {
@@ -167,6 +169,8 @@ class ReplyRunner(
                     ""
                 }
                 val note = when {
+                    copied && parts.size > 1 ->
+                        "${write.note}（已复制第 1 段，剩下 ${parts.size - 1} 段发完自动复制）"
                     copied -> "${write.note}（草稿已复制到剪贴板）"
                     else -> write.note + segHint
                 }

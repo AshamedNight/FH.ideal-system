@@ -257,7 +257,9 @@ class MainActivity : Activity() {
                         val copied = if (write.written || write.pending) {
                             false
                         } else {
-                            runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
+                            // 只放第一段：整段塞进剪贴板，用户粘一次就发完了，
+                            // 分段就没意义了
+                            runCatching { sink.copyToClipboard(parts.first()) }.isSuccess
                         }
                         // 只有真进了输入框才记"已处理"
                         if (write.written) {

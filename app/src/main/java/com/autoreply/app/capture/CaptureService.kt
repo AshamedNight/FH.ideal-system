@@ -360,11 +360,12 @@ class CaptureService : AccessibilityService() {
         // 否则会把 A 会话的第二句发给 B
         com.autoreply.app.core.guard.DraftQueue.clear()
 
-        // 等会话渲染完再读。太短会读到上一个会话的残留节点
+        // 等会话渲染完再读。太短会读到上一个会话的残留节点，
+        // 800~1200ms 是实测能稳定读到新会话内容的区间。
         mainHandler.postDelayed({
             if (!batchActive) return@postDelayed
             runAuto(null) { armBatchWatchdog() }
-        }, 1000L + kotlin.random.Random.nextLong(700))
+        }, 800L + kotlin.random.Random.nextLong(400))
     }
 
     /**
@@ -398,9 +399,9 @@ class CaptureService : AccessibilityService() {
         batchWatchdog = null
         batchLeft--
         // 等新气泡渲染完再切，否则读到的还是上一屏。
-        // 600~1300ms 而不是原来的 1200~2100：实测那个间隔让人明显感觉"卡了一下"，
-        // 而渲染其实几百毫秒就完成了。
-        mainHandler.postDelayed({ batchStep() }, 600L + kotlin.random.Random.nextLong(700))
+        // 400~800ms：发完一条就该往下走，用户不会等着看对方回不回。
+        // 仍然带随机 —— 固定 400 这种等距节奏本身就是特征。
+        mainHandler.postDelayed({ batchStep() }, 400L + kotlin.random.Random.nextLong(400))
     }
 
     /**
@@ -410,8 +411,16 @@ class CaptureService : AccessibilityService() {
      */
     private fun fillNextSegment(root: AccessibilityNodeInfo, profile: PlatformProfile): Boolean {
         val next = com.autoreply.app.core.guard.DraftQueue.poll() ?: return false
-        com.autoreply.app.platform.TextWriter.write(this, profile, next)
-        logAuto("上一句已发，接着填：${next.take(16)}")
+        val res = com.autoreply.app.platform.TextWriter.write(this, profile, next)
+        // 走哪条通道决定提示怎么写 —— 没有输入法时这段是放剪贴板，
+        // 用户需要知道"去粘一下"，而不是站在那儿等它自己出现在输入框里
+        logAuto(
+            when {
+                res.written -> "上一句已发，接着填：${next.take(16)}"
+                res.pending -> "上一句已发，已排队：${next.take(16)}"
+                else -> "上一句已发，下一段已复制到剪贴板：${next.take(16)}"
+            }
+        )
         // 新的一段等于重新开始等发送，看门狗要重新计时
         if (batchActive) armBatchWatchdog()
         return true
@@ -481,10 +490,15 @@ class CaptureService : AccessibilityService() {
         // 用户点开会话的那一刻就是这个时机，抓不到就只能等他再点。
         if (pendingHit != null) tryAutoReply()
 
-        // 界面驱动的自动触发。节流 900ms：读消息要遍历树，
+        // 界面驱动的自动触发。平时节流 900ms：读消息要遍历树，
         // 而列表滚动一次能发几十个事件，不节流会把主线程拖住。
+        //
+        // 但连点模式下（或还有断句没发完），"及时切下一个"比省这点 CPU 重要得多 ——
+        // 发完一条就该走，没人会在那儿等着对方回复。所以这时收到 350ms。
         val elapsed = SystemClock.elapsedRealtime()
-        if (elapsed - lastAutoCheckElapsed >= AUTO_CHECK_INTERVAL_MS) {
+        val urgent = batchActive || com.autoreply.app.core.guard.DraftQueue.size() > 0
+        val interval = if (urgent) 350L else AUTO_CHECK_INTERVAL_MS
+        if (elapsed - lastAutoCheckElapsed >= interval) {
             lastAutoCheckElapsed = elapsed
             maybeAutoReplyOnChange()
         }
