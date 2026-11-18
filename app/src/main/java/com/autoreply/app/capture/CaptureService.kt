@@ -252,6 +252,19 @@ class CaptureService : AccessibilityService() {
         lastFillAt = SystemClock.elapsedRealtime()
     }
 
+    /**
+     * 判定链说"先等等"时，把自动触发推迟到这个时刻之后。
+     *
+     * 不加这个的话，界面每变一次就重新判一次、又得一次"精力低，稍等"，
+     * 日志里连刷好几条「等 N 分钟再回」—— 看起来像卡死，其实是同一件事判了四次。
+     */
+    @Volatile
+    private var autoPostponedUntil = 0L
+
+    fun postponeAuto(ms: Long) {
+        autoPostponedUntil = SystemClock.elapsedRealtime() + ms.coerceAtLeast(0L)
+    }
+
     private var batchWatchdog: Runnable? = null
 
     /** 连续几次发现"本应用在前台"。用来避免切不回去时无限重试。 */
@@ -569,6 +582,8 @@ class CaptureService : AccessibilityService() {
      * 而且它比通知信息更全：通知只有一句摘要，这里能拿到整段对话。
      */
     private fun maybeAutoReplyOnChange() {
+        // 判定链刚说过"先等等" —— 到点之前别再判了
+        if (SystemClock.elapsedRealtime() < autoPostponedUntil) return
         val cfg = config ?: return
 
         val root = targetRoot() ?: return

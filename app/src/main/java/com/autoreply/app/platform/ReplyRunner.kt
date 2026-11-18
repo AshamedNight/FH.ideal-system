@@ -200,6 +200,19 @@ class ReplyRunner(
                     service.noteFill()
                     // 手动模式下也给"下一段"排个兜底（连点有自己的看门狗）
                     service.scheduleNextSegment()
+                } else {
+                    // **没写进输入框也要算"处理过"**。
+                    //
+                    // 之前只在 written 时 mark，剪贴板这条路径就完全不设防：
+                    // 界面每变一次 → 自动触发 → 重新生成 → 覆盖剪贴板。
+                    // 实测同一会话连着生成了 4 次（剪贴板里四条不同草稿，
+                    // 19:38:00 一秒内三条日志），用户根本不知道该粘哪一条。
+                    //
+                    // 交付方式不同（输入框 / 剪贴板 / 排队），
+                    // 但"这条消息已经被处理"这件事是一样的。
+                    dedup.mark(peer, messageText, now)
+                    // 同理，5 秒防抖也要生效，否则界面变化还会继续触发
+                    service.noteFill()
                 }
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
@@ -225,6 +238,9 @@ class ReplyRunner(
             }
 
             is ReplyFlow.Outcome.Wait -> {
+                // 记下"到点之前别再判了"。不这么做的话，界面每变一次就重新判一次，
+                // 又得一次"精力低，稍等"，日志里连刷四五条看起来像卡死。
+                service.postponeAuto(outcome.afterMs)
                 val minutes = (outcome.afterMs / 60_000L).coerceAtLeast(1L)
                 finish(trace, "", "等 ${minutes} 分钟再回：${outcome.reason}", false, false, onDone)
             }
