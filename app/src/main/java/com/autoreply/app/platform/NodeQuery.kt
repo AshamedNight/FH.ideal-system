@@ -2,6 +2,7 @@ package com.autoreply.app.platform
 
 import android.graphics.Rect
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 
 /**
@@ -9,6 +10,10 @@ import android.view.accessibility.AccessibilityNodeInfo
  * AccessibilityNodeInfo 在窗口切换后会失效，缓存它是崩溃的高发点。
  */
 object NodeQuery {
+
+    /** 上次把消息列表滚到底的时间。见 readMessages 里的 2 秒时间窗。 */
+    private var lastScrollAt = 0L
+
 
     private const val MAX_DEPTH = 24
 
@@ -107,6 +112,34 @@ object NodeQuery {
      */
     fun readMessages(root: AccessibilityNodeInfo, profile: PlatformProfile): List<ChatMessage> {
         if (profile.message.isEmpty()) return emptyList()
+
+        // 先把消息列表滚到底。
+        //
+        // RecyclerView 只给**可视区内**的子节点渲染有效坐标：滚出视野的消息
+        // 坐标会变成负高度（实测同城夜聊：[195,1970,514,1959]，bottom < top），
+        // 下面的 `r.height() <= 0` 会把它们当无效节点跳过。
+        //
+        // 后果不是"少读一条"，而是**读到的是更早的那条** —— 于是
+        // 「最后一条是不是对方发的」判断直接错掉。真机现象：
+        // 对方刚发了文字 + 语音，程序却说「最后一条不是对方发的」，不生成草稿。
+        //
+        // 已经在底部时 scrollForward 返回 false、界面不动，不用担心抖动。
+        //
+        // 加 2 秒时间窗：读消息被调得很频繁（判定、填入、连点各一次），
+        // 每次都滚会把"用户正在往上翻历史"硬拽回底部。
+        val nowElapsed = SystemClock.elapsedRealtime()
+        if (nowElapsed - lastScrollAt > 2_000L) {
+            lastScrollAt = nowElapsed
+            profile.messageList.firstOrNull()?.let { sel ->
+                val list = firstMatch(root, listOf(sel))
+                var guard = 0
+                while (guard++ < 4 &&
+                    list?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) == true
+                ) {
+                    // 一页一页滚到底；返回 false 就是到底了
+                }
+            }
+        }
 
         val scope = messageScope(root, profile)
         val rootRect = Rect()
