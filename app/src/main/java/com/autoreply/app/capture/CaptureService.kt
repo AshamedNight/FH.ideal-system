@@ -541,7 +541,10 @@ class CaptureService : AccessibilityService() {
         val next = com.autoreply.app.core.guard.DraftQueue.poll() ?: return false
         nextSegmentTask?.let { mainHandler.removeCallbacks(it) }
         nextSegmentTask = null
-        val res = com.autoreply.app.platform.TextWriter.write(this, profile, next)
+        // replaceExisting = true：上一段如果还挂在输入框里就先清掉再写
+        val res = com.autoreply.app.platform.TextWriter.write(
+            this, profile, next, replaceExisting = true,
+        )
         // 走哪条通道决定提示怎么写 —— 没有输入法时这段是放剪贴板，
         // 用户需要知道"去粘一下"，而不是站在那儿等它自己出现在输入框里
         logAuto(

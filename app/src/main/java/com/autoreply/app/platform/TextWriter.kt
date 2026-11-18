@@ -33,7 +33,16 @@ object TextWriter {
         val pending: Boolean = false,
     )
 
-    fun write(service: CaptureService, profile: PlatformProfile, text: String): Outcome {
+    /**
+     * @param replaceExisting 写入前先清空输入框。断句的第二段必须传 true ——
+     *   走输入法时 `commitText` 是插入不是覆盖，不清会变成两段粘一起。
+     */
+    fun write(
+        service: CaptureService,
+        profile: PlatformProfile,
+        text: String,
+        replaceExisting: Boolean = false,
+    ): Outcome {
         val sink = AccessibilityReplySink(service, profile)
         val fill = sink.fill(text)
         if (fill is FillResult.Ok) {
@@ -57,7 +66,7 @@ object TextWriter {
         val ime = AutoReplyImeService.instance
             ?: return Outcome(false, true, "输入法服务没在运行：去系统设置里重新勾选一次 AutoReply 输入法")
 
-        if (ime.commit(text)) {
+        if (ime.commit(text, replaceFirst = replaceExisting)) {
             return Outcome(true, true, "已通过输入法写入（未发送）")
         }
 

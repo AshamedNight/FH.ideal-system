@@ -198,13 +198,24 @@ class AutoReplyImeService : InputMethodService() {
      * 如果当前没有绑定输入框（`currentInputConnection` 为空），
      * 就只把文本挂起，等 `onStartInput` 时再写 —— 也就是等用户点输入框。
      */
-    fun commit(text: String): Boolean {
+    /**
+     * @param replaceFirst 先清空再写。
+     *
+     * 断句的第二段必须用它：`commitText` 是**在光标处插入**，不覆盖。
+     * 上一次那段如果还留在输入框里（App 没清、或者清了但没刷新），
+     * 直接 commit 就会变成「上一段 + 这一段」连在一起 ——
+     * 真机现象：输入框里出现「突然有点想认识你。在吗？」，但上面已经发过一条了。
+     */
+    fun commit(text: String, replaceFirst: Boolean = false): Boolean {
         val ic = currentInputConnection
         if (ic == null) {
             pendingText = text
             pendingAt = System.currentTimeMillis()
             return false
         }
+        // 只删光标两侧各 120 字符：草稿本来就短，
+        // 这个范围足够清掉上一段，又不会误删更早的对话内容
+        if (replaceFirst) ic.deleteSurroundingText(120, 120)
         ic.commitText(text, 1)
         pendingText = null
         verifyWritten(text)
