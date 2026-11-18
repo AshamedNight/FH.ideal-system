@@ -266,8 +266,13 @@ class MainActivity : Activity() {
                             dedup.mark(peer, lastOther.text, now)
                             // 记下"已填、待确认发出"：消息列表里出现这条时才计配额
                             SentTracker(this@MainActivity).markPending(peer, parts.first(), now)
+                            // 把"我现在发了几条"钉成基线 —— 否则新会话的第一条永远漏检
+                            SentTracker(this@MainActivity)
+                                .markBaseline(peer, messages.count { !it.fromOther })
                             // 填入会让界面变化，那个变化又会触发自动回复 —— 5 秒内跳过
                             service.noteFill()
+                            // 手动模式也给"下一段"排个兜底
+                            service.scheduleNextSegment()
                         }
                         if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 

@@ -454,6 +454,28 @@ class CaptureService : AccessibilityService() {
         mainHandler.postDelayed({ batchStep() }, 400L + kotlin.random.Random.nextLong(400))
     }
 
+    private var nextSegmentTask: Runnable? = null
+
+    /**
+     * 手动模式下的兜底：填入后 N 秒如果还没检测到发送，也把下一段填上。
+     *
+     * 连点模式有 [armBatchWatchdog] 兜底，但**手动点「生成并填入」时没有** ——
+     * 那时一旦漏检（比如列表刷新慢），第二段就永远不出现，用户只能自己再点一次。
+     * 这里给同样的兜底，只是时间更短（用户正盯着屏幕等）。
+     */
+    fun scheduleNextSegment() {
+        if (com.autoreply.app.core.guard.DraftQueue.size() == 0) return
+        if (batchActive) return // 连点有自己的看门狗，别重复
+        nextSegmentTask?.let { mainHandler.removeCallbacks(it) }
+        val task = Runnable {
+            val root = targetRoot() ?: return@Runnable
+            val profile = Profiles.forPackage(root.packageName?.toString() ?: "") ?: return@Runnable
+            fillNextSegment(root, profile)
+        }
+        nextSegmentTask = task
+        mainHandler.postDelayed(task, 12_000L)
+    }
+
     /**
      * 断句的下一段：填进去，不切会话。
      *
@@ -461,6 +483,8 @@ class CaptureService : AccessibilityService() {
      */
     private fun fillNextSegment(root: AccessibilityNodeInfo, profile: PlatformProfile): Boolean {
         val next = com.autoreply.app.core.guard.DraftQueue.poll() ?: return false
+        nextSegmentTask?.let { mainHandler.removeCallbacks(it) }
+        nextSegmentTask = null
         val res = com.autoreply.app.platform.TextWriter.write(this, profile, next)
         // 走哪条通道决定提示怎么写 —— 没有输入法时这段是放剪贴板，
         // 用户需要知道"去粘一下"，而不是站在那儿等它自己出现在输入框里

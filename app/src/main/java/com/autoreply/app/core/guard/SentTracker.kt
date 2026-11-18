@@ -142,6 +142,25 @@ class SentTracker(context: Context) {
     }
 
     /**
+     * 把「当前我已经发了几条」记为基线。
+     *
+     * **必须在填入草稿时调用**，这是修一个必然发生的漏检：
+     *
+     * 新会话里我一条都没发过 → `detectNewSent` 在 `lastSelf == null` 处直接返回，
+     * 基线一直是"未初始化"。等我发出第一条，它才第一次跑初始化分支、
+     * 把基线设成 1 —— 于是刚发的这条被当成"存量"，永远检测不到。
+     * 表现就是：填了草稿、你发了，但既不计已发数、也不填第二段。
+     *
+     * 在填入时先把基线钉在当前条数（通常是 0），发送后就变成 1 > 0，正常触发。
+     */
+    fun markBaseline(peer: String, selfCount: Int) {
+        sp.edit()
+            .putString(KEY_BASE_PEER, peer)
+            .putInt(KEY_BASE_COUNT, selfCount)
+            .apply()
+    }
+
+    /**
      * 检查消息列表里有没有「我发的那条」（只判断 pending 草稿的命运）。
      *
      * @return true 表示确认已经发出去了（并清掉 pending）

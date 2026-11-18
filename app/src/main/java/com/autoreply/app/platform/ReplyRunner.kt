@@ -127,7 +127,11 @@ class ReplyRunner(
                 )
                 val trace = flow.lastTrace
                 mainHandler.post {
-                    deliver(outcome, trace, profile, peer, lastOther.text, now, dedup, onDone)
+                    deliver(
+                        outcome, trace, profile, peer, lastOther.text, now, dedup,
+                        selfCount = messages.count { !it.fromOther },
+                        onDone = onDone,
+                    )
                 }
             } catch (e: Throwable) {
                 mainHandler.post {
@@ -150,6 +154,7 @@ class ReplyRunner(
         messageText: String,
         now: Long,
         dedup: ReplyDedup,
+        selfCount: Int,
         onDone: ((Result) -> Unit)?,
     ) {
         val sink = AccessibilityReplySink(service, profile)
@@ -179,9 +184,15 @@ class ReplyRunner(
                     // 记下"已填、待确认发出"。之后消息列表里只要出现这条，
                     // 就说明用户点了发送 —— 那时才计一次平台配额。
                     SentTracker(service).markPending(peer, parts.first(), now)
+                    // 把"我现在发了几条"钉成基线。不做这一步，新会话的**第一条**
+                    // 永远检测不到：基线未初始化时，发送后的第一次读取会被当成
+                    // "初始化"而不是"条数增加"。
+                    SentTracker(service).markBaseline(peer, selfCount)
                     // 填入会让界面变化，那个变化又会触发一次自动回复 ——
                     // 记一下时刻，让自动触发在这 5 秒内跳过
                     service.noteFill()
+                    // 手动模式下也给"下一段"排个兜底（连点有自己的看门狗）
+                    service.scheduleNextSegment()
                 }
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
