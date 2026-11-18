@@ -561,7 +561,10 @@ class CaptureService : AccessibilityService() {
         // 发完一条就该走，没人会在那儿等着对方回复。所以这时收到 350ms。
         val elapsed = SystemClock.elapsedRealtime()
         val urgent = batchActive || com.autoreply.app.core.guard.DraftQueue.size() > 0
-        val interval = if (urgent) 350L else AUTO_CHECK_INTERVAL_MS
+        // 200ms 而不是 350：断句的第二段要等"检测到发送 → 再填"，
+        // 这个间隔直接叠加到用户感知的延迟上。再把每轮遍历树的成本压到
+        // 可接受范围 —— 只读一次消息列表，不跑判定链。
+        val interval = if (urgent) 200L else AUTO_CHECK_INTERVAL_MS
         if (elapsed - lastAutoCheckElapsed >= interval) {
             lastAutoCheckElapsed = elapsed
             maybeAutoReplyOnChange()

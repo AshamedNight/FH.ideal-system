@@ -51,6 +51,10 @@ class PacerGuard(context: Context, private val config: AppConfig) {
             return Decision.Block("已熔断：${minutesOf(halted - now)} 分钟后恢复", halted - now)
         }
 
+        // 演练模式：不限速，但**熔断仍然拦** —— 那是平台真的报警了，
+        // 跟"我这是不是测试"无关。
+        if (config.drillMode) return Decision.Allow
+
         if (respectCooldown) {
             val cooling = coolingUntil()
             if (cooling > now) {

@@ -713,6 +713,10 @@ class MainActivity : Activity() {
                 append(" 个")
             }
             append('\n').append(versionLine)
+            if (config.drillMode) {
+                // 必须显眼：否则用户会以为这些回复是模型写的
+                append("\n[演练模式] 不调模型、不限速 —— 内容由本机假模型生成，发送仍由你点")
+            }
             if (notes.isNotEmpty()) {
                 append("\n最近处理：")
                 notes.forEach { append("\n  ").append(it) }

@@ -61,6 +61,22 @@ class SettingsActivity : Activity() {
         root.addView(field("minGapSeconds", "两条之间最短间隔（秒，≥30）", config.minGapSeconds.toString(), InputType.TYPE_CLASS_NUMBER))
         root.addView(field("batchSize", "连点一次处理几个（≤20）", config.batchSize.toString(), InputType.TYPE_CLASS_NUMBER))
         root.addView(note("实际间隔会在最短值上乘 0.7~1.8 的随机系数，不要设成整齐数字。\n这几个值只在「自动触发」时起作用；手动点「生成并填入」只受每小时上限约束，不会被冷却或精力拦住。\n平台报警后的熔断（30 分钟）任何时候都生效，那才是真正需要等的东西。"))
+        root.addView(section("演练模式"))
+        root.addView(android.widget.CheckBox(this).apply {
+            text = "演练模式：不调模型、不限速（只测流程）"
+            isChecked = config.drillMode
+            setOnCheckedChangeListener { _, on -> config.drillMode = on }
+        })
+        root.addView(
+            note(
+                "开着它：回复由本机假模型生成，不联网、不花 Key 的钱；\n" +
+                    "每小时上限、连续上限、冷却、精力全部不生效，连点一次最多可设 999 个。\n" +
+                    "熔断仍然生效 —— 那是平台真的报警了。\n\n" +
+                    "注意：这些内容是**真的会发出去**的（发送永远由你点），只能用于测试，测完记得关掉。"
+                    .replace("**真的会发出去**", "真的会发出去")
+            )
+        )
+
         root.addView(Button(this).apply {
             text = "清除冷却（程序自己歇的那段）"
             setOnClickListener {

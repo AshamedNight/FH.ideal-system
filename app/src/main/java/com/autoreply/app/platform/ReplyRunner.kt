@@ -119,9 +119,11 @@ class ReplyRunner(
                     turns,
                     selfSaidAgoSeconds = selfAgo,
                     now = now,
-                    // 手动/连点 → 拟人机制让路；自动触发 → 照常约束
-                    respectEnergy = !manual,
-                    respectCooldown = !manual,
+                    // 手动/连点/演练模式 → 拟人机制让路；自动触发 → 照常约束。
+                    // 演练模式必须在这里也让路：精力判断在判定链里，不在 PacerGuard，
+                    // 只放开护栏是不够的 —— 连发到第 16 条还是会卡在"精力低"。
+                    respectEnergy = !(manual || config.drillMode),
+                    respectCooldown = !(manual || config.drillMode),
                 )
                 val trace = flow.lastTrace
                 mainHandler.post {

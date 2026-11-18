@@ -59,6 +59,21 @@ class AppConfig(context: Context) {
         set(value) = sp.edit().putInt(KEY_GAP_SEC, value.coerceAtLeast(30)).apply()
 
     /**
+     * 演练模式：只跑流程，不调真模型、不限速。
+     *
+     * 用来做"批量发送会不会被封"的实测 —— 那种测试需要短时间内发几十上百条，
+     * 而且完全不需要模型参与（内容不重要）。开着它：
+     *   - 回复由本机假模型生成，**不花一分钱、不联网**
+     *   - 每小时上限 / 连续上限 / 冷却 / 精力全部不生效
+     *   - **熔断仍然生效**：那是平台真的报警了，必须停
+     *
+     * 注意：这些内容是**真的会发出去**的（发送永远由人点），所以只能用于测试。
+     */
+    var drillMode: Boolean
+        get() = sp.getBoolean(KEY_DRILL, false)
+        set(value) = sp.edit().putBoolean(KEY_DRILL, value).apply()
+
+    /**
      * 一次「连点」最多处理几个会话。
      *
      * 上限 20：连点是效率工具，但它同时是这套东西里最接近"批量操作"的行为。
@@ -66,7 +81,11 @@ class AppConfig(context: Context) {
      */
     var batchSize: Int
         get() = sp.getInt(KEY_BATCH_SIZE, 5)
-        set(value) = sp.edit().putInt(KEY_BATCH_SIZE, value.coerceIn(1, 20)).apply()
+        // 演练模式放开到 999：那个模式存在的意义就是"一次发很多条"。
+        // 平时仍限制 20 —— 连点是效率工具，不是批量轰炸机。
+        set(value) = sp.edit()
+            .putInt(KEY_BATCH_SIZE, value.coerceIn(1, if (drillMode) 999 else 20))
+            .apply()
 
     /**
      * 目标平台包名，可多个（一行一个）。
@@ -185,6 +204,7 @@ class AppConfig(context: Context) {
         private const val KEY_COOLDOWN_MIN = "cooldown_min"
         private const val KEY_GAP_SEC = "gap_sec"
         private const val KEY_BATCH_SIZE = "batch_size"
+        private const val KEY_DRILL = "drill_mode"
         private const val KEY_TARGET_PKGS = "target_pkgs"
         private const val KEY_LLM_URL = "llm_url"
         private const val KEY_LLM_KEY = "llm_key"

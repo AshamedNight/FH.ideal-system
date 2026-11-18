@@ -70,7 +70,7 @@ class ReplyEngine(
 
         val system = buildSystem(persona, config.maxReplyChars)
         val baseUser = buildUser(turns)
-        val client = LlmClient(config.llmBaseUrl, config.llmApiKey, config.llmModel, config.llmProxy)
+        val client = LlmClient(effectiveBaseUrl, config.llmApiKey, config.llmModel, config.llmProxy)
 
         var lastHit = ""
         var inTokens = 0
@@ -122,8 +122,19 @@ class ReplyEngine(
     fun previewUser(turns: List<Turn>): String = buildUser(turns)
 
     /** 假模型标记，UI 用来提示"这不是真模型写的"。 */
+    /**
+     * 实际用的接口地址。演练模式下强制 "mock"（本地假模型，不联网不花钱），
+     * 这样用户不用改设置里的地址，关掉开关就恢复。
+     */
+    private val effectiveBaseUrl: String
+        get() = if (config.drillMode) "mock" else config.llmBaseUrl
+
     val isMockModel: Boolean
-        get() = config.llmBaseUrl.trim().equals("mock", ignoreCase = true)
+        get() = effectiveBaseUrl.trim().equals("mock", ignoreCase = true)
+
+    /** 演练模式标记。UI 必须显著提示，否则用户会以为这些是模型写的。 */
+    val isDrill: Boolean
+        get() = config.drillMode
 
     private fun buildSystem(persona: Persona, maxChars: Int): String = buildString {
         appendLine(persona.identity.trim())
