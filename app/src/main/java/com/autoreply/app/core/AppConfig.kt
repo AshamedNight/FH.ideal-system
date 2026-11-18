@@ -221,10 +221,34 @@ class AppConfig(context: Context) {
         get() = sp.getString(KEY_BANNED, "") ?: ""
         set(value) = sp.edit().putString(KEY_BANNED, value).apply()
 
-    /** 回复长度上限（字）。太长不像人打的，也更容易被判定为机器生成。 */
+    /**
+     * 回复长度上限（字）。太长不像人打的，也更容易被判定为机器生成。
+     *
+     * **默认 35 而不是 80。** 80 字会被断句切成 2~3 段，
+     * 意味着每处理一个会话要点 2~3 次发送 —— 体感就是"连点不流畅、老得手动"。
+     * 而真人聊天一条本来也就十几个字。演示模式之所以"顺"，
+     * 是因为它回的都是三五个字的短句，一次就发完。
+     *
+     * 老版本存的是 80（当时的默认值），这里做一次性迁移 ——
+     * 用户几乎不可能主动去动这个数字，80 基本都是没改过的。
+     */
     var maxReplyChars: Int
-        get() = sp.getInt(KEY_MAX_CHARS, 80)
-        set(value) = sp.edit().putInt(KEY_MAX_CHARS, value.coerceIn(20, 300)).apply()
+        get() {
+            val v = sp.getInt(KEY_MAX_CHARS, Int.MIN_VALUE)
+            if (v == Int.MIN_VALUE) return 35
+            if (v == 80 && !sp.getBoolean(KEY_MAX_CHARS_MIGRATED, false)) {
+                sp.edit()
+                    .putInt(KEY_MAX_CHARS, 35)
+                    .putBoolean(KEY_MAX_CHARS_MIGRATED, true)
+                    .apply()
+                return 35
+            }
+            return v
+        }
+        set(value) = sp.edit()
+            .putInt(KEY_MAX_CHARS, value.coerceIn(20, 300))
+            .putBoolean(KEY_MAX_CHARS_MIGRATED, true)
+            .apply()
 
     companion object {
         const val LEVEL_FILL_ONLY = 0
@@ -264,5 +288,6 @@ class AppConfig(context: Context) {
         private const val KEY_PERSONA_JSON = "persona_json"
         private const val KEY_BANNED = "banned"
         private const val KEY_MAX_CHARS = "max_chars"
+        private const val KEY_MAX_CHARS_MIGRATED = "max_chars_migrated"
     }
 }

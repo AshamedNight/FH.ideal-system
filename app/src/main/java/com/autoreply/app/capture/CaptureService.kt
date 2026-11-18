@@ -54,6 +54,14 @@ class CaptureService : AccessibilityService() {
          * 所以缩短等于让"检测漏了"的情况更快自愈。
          */
         private const val BATCH_SEND_TIMEOUT_MS = 20_000L
+
+        /**
+         * 一次生成最多等多久。超了就强制复位、继续下一步。
+         *
+         * 20 秒而不是 40：模型卡住时（网络抖动、中转排队），
+         * 40 秒里用户只能干看着，体感就是"不动了"。
+         */
+        private const val AUTO_STUCK_TIMEOUT_MS = 20_000L
     }
 
     private var config: AppConfig? = null
@@ -204,7 +212,7 @@ class CaptureService : AccessibilityService() {
         // 只在各自调用前检查的话，中间仍有窗口期 —— 真机表现就是
         // 输入框里被写了两遍同一句话（「你好啊你好啊」）。
         if (autoRunning) {
-            if (SystemClock.elapsedRealtime() - autoStartedAt > 40_000L) {
+            if (SystemClock.elapsedRealtime() - autoStartedAt > AUTO_STUCK_TIMEOUT_MS) {
                 autoRunning = false
                 logAuto("上一步卡住了，已强制复位")
             } else {
@@ -375,7 +383,7 @@ class CaptureService : AccessibilityService() {
         }
         if (autoRunning) {
             // 回调丢了就强制复位，别让整条连点死在这里
-            if (SystemClock.elapsedRealtime() - autoStartedAt > 40_000L) {
+            if (SystemClock.elapsedRealtime() - autoStartedAt > AUTO_STUCK_TIMEOUT_MS) {
                 autoRunning = false
                 logAuto("上一步超时，已强制复位")
             } else {
