@@ -115,7 +115,14 @@ class Energy(context: Context) {
         const val KEY_LAST_AT = "last_at"
         const val KEY_DAY = "day"
 
-        const val MIN = 0.15
+        /**
+         * 精力的地板。到了这里就"累到不想动"。
+         *
+         * 0.05 而不是 0.15：0.15 太高 —— 稍微多聊几句就触底，
+         * 之后每次都要等（恢复 0.20/小时，从 0.15 回到 0.30 要 45 分钟）。
+         * 它只是"慢下来"的开关，不该让整件事停住。
+         */
+        const val MIN = 0.05
         const val MAX = 1.0
 
         /** 每天第一次打开时的精力：不是满格，接近满格。 */

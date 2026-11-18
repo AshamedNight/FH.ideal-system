@@ -151,10 +151,12 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
         val tired = energy.isTired(now)
         val energyNow = "%.2f".format(energy.current(now))
         if (tired && respectEnergy) {
-            step("③ 精力：$energyNow 偏低，压一压")
+            step("③ 精力：$energyNow 偏低，稍等一下")
             return Outcome.Wait(
-                delayMs(baseMinutes = 8, now = now),
-                "精力低（$energyNow），压一压再回",
+                // 3 分钟而不是 8：精力低只该让人"慢一点"，不该让人"回不了"。
+                // 8 分钟乘上精力倍数（最多 3 倍）= 24 分钟，交友平台上对方早走了。
+                delayMs(baseMinutes = 3, now = now),
+                "精力低（$energyNow），稍等再回",
             )
         }
         if (tired) {

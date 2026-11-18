@@ -687,6 +687,22 @@ class MainActivity : Activity() {
             getString(R.string.btn_batch, config.batchSize)
         }
 
+        // 版本号必须露出来：用户报问题时，"装的是哪一版"是第一个要确认的。
+        // dev.N 里的 N 是 CI 的 run_number，两版对比直接看数字大小。
+        //
+        // 用 packageManager 读而不是 BuildConfig：AGP 8 默认关掉 buildConfig 特性，
+        // 直接引 BuildConfig 会让 CI 编译失败（还得额外开 buildFeatures）。
+        // 读 PackageInfo 反而更贴排查场景 —— 它反映的是"真正装上的那一版"。
+        val versionLine = runCatching {
+            val pi = packageManager.getPackageInfo(packageName, 0)
+            @Suppress("DEPRECATION")
+            val code = if (android.os.Build.VERSION.SDK_INT >= 28) {
+                pi.longVersionCode
+            } else {
+                pi.versionCode.toLong()
+            }
+            "版本：${pi.versionName}（#$code）"
+        }.getOrNull() ?: "版本：未知"
         statusLevel.text = buildString {
             append(statusLevel.text)
             append('\n').append(imeLine)
@@ -696,6 +712,7 @@ class MainActivity : Activity() {
                 append(CaptureService.instance?.batchLeft ?: 0)
                 append(" 个")
             }
+            append('\n').append(versionLine)
             if (notes.isNotEmpty()) {
                 append("\n最近处理：")
                 notes.forEach { append("\n  ").append(it) }
