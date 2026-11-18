@@ -73,7 +73,7 @@ class ReplyEngine(
         // 比每人一段风格飘忽的开场更像同一个人。
         val iSaidAlready = turns.any { !it.fromOther }
         val greetings = config.greetingLines
-        if (!iSaidAlready && greetings.isNotEmpty()) {
+        if (config.greetingEnabled && !iSaidAlready && greetings.isNotEmpty()) {
             // **两句一组**：你填「突然想认识你」「在吗？」就是要连发这两句，
             // 不是从里面挑一句。用「。」连起来，外面会自动拆成两条。
             // 填了 4 句就分成 2 组，按昵称取模选一组 —— 同一个人始终同一组。

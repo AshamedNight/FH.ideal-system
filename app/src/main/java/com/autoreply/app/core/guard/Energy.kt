@@ -22,14 +22,20 @@ class Energy(context: Context) {
     private val sp = context.applicationContext
         .getSharedPreferences("autoreply_energy", Context.MODE_PRIVATE)
 
+    // 只为读"精力锁"这两个开关，本身很轻（SP 包装），不用担心开销
+    private val config = com.autoreply.app.core.AppConfig(context)
+
     /** 现在有多少精力。 */
     fun current(now: Long = System.currentTimeMillis()): Double {
+        // 锁定时直接返回设定值：不衰减、不恢复，界面上的数字也就稳定了
+        if (config.energyLocked) return config.energyLockedValue.toDouble()
         refresh(now)
         return sp.getFloat(KEY_VALUE, DEFAULT_START).toDouble()
     }
 
     /** 消耗一次（每次填入草稿后调用）。消耗量与当前精力成正比 —— 越累越提不起劲。 */
     fun consume(now: Long = System.currentTimeMillis()): Double {
+        if (config.energyLocked) return config.energyLockedValue.toDouble()
         refresh(now)
         val v = sp.getFloat(KEY_VALUE, DEFAULT_START).toDouble()
         val next = max(MIN, v - DECAY)
@@ -73,7 +79,11 @@ class Energy(context: Context) {
      * 而 0.25 其实是还能好好说话的状态。0.30 这条线把"有点乏"和"说不出话"
      * 混成了一档，结果一天里大半天都在被拦。
      */
-    fun isTired(now: Long = System.currentTimeMillis()): Boolean = current(now) < 0.20
+    fun isTired(now: Long = System.currentTimeMillis()): Boolean {
+        // 锁上的意思是"我就是不累"，连 0.15 以下也不拦 —— 否则锁了还拦，等于没锁
+        if (config.energyLocked) return false
+        return current(now) < 0.20
+    }
 
     // ------------------------------------------------------------------ 内部
 

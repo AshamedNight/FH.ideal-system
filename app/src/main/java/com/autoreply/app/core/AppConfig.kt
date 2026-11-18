@@ -88,6 +88,31 @@ class AppConfig(context: Context) {
             .apply()
 
     /**
+     * 精力锁：锁定后不再消耗、也不随时间恢复，永远等于 [energyLockedValue]。
+     *
+     * 用途很实际：连着测十几条时，程序自己的疲劳曲线会把后面全压住，
+     * 而人明明刚坐下。锁上就"永远精神"，测完再关掉。
+     * **关掉不会丢你已经设好的值** —— 开关只决定用不用。
+     */
+    var energyLocked: Boolean
+        get() = sp.getBoolean(KEY_ENERGY_LOCKED, false)
+        set(value) = sp.edit().putBoolean(KEY_ENERGY_LOCKED, value).apply()
+
+    /** 锁定时的精力值（0~1）。只在 [energyLocked] 为真时生效。 */
+    var energyLockedValue: Float
+        get() = sp.getFloat(KEY_ENERGY_VALUE, 0.85f)
+        set(value) = sp.edit().putFloat(KEY_ENERGY_VALUE, value.coerceIn(0f, 1f)).apply()
+
+    /**
+     * 固定开场白是否启用。
+     *
+     * 关掉只是"不用它开口"，**已经填的那些不会删** —— 下次打开还在。
+     */
+    var greetingEnabled: Boolean
+        get() = sp.getBoolean(KEY_GREETING_ON, true)
+        set(value) = sp.edit().putBoolean(KEY_GREETING_ON, value).apply()
+
+    /**
      * 固定的开场白，一行一句。**留空则交给模型写。**
      *
      * 为什么需要这个：开场白是最不需要"智能"的一句 —— 它只是一声招呼，
@@ -224,6 +249,9 @@ class AppConfig(context: Context) {
         private const val KEY_BATCH_SIZE = "batch_size"
         private const val KEY_DRILL = "drill_mode"
         private const val KEY_GREETINGS = "greeting_lines"
+        private const val KEY_GREETING_ON = "greeting_enabled"
+        private const val KEY_ENERGY_LOCKED = "energy_locked"
+        private const val KEY_ENERGY_VALUE = "energy_locked_value"
         private const val KEY_TARGET_PKGS = "target_pkgs"
         private const val KEY_LLM_URL = "llm_url"
         private const val KEY_LLM_KEY = "llm_key"

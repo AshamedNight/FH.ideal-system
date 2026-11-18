@@ -94,6 +94,27 @@ class SettingsActivity : Activity() {
         root.addView(note("代理只作用于「发往模型接口」的请求，目标 App 的流量不经过它 —— 所以不必为此打开手机的系统级 VPN。\n例：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080（Termux 里跑的代理填这里）。走电脑中转时留空。"))
         root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，也可改成电脑中转：http://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
 
+        root.addView(section("精力"))
+        root.addView(android.widget.CheckBox(this).apply {
+            text = "锁定精力（测试时用）"
+            isChecked = config.energyLocked
+            setOnCheckedChangeListener { _, on -> config.energyLocked = on }
+        })
+        root.addView(
+            note(
+                "开启后精力不再消耗、也不随时间恢复，永远等于下面这个值；\n" +
+                    "判定链也不会因为\"累了\"压住你。关掉就恢复程序自己的疲劳曲线 ——\n" +
+                    "已经设好的值不会丢，开关只决定用不用。"
+            )
+        )
+        root.addView(
+            field(
+                "energyValue", "锁定值（0~1，如 0.85）",
+                config.energyLockedValue.toString(),
+                InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL,
+            )
+        )
+
         root.addView(section("固定开场白"))
         root.addView(
             note(
@@ -102,6 +123,11 @@ class SettingsActivity : Activity() {
                     "建议两句一组：一句招呼 + 一句问话，像「突然想认识你」「在吗？」"
             )
         )
+        root.addView(android.widget.CheckBox(this).apply {
+            text = "启用固定开场白"
+            isChecked = config.greetingEnabled
+            setOnCheckedChangeListener { _, on -> config.greetingEnabled = on }
+        })
         root.addView(
             field(
                 "greetingLines", "开场白（一行一句，可留空）",
@@ -184,6 +210,9 @@ class SettingsActivity : Activity() {
         config.cooldownMinutes = intOf("cooldownMinutes", config.cooldownMinutes)
         config.minGapSeconds = intOf("minGapSeconds", config.minGapSeconds)
         config.batchSize = intOf("batchSize", config.batchSize)
+        inputs["energyValue"]?.text?.toString()?.trim()?.toFloatOrNull()?.let {
+            config.energyLockedValue = it
+        }
         config.greetingLines = inputs["greetingLines"]?.text?.toString().orEmpty()
             .split('\n').map { it.trim() }.filter { it.isNotEmpty() }
         config.llmBaseUrl = textOf("llmBaseUrl")
