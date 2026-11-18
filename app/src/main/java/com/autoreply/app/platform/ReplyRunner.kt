@@ -130,6 +130,10 @@ class ReplyRunner(
                     deliver(
                         outcome, trace, profile, peer, lastOther.text, now, dedup,
                         selfCount = messages.count { !it.fromOther },
+                        // 和 detectNewSent 的 key 同一套算法
+                        sessionKey = peer.ifEmpty {
+                            messages.firstOrNull()?.text?.take(12).orEmpty()
+                        },
                         onDone = onDone,
                     )
                 }
@@ -155,6 +159,8 @@ class ReplyRunner(
         now: Long,
         dedup: ReplyDedup,
         selfCount: Int,
+        /** 会话标识，和 detectNewSent 里算的 key 保持一致（昵称读不到时用会话首条消息） */
+        sessionKey: String,
         onDone: ((Result) -> Unit)?,
     ) {
         val sink = AccessibilityReplySink(service, profile)
@@ -187,12 +193,8 @@ class ReplyRunner(
                     // 把"我现在发了几条"钉成基线。不做这一步，新会话的**第一条**
                     // 永远检测不到：基线未初始化时，发送后的第一次读取会被当成
                     // "初始化"而不是"条数增加"。
-                    // key 必须和 detectNewSent 里算的一致（昵称读不到时用会话首条消息），
-                    // 否则基线写进去也对不上，等于白记
-                    SentTracker(service).markBaseline(
-                        peer.ifEmpty { turns.firstOrNull()?.text?.take(12).orEmpty() },
-                        selfCount,
-                    )
+                    // key 必须和 detectNewSent 里算的一致，否则基线写进去也对不上
+                    SentTracker(service).markBaseline(sessionKey, selfCount)
                     // 填入会让界面变化，那个变化又会触发一次自动回复 ——
                     // 记一下时刻，让自动触发在这 5 秒内跳过
                     service.noteFill()
