@@ -177,6 +177,9 @@ class ReplyRunner(
                     // 记下"已填、待确认发出"。之后消息列表里只要出现这条，
                     // 就说明用户点了发送 —— 那时才计一次平台配额。
                     SentTracker(service).markPending(peer, parts.first(), now)
+                    // 填入会让界面变化，那个变化又会触发一次自动回复 ——
+                    // 记一下时刻，让自动触发在这 5 秒内跳过
+                    service.noteFill()
                 }
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 

@@ -177,6 +177,7 @@ class CaptureService : AccessibilityService() {
      * 用户看到的只是"草稿已经在了"。
      */
     private fun tryAutoReply() {
+        if (batchActive) return
         if (autoRunning) return
         val hit = pendingHit ?: return
 
@@ -189,11 +190,28 @@ class CaptureService : AccessibilityService() {
         runAuto(hit.text)
     }
 
+    /**
+     * @param manual true 表示用户主动发起（连点 / 点了按钮），此时精力和长冷却让路。
+     */
+    @Synchronized
     private fun runAuto(
         notifyText: String?,
         manual: Boolean = false,
         onDone: (() -> Unit)? = null,
     ) {
+        // 必须在这里再拦一次，不能只靠调用方检查。
+        // "连点"和"界面变化的自动触发"是两条独立入口，都能走到这里；
+        // 只在各自调用前检查的话，中间仍有窗口期 —— 真机表现就是
+        // 输入框里被写了两遍同一句话（「你好啊你好啊」）。
+        if (autoRunning) {
+            if (SystemClock.elapsedRealtime() - autoStartedAt > 40_000L) {
+                autoRunning = false
+                logAuto("上一步卡住了，已强制复位")
+            } else {
+                return
+            }
+        }
+
         val cfg = config ?: return
         autoRunning = true
         autoStartedAt = SystemClock.elapsedRealtime()
@@ -217,6 +235,22 @@ class CaptureService : AccessibilityService() {
     @Volatile
     var batchLeft: Int = 0
         private set
+
+    /**
+     * 最近一次真写进输入框的时刻。
+     *
+     * 填入会让输入框变化，那个变化本身又会触发一次 content_changed ——
+     * 不拦的话，"填了"会被当成"有新消息"，又生成一遍同样的草稿。
+     * `maybeAutoReplyOnChange` 用它跳过填入后的 5 秒。
+     */
+    @Volatile
+    var lastFillAt: Long = 0L
+        private set
+
+    /** 草稿真的写进输入框时调用。 */
+    fun noteFill() {
+        lastFillAt = SystemClock.elapsedRealtime()
+    }
 
     private var batchWatchdog: Runnable? = null
 
@@ -452,7 +486,18 @@ class CaptureService : AccessibilityService() {
      * 而且它比通知信息更全：通知只有一句摘要，这里能拿到整段对话。
      */
     private fun maybeAutoReplyOnChange() {
+        // 连点进行中时，自动触发必须让路。
+        //
+        // 两条路都在跑 runAuto 会互相踩：连点刚填完一句、自动触发又填一次，
+        // 输入框里就变成「你好啊你好啊」。而且自动触发走的是非手动路径，
+        // 会被精力和冷却拦住，在日志里刷出一堆"等 N 分钟再回"——
+        // 看起来像连点被卡，其实连点是好的。
+        if (batchActive) return
         if (autoRunning) return
+        // 刚填过字的 5 秒内不触发：填入会让输入框变化，那个变化本身就会
+        // 触发一次 content_changed —— 不拦的话"填了"会被当成"有新消息"，
+        // 又生成一遍同样的草稿。真机出现过「你好啊你好啊」就是这么来的。
+        if (SystemClock.elapsedRealtime() - lastFillAt < 5_000L) return
         val cfg = config ?: return
         // L0 档不自动：那个档位的定义就是"人自己停在页面里，程序只负责填"
         if (cfg.level < AppConfig.LEVEL_NOTIFY) return
