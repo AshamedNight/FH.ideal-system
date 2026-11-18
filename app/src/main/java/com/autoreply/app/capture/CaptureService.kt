@@ -258,6 +258,22 @@ class CaptureService : AccessibilityService() {
     private var frontFailCount = 0
 
     /**
+     * 连续切了几个平台都还没有未读。
+     *
+     * 用来终止"两个平台都没未读了，来回切"的死循环 ——
+     * 没有它，程序会在两个 App 之间无限跳。
+     */
+    private var platformHops = 0
+
+    /** 按配置顺序找下一个平台。只有一个平台时返回 null。 */
+    private fun nextPlatformPkg(): String? {
+        val list = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
+        if (list.size < 2) return null
+        val idx = list.indexOf(lastTargetPkg)
+        return if (idx < 0) list.first() else list[(idx + 1) % list.size]
+    }
+
+    /**
      * 最近一次成功读到的目标包名。
      *
      * 兜底用：用户很可能在设置里填了应用名（「同城夜聊」）而不是包名
@@ -296,8 +312,9 @@ class CaptureService : AccessibilityService() {
      * （SYSTEM_ALERT_WINDOW）权限就豁免**。没权限时它会失败，
      * 那就让用户自己切 —— 反正他本来就要回到目标应用里点发送。
      */
-    private fun bringTargetToFront(): String? {
+    private fun bringTargetToFront(prefer: String? = null): String? {
         val candidates = buildList {
+            if (prefer != null) add(prefer)
             addAll(config?.targetPackages.orEmpty())
             lastTargetPkg?.let { add(it) }
         }.distinct().filter { it.isNotBlank() }
@@ -402,9 +419,23 @@ class CaptureService : AccessibilityService() {
             com.autoreply.app.platform.TextWriter.tapNode(this, n)
         }
         if (!clicked) {
-            stopBatch("连点结束：没有更多未读了")
+            // 这个平台没有未读了 —— 如果还配了别的平台，轮过去接着跑。
+            // 用户的实际用法就是"同城打完打心遇"，让他手动切一次很别扭。
+            val platforms = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
+            val next = nextPlatformPkg()
+            platformHops++
+            if (next == null || platformHops > platforms.size) {
+                stopBatch("连点结束：所有平台都没有未读了")
+                return
+            }
+            logAuto("本平台没有未读了，切到下一个平台继续（第 $platformHops 次换台）")
+            // 换台等于换会话，没发完的断句必须丢掉
+            com.autoreply.app.core.guard.DraftQueue.clear()
+            bringTargetToFront(next)?.let { logAuto("切平台失败：$it") }
+            mainHandler.postDelayed({ batchStep() }, 2200L)
             return
         }
+        platformHops = 0
 
         // 换会话了，上一段没发完的断句必须丢掉，
         // 否则会把 A 会话的第二句发给 B

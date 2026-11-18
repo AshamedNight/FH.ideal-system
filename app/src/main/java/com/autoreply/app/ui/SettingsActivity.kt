@@ -74,8 +74,7 @@ class SettingsActivity : Activity() {
                     "所以能看出续聊到底有没有接上（固定几句话是测不出来的）。\n" +
                     "每小时上限、连续上限、冷却、精力全部不生效，连点一次最多可设 999 个。\n" +
                     "熔断仍然生效 —— 那是平台真的报警了。\n\n" +
-                    "注意：这些内容是**真的会发出去**的（发送永远由你点），只能用于测试，测完记得关掉。"
-                    .replace("**真的会发出去**", "真的会发出去")
+                    "注意：这些内容是真的会发出去的（发送永远由你点），只能用于测试，测完记得关掉。"
             )
         )
 
@@ -94,6 +93,25 @@ class SettingsActivity : Activity() {
         root.addView(field("llmProxy", "代理（可选）", config.llmProxy, InputType.TYPE_TEXT_VARIATION_URI))
         root.addView(note("代理只作用于「发往模型接口」的请求，目标 App 的流量不经过它 —— 所以不必为此打开手机的系统级 VPN。\n例：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080（Termux 里跑的代理填这里）。走电脑中转时留空。"))
         root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，也可改成电脑中转：http://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
+
+        root.addView(section("固定开场白"))
+        root.addView(
+            note(
+                "一行一句。填了就用这几句开口（不调模型，也不花 token）；留空则交给模型写。
+" +
+                    "同一个人始终收到同一句（按昵称取模），不会反复变。
+" +
+                    "建议两句一组：一句招呼 + 一句问话，像「突然想认识你」「在吗？」"
+            )
+        )
+        root.addView(
+            field(
+                "greetingLines", "开场白（一行一句，可留空）",
+                config.greetingLines.joinToString("\n"),
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE,
+                singleLine = false,
+            )
+        )
 
         root.addView(section("人设"))
 
@@ -168,6 +186,8 @@ class SettingsActivity : Activity() {
         config.cooldownMinutes = intOf("cooldownMinutes", config.cooldownMinutes)
         config.minGapSeconds = intOf("minGapSeconds", config.minGapSeconds)
         config.batchSize = intOf("batchSize", config.batchSize)
+        config.greetingLines = inputs["greetingLines"]?.text?.toString().orEmpty()
+            .split('\n').map { it.trim() }.filter { it.isNotEmpty() }
         config.llmBaseUrl = textOf("llmBaseUrl")
         config.llmApiKey = textOf("llmApiKey")
         config.llmModel = textOf("llmModel")
@@ -216,7 +236,13 @@ class SettingsActivity : Activity() {
         setPadding(0, dp(2), 0, dp(6))
     }
 
-    private fun field(key: String, label: String, value: String, inputType: Int): ViewGroup {
+    private fun field(
+        key: String,
+        label: String,
+        value: String,
+        inputType: Int,
+        singleLine: Boolean = true,
+    ): ViewGroup {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(4), 0, dp(4))
@@ -230,7 +256,9 @@ class SettingsActivity : Activity() {
             setText(value)
             this.inputType = inputType
             textSize = 13f
-            setSingleLine(true)
+            // 多行字段（开场白一行一句）必须放行换行，否则全被压成一行
+            setSingleLine(singleLine)
+            if (!singleLine) maxLines = 6
         }
         inputs[key] = edit
         box.addView(edit)

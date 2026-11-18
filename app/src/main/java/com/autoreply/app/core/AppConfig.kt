@@ -88,6 +88,24 @@ class AppConfig(context: Context) {
             .apply()
 
     /**
+     * 固定的开场白，一行一句。**留空则交给模型写。**
+     *
+     * 为什么需要这个：开场白是最不需要"智能"的一句 —— 它只是一声招呼，
+     * 而且同一批人收到同一套招呼，比每人一段风格飘忽的开场更像同一个人。
+     * 另外它不消耗 token：一天打几十个招呼，这一项能省掉几十次调用。
+     *
+     * 同一句对同一个人是固定的（按昵称取模），不会反复变。
+     */
+    var greetingLines: List<String>
+        get() = (sp.getString(KEY_GREETINGS, "") ?: "")
+            .split('\n')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        set(value) = sp.edit()
+            .putString(KEY_GREETINGS, value.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n"))
+            .apply()
+
+    /**
      * 目标平台包名，可多个（一行一个）。
      *
      * 这个产品不是只服务一个平台，所以包名从一开始就是集合而不是单值。
@@ -205,6 +223,7 @@ class AppConfig(context: Context) {
         private const val KEY_GAP_SEC = "gap_sec"
         private const val KEY_BATCH_SIZE = "batch_size"
         private const val KEY_DRILL = "drill_mode"
+        private const val KEY_GREETINGS = "greeting_lines"
         private const val KEY_TARGET_PKGS = "target_pkgs"
         private const val KEY_LLM_URL = "llm_url"
         private const val KEY_LLM_KEY = "llm_key"

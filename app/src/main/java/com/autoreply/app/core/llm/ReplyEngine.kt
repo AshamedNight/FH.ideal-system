@@ -68,6 +68,18 @@ class ReplyEngine(
             .map { it.trim() }
             .filter { it.isNotEmpty() }
 
+        // 固定开场白：这个会话我还没说过话，而你配了开场白 —— 直接用，不调模型。
+        // 省 token 只是顺带的好处，主要价值是"同一批人收到同一套招呼"，
+        // 比每人一段风格飘忽的开场更像同一个人。
+        val iSaidAlready = turns.any { !it.fromOther }
+        val greetings = config.greetingLines
+        if (!iSaidAlready && greetings.isNotEmpty()) {
+            // 按昵称取模：同一个人始终是同一句，不会重进一次换一句
+            val idx = (turns.lastOrNull { it.fromOther }?.text.orEmpty().hashCode()
+                .let { kotlin.math.abs(it) }) % greetings.size
+            return Result.Draft(greetings[idx], 1, 0, 0, 0)
+        }
+
         val system = buildSystem(persona, config.maxReplyChars)
         val baseUser = buildUser(turns)
         val client = LlmClient(effectiveBaseUrl, config.llmApiKey, config.llmModel, config.llmProxy)
