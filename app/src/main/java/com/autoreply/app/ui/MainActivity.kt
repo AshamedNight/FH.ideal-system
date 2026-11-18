@@ -415,7 +415,7 @@ class MainActivity : Activity() {
                     toast("$left 秒后执行：切回目标 App，点一下输入框")
                     output.text = buildString {
                         append("倒计时 $left 秒\n\n")
-                        append("现在切回目标 App，点一下输入框让光���留在里面。\n")
+                        append("现在切回目标 App，点一下输入框让光标留在里面。\n")
                         append("执行结果会写在这里（完成后切回本 App 查看）。")
                     }
                     left--

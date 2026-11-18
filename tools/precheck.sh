@@ -80,6 +80,15 @@ else
     say "  （没有 python，跳过）"
 fi
 
+say "== 7. 乱码字符 / 字符串闭合 =="
+# 这两项是 CI 报错但又极难看懂的两种：乱码在界面上是个方块，
+# 字符串没闭合则一次报四五条 "Expecting '"'" 且位置对不上真实原因。
+if command -v python >/dev/null 2>&1; then
+    python tools/check_encoding.py || fail=1
+else
+    say "  （没有 python，跳过）"
+fi
+
 echo
 if [ $fail -ne 0 ]; then
     say "自检未通过 —— 修掉再 push，否则 CI 会白跑一轮。"
