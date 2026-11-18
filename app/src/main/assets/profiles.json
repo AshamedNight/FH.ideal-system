@@ -119,12 +119,6 @@
       "去家族参与玩法"
     ],
     "label": "心遇",
-    "peer": [
-      {
-        "by": "viewId",
-        "value": "titleView"
-      }
-    ],
     "nextUnread": [
       {
         "by": "textContains",
@@ -135,6 +129,12 @@
       {
         "by": "viewId",
         "value": "ll_root_view"
+      }
+    ],
+    "peerName": [
+      {
+        "by": "viewId",
+        "value": "titleView"
       }
     ]
   },

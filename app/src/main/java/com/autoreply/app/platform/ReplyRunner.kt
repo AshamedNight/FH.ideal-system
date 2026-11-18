@@ -187,7 +187,12 @@ class ReplyRunner(
                     // 把"我现在发了几条"钉成基线。不做这一步，新会话的**第一条**
                     // 永远检测不到：基线未初始化时，发送后的第一次读取会被当成
                     // "初始化"而不是"条数增加"。
-                    SentTracker(service).markBaseline(peer, selfCount)
+                    // key 必须和 detectNewSent 里算的一致（昵称读不到时用会话首条消息），
+                    // 否则基线写进去也对不上，等于白记
+                    SentTracker(service).markBaseline(
+                        peer.ifEmpty { turns.firstOrNull()?.text?.take(12).orEmpty() },
+                        selfCount,
+                    )
                     // 填入会让界面变化，那个变化又会触发一次自动回复 ——
                     // 记一下时刻，让自动触发在这 5 秒内跳过
                     service.noteFill()

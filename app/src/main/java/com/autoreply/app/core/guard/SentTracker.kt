@@ -79,10 +79,18 @@ class SentTracker(context: Context) {
      * 那不代表你刚发了消息。
      */
     fun detectNewSent(messages: List<ChatMessage>, peer: String, now: Long): Boolean {
-        // 读不到昵称就判断不了"是不是同一个会话"，宁可漏检也别误判。
-        // 误判的代价是「把当前会话的草稿丢掉、直接跳下一条」；
-        // 漏检有 20 秒看门狗兜底，代价小得多。
-        if (peer.isEmpty()) return false
+        // 读不到昵称时，用「会话里第一条消息」当标识。
+        //
+        // 之前这里直接 return false，结果是**整个平台永远不推进**：
+        // 心遇那条 peerName 选择器的字段名写成了 peer，昵称读不到 →
+        // 发送检测全跳过 → 连点卡在第一个会话不动，日志里只显示
+        // 「这个会话」这条已经处理过（"这个会话"是显示层的兜底）。
+        //
+        // 用第一条消息替代：同一个会话里它不变，换会话就变了，
+        // 足以区分"同会话又发了一条"和"换了个会话"。
+        val key = peer.ifEmpty {
+            messages.firstOrNull()?.text?.take(12) ?: return false
+        }
 
         val selfMsgs = messages.filter { !it.fromOther }
         val lastSelf = selfMsgs.lastOrNull() ?: return false
@@ -94,9 +102,9 @@ class SentTracker(context: Context) {
         val baseCount = sp.getInt(KEY_BASE_COUNT, -1)
 
         // 换会话：重建基线，不计数
-        if (peer != basePeer) {
+        if (key != basePeer) {
             sp.edit()
-                .putString(KEY_BASE_PEER, peer)
+                .putString(KEY_BASE_PEER, key)
                 .putString(KEY_BASE_TEXT, text)
                 .putInt(KEY_BASE_COUNT, selfMsgs.size)
                 .apply()
