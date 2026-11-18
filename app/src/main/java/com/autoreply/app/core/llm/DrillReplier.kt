@@ -43,6 +43,14 @@ object DrillReplier {
     /** 开场补的第二句。真人打招呼很少只说一句就等回音。 */
     private val OPENERS = listOf("在吗？", "你在忙不", "想问个事")
 
+    /**
+     * 对方说了一长段时的接法：表示在听，不再追问。
+     *
+     * 「哦哦 具体点」用在长段自述后面非常敷衍 —— 人家讲了半天，
+     * 你回一句"具体点"，像没听。
+     */
+    private val ACK = listOf("这样啊", "那挺不容易的", "我懂你说的", "也是啊", "听你这么说")
+
     /** 多轮里隔一轮补的追问，免得整段像一问一答的客服。 */
     private val TAILS = listOf("你呢", "你平时忙不忙", "你做什么的")
 
@@ -83,10 +91,12 @@ object DrillReplier {
         }
 
         if (answer == null) {
-            return if (target.length <= 2) {
-                listOf("怎么了", "啥", "嗯？", "你说")[round % 4]
-            } else {
-                FOLLOW_UP[round % FOLLOW_UP.size]
+            return when {
+                target.length <= 2 -> listOf("怎么了", "啥", "嗯？", "你说")[round % 4]
+                // 对方说了一长段（倾诉、讲经历），回一句「哦哦 具体点」很敷衍 ——
+                // 那种时候该表示在听，而不是继续追问。
+                target.length > 12 -> ACK[round % ACK.size]
+                else -> FOLLOW_UP[round % FOLLOW_UP.size]
             }
         }
 

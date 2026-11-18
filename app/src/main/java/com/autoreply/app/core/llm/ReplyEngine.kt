@@ -74,10 +74,14 @@ class ReplyEngine(
         val iSaidAlready = turns.any { !it.fromOther }
         val greetings = config.greetingLines
         if (!iSaidAlready && greetings.isNotEmpty()) {
-            // 按昵称取模：同一个人始终是同一句，不会重进一次换一句
-            val idx = (turns.lastOrNull { it.fromOther }?.text.orEmpty().hashCode()
-                .let { kotlin.math.abs(it) }) % greetings.size
-            return Result.Draft(greetings[idx], 1, 0, 0, 0)
+            // **两句一组**：你填「突然想认识你」「在吗？」就是要连发这两句，
+            // 不是从里面挑一句。用「。」连起来，外面会自动拆成两条。
+            // 填了 4 句就分成 2 组，按昵称取模选一组 —— 同一个人始终同一组。
+            val groups = greetings.chunked(2)
+            val idx = kotlin.math.abs(
+                turns.lastOrNull { it.fromOther }?.text.orEmpty().hashCode()
+            ) % groups.size
+            return Result.Draft(groups[idx].joinToString("。"), 1, 0, 0, 0)
         }
 
         val system = buildSystem(persona, config.maxReplyChars)

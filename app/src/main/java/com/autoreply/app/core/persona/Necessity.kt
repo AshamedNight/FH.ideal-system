@@ -136,10 +136,15 @@ object NecessityJudge {
             reasons.add("单字 -0.20")
         }
 
-        // 抢话惩罚：一分钟内刚说过话就再说，像刷屏。被叫到时豁免（一问一答本来就连续）
-        if (!summoned && selfSaidAgoSeconds < 60) {
-            score -= 0.25
-            reasons.add("${selfSaidAgoSeconds} 秒前刚说过话 -0.25")
+        // 抢话惩罚：只罚"极端连发"。
+        //
+        // 原来是 60 秒内 -0.25，误伤严重：对方回你一句、你六秒前刚发过，
+        // 就直接被判成"先等等"，可这明明是一问一答该接的时候。
+        // 真要防重复，dedup 已经在"同一条消息 5 分钟内不重复处理"那层挡住了，
+        // 这里只保留 10 秒这个真正像刷屏的窗口。
+        if (!summoned && selfSaidAgoSeconds < 10) {
+            score -= 0.15
+            reasons.add("${selfSaidAgoSeconds} 秒前刚说过话 -0.15")
         }
 
         val final = score.coerceIn(0.0, 1.0)

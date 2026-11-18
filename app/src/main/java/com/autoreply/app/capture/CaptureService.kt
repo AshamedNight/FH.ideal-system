@@ -265,6 +265,14 @@ class CaptureService : AccessibilityService() {
      */
     private var platformHops = 0
 
+    /**
+     * 连续几次发现"当前会话还有没接的话"。
+     *
+     * 用来避免一直等着不换台 —— 有些会话（比如只有一条系统招呼）
+     * 永远轮不到"我最后说"这个状态。
+     */
+    private var platformWait = 0
+
     /** 按配置顺序找下一个平台。只有一个平台时返回 null。 */
     private fun nextPlatformPkg(): String? {
         val list = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
@@ -419,6 +427,21 @@ class CaptureService : AccessibilityService() {
             com.autoreply.app.platform.TextWriter.tapNode(this, n)
         }
         if (!clicked) {
+            // **「找不到下一个未读按钮」不等于「没有未读消息」** ——
+            // 这类按钮通常只在"还有别的未读会话"时才出现，
+            // 当前会话本身没处理完时它也是不显示的。
+            // 不确认就换台，就会出现"这边还有话没接，程序已经跑去开另一个 App"。
+            val lastIsOther = messages.lastOrNull()?.fromOther == true
+            val alreadyHandled = com.autoreply.app.core.guard.DraftQueue.size() > 0 ||
+                SystemClock.elapsedRealtime() - lastFillAt < 60_000L
+            if (lastIsOther && !alreadyHandled && platformWait < 3) {
+                platformWait++
+                logAuto("当前会话还有没接的话，先不换台（第 $platformWait 次确认）")
+                mainHandler.postDelayed({ batchStep() }, 3000L)
+                return
+            }
+            platformWait = 0
+
             // 这个平台没有未读了 —— 如果还配了别的平台，轮过去接着跑。
             // 用户的实际用法就是"同城打完打心遇"，让他手动切一次很别扭。
             val platforms = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
@@ -432,7 +455,9 @@ class CaptureService : AccessibilityService() {
             // 换台等于换会话，没发完的断句必须丢掉
             com.autoreply.app.core.guard.DraftQueue.clear()
             bringTargetToFront(next)?.let { logAuto("切平台失败：$it") }
-            mainHandler.postDelayed({ batchStep() }, 2200L)
+            // 4 秒而不是 2.2：真机出现过"切过去 1 秒就判定所有平台都没未读"，
+            // 目标是冷启动的，界面根本还没渲染完
+            mainHandler.postDelayed({ batchStep() }, 4000L)
             return
         }
         platformHops = 0
