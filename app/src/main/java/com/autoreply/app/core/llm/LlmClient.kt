@@ -100,9 +100,29 @@ class LlmClient(
             val raw = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
 
             if (code !in 200..299) {
-                // 把实际请求的地址带出来：404 最常见的原因是 /v1 少写或重复，
-                // 不给地址的话用户只能靠猜。
-                return Result.Err("HTTP $code（请求了 $url）：${raw.take(180)}")
+                // 服务端一般在 detail / error.message 里写的是人话，
+                // 直接甩整段 JSON 用户看不出"该改什么"。
+                // 实测收到过：「这个模型不在 Pro 名单里，Free 用不了：deepseek-v3.2」——
+                // 那句话就是全部信息量，但它埋在一坨 JSON 里。
+                val hint = try {
+                    val o = JSONObject(raw)
+                    o.optString("detail").ifEmpty {
+                        o.optJSONObject("error")?.optString("message").orEmpty()
+                    }
+                } catch (_: Exception) {
+                    ""
+                }
+
+                val advice = when (code) {
+                    401, 403 -> "（Key 不对或没权限）"
+                    404 -> "（接口地址不对 —— 检查设置里是否少写/多写了 /v1）"
+                    429 -> "（被限流或额度用完了）"
+                    503 -> "（服务端说这个模型/账号现在不可用 —— 换个模型名试试）"
+                    else -> ""
+                }
+                return Result.Err(
+                    "HTTP $code$advice" + if (hint.isNotEmpty()) "：$hint" else "（请求了 $url）"
+                )
             }
 
             val json = JSONObject(raw)
