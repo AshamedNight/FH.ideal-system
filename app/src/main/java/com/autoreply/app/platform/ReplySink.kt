@@ -52,8 +52,14 @@ interface ReplySink {
      */
     fun fill(text: String): FillResult
 
-    /** 填不进去时的兜底：放进剪贴板，由用户自己粘。 */
-    fun copyToClipboard(text: String)
+    /**
+     * 填不进去时的兜底：放进剪贴板，由用户自己粘。
+     *
+     * @return 是否**确认**写进去了。Android 10+ 会拦后台写剪贴板，
+     *   而且失败时不抛异常 —— 只看"没报错"就报成功，用户会以为复制了
+     *   实际去粘贴发现是空的。
+     */
+    fun copyToClipboard(text: String): Boolean
 }
 
 /**

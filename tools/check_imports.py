@@ -39,6 +39,10 @@ KNOWN = {
     "LlmClient": "com.autoreply.app.core.llm.LlmClient",
     # core/persona
     "PersonaLoader": "com.autoreply.app.core.persona.PersonaLoader",
+    "PersonaStore": "com.autoreply.app.core.persona.PersonaStore",
+    "FewShot": "com.autoreply.app.core.persona.FewShot",
+    "KnowledgeItem": "com.autoreply.app.core.persona.KnowledgeItem",
+    "Tone": "com.autoreply.app.core.persona.Tone",
     "NecessityJudge": "com.autoreply.app.core.persona.NecessityJudge",
     "Persona": "com.autoreply.app.core.persona.Persona",
     # platform
@@ -57,6 +61,10 @@ KNOWN = {
     "NodeDumper": "com.autoreply.app.capture.NodeDumper",
     "MessageNotificationListener": "com.autoreply.app.notify.MessageNotificationListener",
     "AutoReplyImeService": "com.autoreply.app.ime.AutoReplyImeService",
+    # ui
+    "MainActivity": "com.autoreply.app.ui.MainActivity",
+    "SettingsActivity": "com.autoreply.app.ui.SettingsActivity",
+    "PersonaActivity": "com.autoreply.app.ui.PersonaActivity",
 }
 
 

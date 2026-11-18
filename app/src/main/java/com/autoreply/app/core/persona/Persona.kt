@@ -42,6 +42,17 @@ data class Persona(
     /** 输出侧：生成的草稿命中这里 → 丢弃重写 */
     val tabooWords: List<String>,
     val fewShot: List<FewShot>,
+    /**
+     * 行为准则：一句话一条，直接进提示词。
+     *
+     * 和 [boundaries] 方向不同 —— boundaries 是「对方说到这些就不回」，
+     * 这里是「该用什么姿态接」。比如「对方说得不清楚就问一句，别猜」，
+     * 既不是禁止也不是内容，而是一种做法。
+     *
+     * 单独成字段（而不是写死在代码里）是为了让用户在 App 里自己改，
+     * 不用改代码重新打包。
+     */
+    val rules: List<String> = emptyList(),
 ) {
 
     /** 把语气参数换算成给模型的具体要求。 */
@@ -80,6 +91,7 @@ data class Persona(
                 boundaries = DEFAULT_BOUNDARIES,
                 tabooWords = DEFAULT_TABOO,
                 fewShot = emptyList(),
+                rules = emptyList(),
             )
         }
 
@@ -100,6 +112,7 @@ data class Persona(
                 boundaries = o.optJSONArray("boundaries").toStringList(),
                 tabooWords = o.optJSONArray("taboo_words").toStringList(),
                 fewShot = o.optJSONArray("few_shot").toFewShot(),
+                rules = o.optJSONArray("rules").toStringList(),
             )
         } catch (e: Exception) {
             null

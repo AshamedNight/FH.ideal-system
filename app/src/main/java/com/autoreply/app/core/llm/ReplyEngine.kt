@@ -138,6 +138,15 @@ class ReplyEngine(
             }
         }
 
+        // 行为准则放在样例**之前**：样例管"说什么"，准则管"怎么接"。
+        // 先给准则，模型读样例时会带着这个姿态去模仿；
+        // 反过来放在样例后面，它容易被当成"补充说明"而忽略。
+        if (persona.rules.isNotEmpty()) {
+            appendLine()
+            appendLine("# 这几条是这条线上必须守的")
+            persona.rules.forEach { appendLine("- $it") }
+        }
+
         if (persona.fewShot.isNotEmpty()) {
             appendLine()
             appendLine("# 你平时说话的样例（模仿语感，不要照抄内容）")

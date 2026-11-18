@@ -31,8 +31,19 @@ class AccessibilityReplySink(
         return NodeQuery.fillOnly(root, profile, text)
     }
 
-    override fun copyToClipboard(text: String) {
+    override fun copyToClipboard(text: String): Boolean = try {
         val cm = service.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("autoreply-draft", text))
+        // 写完立刻回读。Android 10+ 会限制后台应用写剪贴板，
+        // 而失败时**不抛异常**——只判断"没报错"就会把失败当成功，
+        // 用户看到"已复制"，去粘贴发现是空的。
+        val back = cm.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.text
+            ?.toString()
+        back == text
+    } catch (_: Exception) {
+        false
     }
 }

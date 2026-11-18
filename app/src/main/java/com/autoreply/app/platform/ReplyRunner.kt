@@ -169,7 +169,7 @@ class ReplyRunner(
                 val copied = if (write.written) {
                     false
                 } else {
-                    runCatching { sink.copyToClipboard(parts.first()) }.isSuccess
+                    sink.copyToClipboard(parts.first())
                 }
                 // 只有真进了输入框才算"处理过"：排队和复制都还要用户再动一下手
                 if (write.written) {
@@ -199,7 +199,7 @@ class ReplyRunner(
 
             is ReplyFlow.Outcome.Hold -> {
                 // 风险太高：不替你填，但把草稿放到剪贴板，你要用自己粘贴
-                val copied = runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
+                val copied = sink.copyToClipboard(outcome.text)
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
                 finish(trace, outcome.text, outcome.reason, false, copied, onDone)
             }

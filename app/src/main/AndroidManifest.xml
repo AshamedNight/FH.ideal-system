@@ -53,6 +53,9 @@
             android:name=".ui.SettingsActivity"
             android:exported="false"
             android:label="@string/title_settings" />
+        <activity
+            android:name=".ui.PersonaActivity"
+            android:exported="false" />
 
         <!--
           读屏服务。eventTypes 只订阅窗口变化，不订阅 typeViewClicked ——

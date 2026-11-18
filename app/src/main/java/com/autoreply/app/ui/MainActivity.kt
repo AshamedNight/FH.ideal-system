@@ -259,7 +259,7 @@ class MainActivity : Activity() {
                         } else {
                             // 只放第一段：整段塞进剪贴板，用户粘一次就发完了，
                             // 分段就没意义了
-                            runCatching { sink.copyToClipboard(parts.first()) }.isSuccess
+                            sink.copyToClipboard(parts.first())
                         }
                         // 只有真进了输入框才记"已处理"
                         if (write.written) {
@@ -300,7 +300,7 @@ class MainActivity : Activity() {
                         // 风险太高：草稿给你看，但不替你填。
                         // 填进输入框的话人多半顺手就发了 —— 那是用界面诱导犯错。
                         val sink = AccessibilityReplySink(service, profile)
-                        val copied = runCatching { sink.copyToClipboard(outcome.text) }.isSuccess
+                        val copied = sink.copyToClipboard(outcome.text)
                         if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
                         output.text = buildString {
                             append(head)

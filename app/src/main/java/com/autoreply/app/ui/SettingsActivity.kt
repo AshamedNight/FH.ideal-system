@@ -78,6 +78,15 @@ class SettingsActivity : Activity() {
         root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，也可改成电脑中转：http://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
 
         root.addView(section("人设"))
+
+        // 话术管理单独一页：样例和准则会改得很频繁，塞进这个已经很长的页面
+        // 会把其他设置冲散
+        root.addView(Button(this).apply {
+            text = "话术管理（问答样例 / 行为准则）"
+            setOnClickListener {
+                startActivity(Intent(this@SettingsActivity, PersonaActivity::class.java))
+            }
+        })
         root.addView(multi("persona", config.persona, 8))
         root.addView(note("用「你是……」开头描述这个人是什么身份、怎么说话、绝不说什么。不要写「请帮我生成回复」，那是任务不是人设。"))
 

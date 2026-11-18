@@ -486,21 +486,7 @@ class CaptureService : AccessibilityService() {
      * 而且它比通知信息更全：通知只有一句摘要，这里能拿到整段对话。
      */
     private fun maybeAutoReplyOnChange() {
-        // 连点进行中时，自动触发必须让路。
-        //
-        // 两条路都在跑 runAuto 会互相踩：连点刚填完一句、自动触发又填一次，
-        // 输入框里就变成「你好啊你好啊」。而且自动触发走的是非手动路径，
-        // 会被精力和冷却拦住，在日志里刷出一堆"等 N 分钟再回"——
-        // 看起来像连点被卡，其实连点是好的。
-        if (batchActive) return
-        if (autoRunning) return
-        // 刚填过字的 5 秒内不触发：填入会让输入框变化，那个变化本身就会
-        // 触发一次 content_changed —— 不拦的话"填了"会被当成"有新消息"，
-        // 又生成一遍同样的草稿。真机出现过「你好啊你好啊」就是这么来的。
-        if (SystemClock.elapsedRealtime() - lastFillAt < 5_000L) return
         val cfg = config ?: return
-        // L0 档不自动：那个档位的定义就是"人自己停在页面里，程序只负责填"
-        if (cfg.level < AppConfig.LEVEL_NOTIFY) return
 
         val root = targetRoot() ?: return
         val pkg = root.packageName?.toString() ?: return
@@ -513,17 +499,34 @@ class CaptureService : AccessibilityService() {
         val messages = NodeQuery.readMessages(root, profile)
         val peer = NodeQuery.peerName(root, profile)
 
-        // 先看是不是又发出去了一条。判据是「同一个会话里，我发的最后一条变了」——
-        // 不依赖"草稿被原样发出"，因为用户可能改几个字再发，也可能干脆自己手打。
-        // 那些都是真实发送，平台都看到了，都该计入配额。
+        // ★ 发送检测必须最先做，不受下面任何"要不要自动回"的条件约束。
+        //
+        // 这里踩过一次：把它放在防抖后面，结果"填完草稿 2 秒后点发送"
+        // 这个最常见的情况永远检测不到 —— 已发计数不涨、连点不推进、
+        // 断句的第二段也不出现，三个症状全都由这一个顺序错误引起。
+        //
+        // 判断依据是「同一个会话里，我发的最后一条变了」，不依赖草稿被原样发出
+        //（用户可能改几个字，也可能自己手打，那些同样是真实发送）。
         val nowWall = System.currentTimeMillis()
         if (SentTracker(this).detectNewSent(messages, peer, nowWall)) {
             PacerGuard(this, cfg).recordSent(nowWall)
-            // 断句：这句话如果是拆开发的，先接着填下一句 —— 不切会话
+            // 断句：这句话是拆开发的，先接着填下一句 —— 不切会话
             if (fillNextSegment(root, profile)) return
             // 连点模式下，"你点了发送"就是推进信号
             onBatchSent()
         }
+
+        // ★ 以下才是"要不要自动生成草稿"，三个门都只该管这件事
+        //
+        // 连点进行中：两条路都跑 runAuto 会互相踩（连点填完一句、自动触发又填一次
+        // 就是「你好啊你好啊」），而且自动触发会被精力和冷却拦住刷出一堆日志。
+        if (batchActive) return
+        if (autoRunning) return
+        // 刚填过字的 5 秒内不触发：填入让输入框变化，那个变化本身又会触发一次
+        // content_changed —— 不拦的话"填了"会被当成"有新消息"。
+        if (SystemClock.elapsedRealtime() - lastFillAt < 5_000L) return
+        // L0 档不自动：那个档位的定义就是"人自己停在页面里，程序只负责填"
+        if (cfg.level < AppConfig.LEVEL_NOTIFY) return
 
         val last = messages.lastOrNull { it.fromOther } ?: return
         // 指纹必须带昵称。交友平台大量新会话第一句都是「你好」，

@@ -21,6 +21,20 @@ object PersonaLoader {
     fun load(context: Context, config: AppConfig): Persona = resolve(context, config).persona
 
     fun resolve(context: Context, config: AppConfig): Loaded {
+        val builtin = resolveBuiltin(context, config)
+
+        // 用户自己在 App 里改的「问答样例 / 行为准则」覆盖内置的那两项。
+        // 只换这两项，identity / tone / boundaries 保持原样 ——
+        // 把整个 persona 交给用户编辑，改坏了他也看不出哪里坏了。
+        val ov = PersonaStore.load(context) ?: return builtin
+        val merged = builtin.persona.copy(
+            fewShot = ov.fewShot ?: builtin.persona.fewShot,
+            rules = ov.rules ?: builtin.persona.rules,
+        )
+        return Loaded(merged, builtin.source + " + 本地编辑")
+    }
+
+    private fun resolveBuiltin(context: Context, config: AppConfig): Loaded {
         val pasted = config.personaJson
         if (pasted.isNotEmpty()) {
             Persona.fromJson(pasted)?.let {
