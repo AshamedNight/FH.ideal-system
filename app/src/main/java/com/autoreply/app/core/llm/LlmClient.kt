@@ -193,12 +193,20 @@ class LlmClient(
     private fun mockReply(user: String): String {
         val last = Regex("对方：(.+)").findAll(user).lastOrNull()
             ?.groupValues?.get(1)?.trim().orEmpty()
-        return when {
-            last.isEmpty() -> "嗯"
-            last.length <= 2 -> "咋了"
-            last.endsWith("？") || last.endsWith("?") -> "让我想想"
-            else -> "哈哈 是"
+        if (last.isEmpty()) return "嗯"
+
+        // 按对话轮次轮换而不是固定几句。
+        // 固定回复在实测里很难看出"到底有没有走通"——连着四条都是「哈哈 是」，
+        // 分不清是流程正常还是卡住重复了。
+        val turns = Regex("对方：").findAll(user).count()
+        val pool = if (last.length <= 2) {
+            listOf("咋了", "嗯？", "在", "你说")
+        } else if (last.endsWith("？") || last.endsWith("?")) {
+            listOf("让我想想", "你猜", "这个不好说", "怎么了")
+        } else {
+            listOf("哈哈 是", "也是", "行啊", "差不多吧", "嗯 对", "不知道啊")
         }
+        return pool[turns % pool.size]
     }
 
     private companion object {

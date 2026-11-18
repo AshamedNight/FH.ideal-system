@@ -79,29 +79,66 @@ class SentTracker(context: Context) {
      * 那不代表你刚发了消息。
      */
     fun detectNewSent(messages: List<ChatMessage>, peer: String, now: Long): Boolean {
-        val lastSelf = messages.lastOrNull { !it.fromOther } ?: return false
+        // 读不到昵称就判断不了"是不是同一个会话"，宁可漏检也别误判。
+        // 误判的代价是「把当前会话的草稿丢掉、直接跳下一条」；
+        // 漏检有 20 秒看门狗兜底，代价小得多。
+        if (peer.isEmpty()) return false
+
+        val selfMsgs = messages.filter { !it.fromOther }
+        val lastSelf = selfMsgs.lastOrNull() ?: return false
         val text = squash(lastSelf.text)
         if (text.isEmpty()) return false
 
-        val baselinePeer = sp.getString(KEY_BASE_PEER, "") ?: ""
-        val baselineText = sp.getString(KEY_BASE_TEXT, "") ?: ""
+        val basePeer = sp.getString(KEY_BASE_PEER, "") ?: ""
+        val baseText = sp.getString(KEY_BASE_TEXT, "") ?: ""
+        val baseCount = sp.getInt(KEY_BASE_COUNT, -1)
 
         // 换会话：重建基线，不计数
-        if (peer != baselinePeer) {
+        if (peer != basePeer) {
             sp.edit()
                 .putString(KEY_BASE_PEER, peer)
                 .putString(KEY_BASE_TEXT, text)
+                .putInt(KEY_BASE_COUNT, selfMsgs.size)
                 .apply()
             return false
         }
 
-        if (text == baselineText) return false
+        if (baseCount < 0) {
+            sp.edit()
+                .putString(KEY_BASE_TEXT, text)
+                .putInt(KEY_BASE_COUNT, selfMsgs.size)
+                .apply()
+            return false
+        }
 
-        sp.edit()
-            .putString(KEY_BASE_TEXT, text)
-            .putLong(KEY_LAST_SENT, now)
-            .apply()
-        return true
+        // ---- 关键：不能只看文本 ----
+        //
+        // 消息列表只读**可见区域**。对方发来新消息时列表会往下滚，
+        // 我之前发的那条可能滚出屏幕，`lastSelf` 就变成更早的一条 ——
+        // 文本"变了"，但根本没发新消息。只看文本就会误判成"刚发了一条"，
+        // 然后连点以为这一轮做完了，切会话 + 清空草稿。
+        // 真机表现：「对方说第 5 条时，第 4 条（我发的）又冒出来一遍，然后跳过」。
+        //
+        // 所以条数变少时**只更新文本基线，不降低条数基线、也不触发**。
+        // 基线记住的是"见过的最多条数"，滚动不会让它退回去。
+        if (selfMsgs.size < baseCount) {
+            sp.edit().putString(KEY_BASE_TEXT, text).apply()
+            return false
+        }
+
+        // 条数真的增加了 = 发出去一条
+        if (selfMsgs.size > baseCount) {
+            sp.edit()
+                .putString(KEY_BASE_TEXT, text)
+                .putInt(KEY_BASE_COUNT, selfMsgs.size)
+                .putLong(KEY_LAST_SENT, now)
+                .apply()
+            return true
+        }
+
+        // 条数不变、文本变了：多半是 App 改写了展示，不算发送
+        sp.edit().putString(KEY_BASE_TEXT, text).apply()
+        return false
     }
 
     /**
@@ -156,6 +193,7 @@ class SentTracker(context: Context) {
         const val KEY_LAST_SENT = "last_sent"
         const val KEY_BASE_PEER = "base_peer"
         const val KEY_BASE_TEXT = "base_text"
+        const val KEY_BASE_COUNT = "base_count"
 
         /** 10 分钟：够用户从容地点发送，又不会把很久以前的残留当成本次。 */
         const val WINDOW_MS = 10 * 60_000L
