@@ -1,30 +1,51 @@
 {
   "_README": "每个平台一段，key 是包名。by 支持 viewId / viewIdEnds / className / text / textContains / contentDesc；pick 支持 first / last。所有值必须来自真机 dump。字段是候选列表，按顺序试，任一命中即停 —— 同一个 App 的不同页面锚点不同，靠候选列表一起覆盖。",
-
   "com.ss.android.ugc.aweme": {
     "_note": "抖音。2026-11-16 两份真机 dump：① 私信聊天页（有真实对话）② 内置豆包 AI 页。两条候选分别对应这两个页面，私信排在前面。抖音的 viewId 是资源混淆后的 1-3 字符短名，大版本更新可能变，所以每条都留了兜底。",
-
     "messageList": [
-      { "by": "viewId", "value": "v6m" },
-      { "by": "viewId", "value": "y0" },
-      { "by": "className", "value": "androidx.recyclerview.widget.RecyclerView" }
+      {
+        "by": "viewId",
+        "value": "v6m"
+      },
+      {
+        "by": "viewId",
+        "value": "y0"
+      },
+      {
+        "by": "className",
+        "value": "androidx.recyclerview.widget.RecyclerView"
+      }
     ],
-
     "message": [
-      { "by": "viewId", "value": "content_layout" },
-      { "by": "viewId", "value": "dyl" }
+      {
+        "by": "viewId",
+        "value": "content_layout"
+      },
+      {
+        "by": "viewId",
+        "value": "dyl"
+      }
     ],
-
     "input": [
-      { "by": "viewId", "value": "msg_et" },
-      { "by": "viewId", "value": "jbj" }
+      {
+        "by": "viewId",
+        "value": "msg_et"
+      },
+      {
+        "by": "viewId",
+        "value": "jbj"
+      }
     ],
-
     "pageHint": [
-      { "by": "viewId", "value": "msg_et" },
-      { "by": "viewId", "value": "jbj" }
+      {
+        "by": "viewId",
+        "value": "msg_et"
+      },
+      {
+        "by": "viewId",
+        "value": "jbj"
+      }
     ],
-
     "exclude": [
       "为保障用户沟通安全",
       "请遵守法律法规",
@@ -33,63 +54,124 @@
       "对方设置了隐私权限"
     ]
   },
-
   "com.netease.moyi": {
     "_note": "网易 moyi。2026-11-16 真机 dump。这是目前结构最规范的一个：id 全是语义化全名（不是混淆短名），且消息体用的是网易云信 SDK 的标准组件 nim_message_item_text_body —— 意味着同类接入云信 SDK 的 App 可以共用这套锚点。",
-
     "messageList": [
-      { "by": "viewId", "value": "biz_msg_chat_message_list_view" },
-      { "by": "className", "value": "androidx.recyclerview.widget.RecyclerView" }
+      {
+        "by": "viewId",
+        "value": "biz_msg_chat_message_list_view"
+      },
+      {
+        "by": "className",
+        "value": "androidx.recyclerview.widget.RecyclerView"
+      }
     ],
-
     "message": [
-      { "by": "viewId", "value": "nim_message_item_text_body" },
-      { "by": "viewId", "value": "message_item_text_body" }
+      {
+        "by": "viewId",
+        "value": "nim_message_item_text_body"
+      },
+      {
+        "by": "viewId",
+        "value": "message_item_text_body"
+      }
     ],
-
     "input": [
-      { "by": "viewId", "value": "editTextView" },
-      { "by": "className", "value": "android.widget.EditText", "pick": "last" }
+      {
+        "by": "viewId",
+        "value": "editTextView"
+      },
+      {
+        "by": "className",
+        "value": "android.widget.EditText",
+        "pick": "last"
+      }
     ],
-
     "pageHint": [
-      { "by": "viewId", "value": "editTextView" },
-      { "by": "viewId", "value": "biz_msg_chat_message_list_view" }
+      {
+        "by": "viewId",
+        "value": "editTextView"
+      },
+      {
+        "by": "viewId",
+        "value": "biz_msg_chat_message_list_view"
+      }
     ],
-
     "exclude": [
       "缘分天使",
       "匹配度较高",
-      "别错过缘分"
+      "别错过缘分",
+      "你们都来自",
+      "可以跟他聊聊",
+      "挺喜欢你的",
+      "我感觉我们挺有缘",
+      "职业：",
+      "身高：",
+      "请输入信息"
+    ],
+    "label": "心遇",
+    "peer": [
+      {
+        "by": "viewId",
+        "value": "titleView"
+      }
     ]
   },
-
   "com.huwei.fox": {
     "_note": "2026-11-17 真机 dump（测试账号）。结构规范程度介于 moyi 和抖音之间：id 是语义化全名，但消息文本和快捷回复都叫 tv_content —— 必须靠 messageList 作用域隔离，#recyclerview 外面的 #quick_replies_recyclerview 里有同名 id。注意输入框：dump 里只有 #et_content_container / #all_et_content_container 两层容器，真正的 EditText 没暴露（NodeQuery.firstEditable 会在容器内下探 8 层找可编辑节点）。",
-
     "messageList": [
-      { "by": "viewId", "value": "recyclerview" },
-      { "by": "className", "value": "androidx.recyclerview.widget.RecyclerView" }
+      {
+        "by": "viewId",
+        "value": "recyclerview"
+      },
+      {
+        "by": "className",
+        "value": "androidx.recyclerview.widget.RecyclerView"
+      }
     ],
-
     "message": [
-      { "by": "viewId", "value": "tv_content" },
-      { "by": "viewId", "value": "cl_container" },
-      { "by": "viewId", "value": "ccv_content" }
+      {
+        "by": "viewId",
+        "value": "tv_content"
+      },
+      {
+        "by": "viewId",
+        "value": "cl_container"
+      },
+      {
+        "by": "viewId",
+        "value": "ccv_content"
+      }
     ],
-
     "input": [
-      { "by": "viewId", "value": "et_content_container" },
-      { "by": "viewId", "value": "all_et_content_container" },
-      { "by": "viewId", "value": "ll_edit_input" },
-      { "by": "className", "value": "android.widget.EditText", "pick": "last" }
+      {
+        "by": "viewId",
+        "value": "et_content_container"
+      },
+      {
+        "by": "viewId",
+        "value": "all_et_content_container"
+      },
+      {
+        "by": "viewId",
+        "value": "ll_edit_input"
+      },
+      {
+        "by": "className",
+        "value": "android.widget.EditText",
+        "pick": "last"
+      }
     ],
-
     "pageHint": [
-      { "by": "viewId", "value": "chat_input" },
-      { "by": "viewId", "value": "recyclerview" }
+      {
+        "by": "viewId",
+        "value": "chat_input"
+      },
+      {
+        "by": "viewId",
+        "value": "recyclerview"
+      }
     ],
-
     "exclude": [
       "一切以刷单",
       "做任务、抢单",
@@ -110,31 +192,39 @@
       "抓住推荐机会",
       "金币"
     ],
-
     "nextUnread": [
-      { "by": "viewId", "value": "tv_next" }
+      {
+        "by": "viewId",
+        "value": "tv_next"
+      }
     ],
-
     "peerName": [
-      { "by": "viewId", "value": "txt_top_center" }
+      {
+        "by": "viewId",
+        "value": "txt_top_center"
+      }
     ]
   },
-
   "com.xingjiabi.shengsheng": {
     "_note": "他趣 8.7.3.1（网易易盾加固）。2026-11-17 真机 dump：根节点 View [0,0,0] noimp，全树只有 1 个节点 —— 整棵树被 importantForAccessibility=no 摘掉了，所以**消息读不到**（不是自绘，是主动关闭无障碍）。但输入焦点仍能拿到：EditText #editContent editable=true，所以填字有戏（靠 NodeQuery.firstEditable 的 findFocus 兜底，不靠遍历）。读消息要靠通知监听，下一步再接。",
-
     "messageList": [],
     "message": [],
-
     "input": [
-      { "by": "viewId", "value": "editContent" },
-      { "by": "className", "value": "android.widget.EditText" }
+      {
+        "by": "viewId",
+        "value": "editContent"
+      },
+      {
+        "by": "className",
+        "value": "android.widget.EditText"
+      }
     ],
-
     "pageHint": [
-      { "by": "viewId", "value": "editContent" }
+      {
+        "by": "viewId",
+        "value": "editContent"
+      }
     ],
-
     "exclude": []
   }
 }

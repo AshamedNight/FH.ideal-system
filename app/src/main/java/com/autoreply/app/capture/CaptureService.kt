@@ -666,7 +666,16 @@ class CaptureService : AccessibilityService() {
         if (pkg == null) return false
         if (isSystemUi(pkg)) return false
         val list = targets()
-        return list.isEmpty() || list.contains(pkg)
+        // 设置里没填 = 认所有在 profiles.json 里配过的平台。
+        //
+        // 原来写的是"没填就认任意包名"，结果是：用户切到任何一个 App，
+        // 都可能被当成目标界面拿进来，然后在 forPackage 那里失败，
+        // 报一句"这个平台没有配置" —— 但用户根本没让它去认那个 App。
+        // 改成"只认配置过的"，新增平台只要加一段 json 就能直接用，
+        // 不必再去设置页手填包名。
+        val configured = Profiles.forPackage(pkg) != null
+        if (list.isEmpty()) return configured
+        return list.contains(pkg) || configured
     }
 
     /**
