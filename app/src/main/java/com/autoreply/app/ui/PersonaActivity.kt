@@ -189,13 +189,13 @@ class PersonaActivity : Activity() {
         shots.add(ShotRow(qEt, aEt, row))
     }
 
-    private fun addRuleRow(text: String) {
+    private fun addRuleRow(rule: String) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         val et = EditText(this).apply {
-            setText(text)
+            setText(rule)
             hint = "一句话一条"
             maxLines = 3
         }
