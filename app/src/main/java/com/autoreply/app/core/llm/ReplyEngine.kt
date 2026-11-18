@@ -87,7 +87,20 @@ class ReplyEngine(
             // 每轮都要把 system 一起发，所以估算也每轮累加
             estIn += estimateTokens(system) + estimateTokens(user)
 
-            val resp = client.chat(system, user)
+            // 演练模式：不联网，用你注入的问答样例拼回复。
+            //
+            // 为什么不是固定几句话：固定输出验证不了续聊 —— 每轮回复都跟对方说了
+            // 什么无关，看不出上下文有没有被用上。查表拼出来的回复会随对方的话变，
+            // 于是"有没有真的接上"一眼就能看出来。
+            //
+            // 后面的禁止词检查照常走：那也是流程的一部分，跳过就测不全。
+            val resp = if (config.drillMode) {
+                LlmClient.Result.Ok(
+                    DrillReplier.reply(persona, last.text, turns.count { it.fromOther })
+                )
+            } else {
+                client.chat(system, user)
+            }
             if (resp is LlmClient.Result.Err) return Result.Failed(resp.reason)
             val ok = resp as LlmClient.Result.Ok
             // 重写也要算钱，所以累加而不是覆盖
