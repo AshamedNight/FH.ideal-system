@@ -18,8 +18,25 @@ package com.autoreply.app.core.guard
  */
 object SentenceSplitter {
 
-    /** 拆点。用中文标点为主，英文句号顺手带上（模型偶尔会用）。 */
-    private val SPLITTERS = setOf('。', '！', '？', '；', '…', '，', '!', '?', ';', ',', '\n')
+    /**
+     * 硬拆点：句子结束了，必拆。
+     */
+    private val HARD = setOf('。', '！', '？', '…', '!', '?', '\n')
+
+    /**
+     * 软拆点：只是句中停顿，**两边都够长才拆**。
+     *
+     * 不加这个区分会把「电商运营，天天跟数据打交道」拆成两条，
+     * 第一条只有「电商运营」—— 一句话被腰斩，读起来像说话卡住了。
+     * 而「在张店这边。常来没。」这种句号分隔的该照拆。
+     */
+    private val SOFT = setOf('，', '；', '、', ',', ';')
+
+    /** 软拆点两边各自至少这么多字才值得断句。 */
+    private const val SOFT_MIN_CHARS = 5
+
+    /** 旧的合并口径保留给「去段尾标点」使用。 */
+    private val SPLITTERS = HARD + SOFT
 
     /**
      * 少于这个字数的段不值得单独发，并进相邻段。
@@ -43,11 +60,24 @@ object SentenceSplitter {
         // 逐字符搬运：遇到拆点就收一段，标点留在段尾（不丢）
         val pieces = ArrayList<String>(4)
         val sb = StringBuilder()
-        for (ch in text) {
+        for ((i, ch) in text.withIndex()) {
             sb.append(ch)
-            if (ch in SPLITTERS) {
-                pieces.add(sb.toString())
-                sb.setLength(0)
+            when {
+                ch in HARD -> {
+                    pieces.add(sb.toString())
+                    sb.setLength(0)
+                }
+                ch in SOFT -> {
+                    // 软拆点要看两边：任何一边太短就并进同一段，只当普通字符
+                    val head = contentLength(sb.toString())
+                    val rest = text.substring(i + 1)
+                    val nextHard = rest.indexOfFirst { it in HARD }
+                    val tail = contentLength(if (nextHard < 0) rest else rest.substring(0, nextHard + 1))
+                    if (head >= SOFT_MIN_CHARS && tail >= SOFT_MIN_CHARS) {
+                        pieces.add(sb.toString())
+                        sb.setLength(0)
+                    }
+                }
             }
         }
         if (sb.isNotEmpty()) pieces.add(sb.toString())
