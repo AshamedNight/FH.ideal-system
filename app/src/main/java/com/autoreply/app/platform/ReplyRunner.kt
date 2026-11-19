@@ -93,7 +93,7 @@ class ReplyRunner(
         val peer = NodeQuery.peerName(root, profile)
         if (dedup.isDuplicate(peer, lastOther.text, now)) {
             val who = peer.ifEmpty { "这个会话" }
-            finish(emptyList(), "", "「$who」这条已经处理过（5 分钟内同一句）", false, false, onDone)
+            finish(emptyList(), "", "「$who」这条已经处理过（30 分钟内不重复）", false, false, onDone)
             return
         }
 
@@ -221,10 +221,12 @@ class ReplyRunner(
                 } else {
                     ""
                 }
+                // write.note 里已经带了"已复制到剪贴板"这句（TextWriter 写的），
+                // 这里再拼一遍就变成「已复制到剪贴板（已复制到剪贴板）」
                 val note = when {
                     copied && parts.size > 1 ->
-                        "${write.note}（已复制第 1 段，剩下 ${parts.size - 1} 段发完自动复制）"
-                    copied -> "${write.note}（草稿已复制到剪贴板）"
+                        "${write.note}；第 1 段在上面，剩下 ${parts.size - 1} 段发完自动复制"
+                    copied -> write.note
                     else -> write.note + segHint
                 }
                 finish(trace, outcome.text, note, write.written, copied, onDone)

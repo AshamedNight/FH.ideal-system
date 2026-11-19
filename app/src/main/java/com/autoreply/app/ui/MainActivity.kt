@@ -184,7 +184,7 @@ class MainActivity : Activity() {
 
         val turns = messages.map { Turn(it.text, it.fromOther) }
 
-        // ---- 去重：同一条消息 5 分钟内只处理一次 ----
+        // ---- 去重：同一条消息 30 分钟内只处理一次 ----
         // 指纹带对方昵称 —— 交友平台大量新会话第一句都是「你好」，
         // 只按文本去重会把第二个会话直接锁死（这个坑踩过）。
         val now = System.currentTimeMillis()
@@ -200,9 +200,9 @@ class MainActivity : Activity() {
         if (dedup.isDuplicate(peer, lastOther.text, now)) {
             val who = peer.ifEmpty { "这个会话" }
             output.text = buildString {
-                append("「$who」这条已经处理过（5 分钟内同一句），不重复生成。\n\n")
+                append("「$who」这条已经处理过（30 分钟内不重复），不重复生成。\n\n")
                 append("内容：").append(lastOther.text.take(40))
-                append("\n\n（要重来就等 5 分钟，或等对方发新消息）")
+                append("\n\n（要重来就等 30 分钟，或等对方发新消息）")
             }
             return
         }

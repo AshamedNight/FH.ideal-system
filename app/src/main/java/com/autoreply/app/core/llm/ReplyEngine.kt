@@ -73,7 +73,18 @@ class ReplyEngine(
         // 比每人一段风格飘忽的开场更像同一个人。
         val iSaidAlready = turns.any { !it.fromOther }
         val greetings = config.greetingLines
-        if (config.greetingEnabled && !iSaidAlready && greetings.isNotEmpty()) {
+
+        // 还有一个条件：**对方先说的得是招呼**。
+        //
+        // 只看"我没说过话"是不够的 —— 心遇这类平台对方可能一上来就问
+        // 「你多大」「哪的人」，那是具体问题，该正面答，
+        // 拿模板开场白糊过去等于答非所问（对方会觉得你在敷衍）。
+        val peerOpenedWithGreeting = turns.lastOrNull { it.fromOther }
+            ?.let { isJustGreeting(it.text) } == true
+
+        if (config.greetingEnabled && !iSaidAlready && peerOpenedWithGreeting &&
+            greetings.isNotEmpty()
+        ) {
             // **三句一组**：真人打招呼常是两三句连着蹦（「在吗？」「刚看到你」
             // 「认识一下」），比一句一句等回音自然。
             // 填 1~3 句就是一组全发；填 6 句就分两组，按昵称取模选一组 ——
