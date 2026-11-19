@@ -168,8 +168,18 @@ class ReplyEngine(
     /** 给模型看的"现在几点"，顺带把明显不合时宜的说法堵住。 */
     private fun nowDescription(): String {
         val cal = java.util.Calendar.getInstance()
-        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
-        val period = when (hour) {
+
+        // 设置里手动指定了时段就用那个，否则跟系统时钟。
+        // 有些场景系统时间不可信（或者你想让它是"晚上"），手动开关比改系统时间省事。
+        val forced = when (config.timeOfDay) {
+            "morning" -> "上午" to 10
+            "afternoon" -> "下午" to 15
+            "evening" -> "晚上" to 20
+            "night" -> "深夜" to 23
+            else -> null
+        }
+        val hour = forced?.second ?: cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val period = forced?.first ?: when (hour) {
             in 0..4 -> "凌晨"
             in 5..8 -> "早上"
             in 9..11 -> "上午"
@@ -256,7 +266,35 @@ class ReplyEngine(
      * 全量塞进去有两个问题：token 变多、模型会去回很早之前的话。
      * 8 条足够覆盖"刚才在聊什么"，再多是噪音。
      */
+    /**
+     * 这句话是不是"纯招呼"。
+     *
+     * 超过 12 字基本不可能是纯招呼（"你好，我想问问你平时喜欢干什么"是有效内容）。
+     */
+    private fun isJustGreeting(text: String): Boolean {
+        val t = text.trim()
+        if (t.isEmpty() || t.length > 12) return false
+        return GREETING_WORDS.any { t.contains(it) }
+    }
+
     private fun buildUser(turns: List<Turn>): String = buildString {
+        // 二次招呼：你们已经在聊了，对方（或者平台的系统招呼）又来一句"你好"。
+        //
+        // **不跳过，换个方式接**。跳过等于不理人；而回「你好啊」等于重新自我介绍 ——
+        // 真人这时候一般会说"刚看到""在呢""刚忙完"，然后接着刚才的话头。
+        // 这件事只能靠提示词告诉模型，因为它从样例里学不到这种分寸。
+        val lastOther = turns.lastOrNull { it.fromOther }
+        val iSaid = turns.any { !it.fromOther }
+        if (lastOther != null && iSaid && isJustGreeting(lastOther.text)) {
+            appendLine("# 注意")
+            appendLine(
+                "你们已经在聊了，对方刚又发了一句招呼（「${lastOther.text.take(12)}」）。" +
+                    "不要重新打招呼、不要自我介绍，像接着说那样回 —— " +
+                    "「刚看到」「在呢」这类，或者直接接着刚才的话题。"
+            )
+            appendLine()
+        }
+
         appendLine("# 最近的对话")
         turns.takeLast(CONTEXT_TURNS).forEach { t ->
             appendLine((if (t.fromOther) "对方：" else "我：") + t.text.replace("\n", " "))
@@ -312,6 +350,11 @@ class ReplyEngine(
 
         return t.trim()
     }
+
+    private val GREETING_WORDS = listOf(
+        "你好", "在吗", "在不在", "嗨", "哈喽", "hello", "hi",
+        "缘分小助手", "缘分天使", "小助手",
+    )
 
     private companion object {
         const val MAX_ATTEMPTS = 2

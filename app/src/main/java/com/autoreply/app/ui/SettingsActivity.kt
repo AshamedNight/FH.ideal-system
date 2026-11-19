@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
@@ -93,6 +94,40 @@ class SettingsActivity : Activity() {
         root.addView(field("llmProxy", "代理（可选）", config.llmProxy, InputType.TYPE_TEXT_VARIATION_URI))
         root.addView(note("代理只作用于「发往模型接口」的请求，目标 App 的流量不经过它 —— 所以不必为此打开手机的系统级 VPN。\n例：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080（Termux 里跑的代理填这里）。走电脑中转时留空。"))
         root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，也可改成电脑中转：http://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
+
+        root.addView(section("时段"))
+        root.addView(
+            note(
+                "告诉模型「现在几点」，它会据此调整说话方式 —— 比如上午就不会说「刚下班」。\n" +
+                    "留「自动」就跟系统时钟；也可以手动指定，方便测不同时段的效果。"
+            )
+        )
+        val timeGroup = RadioGroup(this).apply { orientation = RadioGroup.VERTICAL }
+        val timeOptions = listOf(
+            "" to "自动（跟系统时钟）",
+            "morning" to "上午",
+            "afternoon" to "下午",
+            "evening" to "晚上",
+            "night" to "深夜",
+        )
+        timeOptions.forEach { (value, label) ->
+            val rb = RadioButton(this).apply {
+                text = label
+                id = View.generateViewId()
+                tag = value
+                isChecked = config.timeOfDay == value
+            }
+            timeGroup.addView(rb)
+        }
+        timeGroup.setOnCheckedChangeListener { group, checkedId ->
+            val rb = group.findViewById<RadioButton>(checkedId)
+            config.timeOfDay = (rb?.tag as? String).orEmpty()
+        }
+        // 没选中任何一个（首次进来且值为空）时，把"自动"选上
+        if (timeGroup.checkedRadioButtonId == -1 && timeGroup.childCount > 0) {
+            (timeGroup.getChildAt(0) as? RadioButton)?.isChecked = true
+        }
+        root.addView(timeGroup)
 
         root.addView(section("精力"))
         root.addView(android.widget.CheckBox(this).apply {

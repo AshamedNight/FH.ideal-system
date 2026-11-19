@@ -88,6 +88,17 @@ class AppConfig(context: Context) {
             .apply()
 
     /**
+     * 手动指定「现在是什么时候」。空 = 跟系统时钟。
+     *
+     * 用途：测试不同时段的说话方式（上午 / 下午 / 晚上 / 深夜），
+     * 以及系统时间不对、或者你想让它是"晚上"的时候。
+     * 取值：""(自动) / "morning" / "afternoon" / "evening" / "night"
+     */
+    var timeOfDay: String
+        get() = sp.getString(KEY_TIME_OF_DAY, "") ?: ""
+        set(value) = sp.edit().putString(KEY_TIME_OF_DAY, value).apply()
+
+    /**
      * 精力锁：锁定后不再消耗、也不随时间恢复，永远等于 [energyLockedValue]。
      *
      * 用途很实际：连着测十几条时，程序自己的疲劳曲线会把后面全压住，
@@ -275,6 +286,7 @@ class AppConfig(context: Context) {
         private const val KEY_GREETINGS = "greeting_lines"
         private const val KEY_GREETING_ON = "greeting_enabled"
         private const val KEY_ENERGY_LOCKED = "energy_locked"
+        private const val KEY_TIME_OF_DAY = "time_of_day"
         private const val KEY_ENERGY_VALUE = "energy_locked_value"
         private const val KEY_TARGET_PKGS = "target_pkgs"
         private const val KEY_LLM_URL = "llm_url"
