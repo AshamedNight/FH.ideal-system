@@ -315,6 +315,13 @@ class ReplyEngine(
 
     private companion object {
         const val MAX_ATTEMPTS = 2
-        const val CONTEXT_TURNS = 8
+        /**
+         * 给模型看最近几条。
+         *
+         * 8 → 12：对方发一条长消息时，8 条里可能大半是「嗯」「好」这类碎片，
+         * 真正有用的信息被挤出去了，模型只能靠猜 ——
+         * 表现就是"接不上话""回复很模板化"。
+         */
+        const val CONTEXT_TURNS = 12
     }
 }

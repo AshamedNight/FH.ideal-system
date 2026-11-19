@@ -93,6 +93,17 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
      *
      *   **两个开关都不影响平台闸门的核心部分**（每小时上限、熔断）—— 那才是真护栏。
      */
+    /**
+     * 这句话是不是"纯招呼"。
+     *
+     * 超过 12 字基本不可能是纯招呼（"你好，我想问问你平时喜欢干什么"是有效内容）。
+     */
+    private fun isJustGreeting(text: String): Boolean {
+        val t = text.trim()
+        if (t.isEmpty() || t.length > 12) return false
+        return GREETING_WORDS.any { t.contains(it) }
+    }
+
     fun decide(
         turns: List<Turn>,
         selfSaidAgoSeconds: Int = Int.MAX_VALUE,
@@ -145,6 +156,23 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
                 "② 该不该回：该回（${"%.2f".format(judgment.score)}）" +
                     judgment.reasons.take(3).joinToString(" ")
             )
+        }
+
+        // ---- 2.5 招呼重复：已经聊起来了，对方又发一句招呼 ----
+        //
+        // 平台会在你打过招呼之后再推一条"系统招呼"（缘分小助手那类），
+        // 有时内容干脆就是「你好」。这时再回一次"你好啊"就非常像机器人 ——
+        // 真人不会对着已经聊了三轮的人重新说一遍你好。
+        //
+        // 半小时内说过话才算"已经聊起来"：隔太久对方重新打招呼是正常的。
+        val lastOtherTurn = turns.lastOrNull { it.fromOther }
+        val iSaid = turns.any { !it.fromOther }
+        if (lastOtherTurn != null && iSaid &&
+            selfSaidAgoSeconds < 1800 &&
+            isJustGreeting(lastOtherTurn.text)
+        ) {
+            step("② 招呼重复：已经聊过，这次不再回招呼（${lastOtherTurn.text.take(12)}）")
+            return Outcome.Silent("已经打过招呼了，对方又发了一句招呼，不重复回")
         }
 
         // ---- 3. 累不累 ----
