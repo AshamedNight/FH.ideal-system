@@ -74,10 +74,11 @@ class ReplyEngine(
         val iSaidAlready = turns.any { !it.fromOther }
         val greetings = config.greetingLines
         if (config.greetingEnabled && !iSaidAlready && greetings.isNotEmpty()) {
-            // **两句一组**：你填「突然想认识你」「在吗？」就是要连发这两句，
-            // 不是从里面挑一句。用「。」连起来，外面会自动拆成两条。
-            // 填了 4 句就分成 2 组，按昵称取模选一组 —— 同一个人始终同一组。
-            val groups = greetings.chunked(2)
+            // **三句一组**：真人打招呼常是两三句连着蹦（「在吗？」「刚看到你」
+            // 「认识一下」），比一句一句等回音自然。
+            // 填 1~3 句就是一组全发；填 6 句就分两组，按昵称取模选一组 ——
+            // 同一个人始终同一组，不会重进一次换一套。
+            val groups = greetings.chunked(3)
             val idx = kotlin.math.abs(
                 turns.lastOrNull { it.fromOther }?.text.orEmpty().hashCode()
             ) % groups.size

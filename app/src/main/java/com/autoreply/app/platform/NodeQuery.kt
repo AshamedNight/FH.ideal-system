@@ -331,7 +331,21 @@ object NodeQuery {
     ): Boolean {
         if (profile.nextUnread.isEmpty()) return false
         val node = firstMatch(root, profile.nextUnread) ?: return false
-        if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+
+        // 命中的节点自己往往不可点 —— 这类按钮常见结构是
+        // 「可点击的 FrameLayout > 一个纯文本 TextView」，我们按文案匹配到的
+        // 是里面那个 TextView，对它 performAction(CLICK) 会返回 false。
+        // 所以沿着 parent 往上找几层，谁 clickable 就点谁。
+        var cur: AccessibilityNodeInfo? = node
+        var depth = 0
+        while (cur != null && depth < 5) {
+            if (cur.isClickable && cur.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true
+            }
+            cur = cur.parent
+            depth++
+        }
+        // 都不行就按坐标点（dispatchGesture）
         return tap?.invoke(node) ?: false
     }
 }
