@@ -165,8 +165,43 @@ class ReplyEngine(
     val isDrill: Boolean
         get() = config.drillMode
 
+    /** 给模型看的"现在几点"，顺带把明显不合时宜的说法堵住。 */
+    private fun nowDescription(): String {
+        val cal = java.util.Calendar.getInstance()
+        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val period = when (hour) {
+            in 0..4 -> "凌晨"
+            in 5..8 -> "早上"
+            in 9..11 -> "上午"
+            in 12..13 -> "中午"
+            in 14..17 -> "下午"
+            in 18..22 -> "晚上"
+            else -> "深夜"
+        }
+        val weekend = when (cal.get(java.util.Calendar.DAY_OF_WEEK)) {
+            java.util.Calendar.SATURDAY, java.util.Calendar.SUNDAY -> "，周末"
+            else -> ""
+        }
+        val ban = when (hour) {
+            in 9..16 -> "别说\"刚下班\"\"还没下班\"\"下班回家\"这类话，这个点人在上班或午休。"
+            in 17..19 -> "可以说下班、路上这类话。"
+            in 22..23, in 0..4 -> "可以说准备睡了、熬夜这类话，别说早上好。"
+            else -> ""
+        }
+        return "${period}${hour}点${weekend}。$ban".trim()
+    }
+
     private fun buildSystem(persona: Persona, maxChars: Int): String = buildString {
         appendLine(persona.identity.trim())
+
+        // 把"现在几点"告诉模型。
+        //
+        // 不加的话它会一直用「刚下班」「还没下班呢」这类话 —— 因为 few_shot 里
+        // 有好几条下班场景，模型照着语感往下写，早上九点也在说下班。
+        // 模型本身没有时钟，这件事只能靠提示词告诉它。
+        appendLine()
+        appendLine("# 现在的时间")
+        appendLine(nowDescription())
         appendLine()
         appendLine(persona.styleRules(maxChars))
 

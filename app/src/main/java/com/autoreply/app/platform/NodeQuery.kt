@@ -144,7 +144,16 @@ object NodeQuery {
         val scope = messageScope(root, profile)
         val rootRect = Rect()
         root.getBoundsInScreen(rootRect)
-        val midX = rootRect.centerX()
+        // 左边缘三分点，用来判断这条是对方发的还是我发的。
+        //
+        // 原来用的是"中心点在中线左边"，遇到**长消息**就失效：
+        // 对方那条「不是的妹妹，，我和你说的是真的…」气泡宽 705px
+        //（[195,1670,900,2200]），中心点 547 刚好超过中线 540
+        // → 被判成"我发的"→ 于是「最后几条都不是对方发的，不生成」。
+        //
+        // 气泡的**起始边**是稳定的：对方从左侧起（约 180~195），
+        // 我从右侧起（600+）。所以看左边缘落在不在屏幕左三分之一内。
+        val mineFromLeft = rootRect.width() / 3
 
         val raw = ArrayList<ChatMessage>()
         // 同一个 id 常常同时打在容器和文本节点上（抖音私信页的 #content_layout
@@ -175,7 +184,7 @@ object NodeQuery {
                         maxOf(1, r.height() / 2)
                 }
                 if (duplicated) continue
-                raw.add(ChatMessage(t, r.centerX() < midX, r))
+                raw.add(ChatMessage(t, r.left < mineFromLeft, r))
             }
             // 第一种选择器命中就够了；多条候选是给版本差异用的，不是用来叠加的
             if (raw.isNotEmpty()) break
