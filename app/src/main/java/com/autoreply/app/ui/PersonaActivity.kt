@@ -12,6 +12,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.persona.FewShot
+import com.autoreply.app.core.persona.KnowledgeItem
 import com.autoreply.app.core.persona.PersonaLoader
 import com.autoreply.app.core.persona.PersonaStore
 
@@ -33,13 +34,17 @@ class PersonaActivity : Activity() {
 
     private lateinit var shotList: LinearLayout
     private lateinit var ruleList: LinearLayout
+    private lateinit var knowledgeList: LinearLayout
     private lateinit var titleView: TextView
 
     private class ShotRow(val q: EditText, val a: EditText, val container: LinearLayout)
     private class RuleRow(val text: EditText, val container: LinearLayout)
 
+    private class KnowledgeRow(val topic: EditText, val answer: EditText, val container: LinearLayout)
+
     private val shots = ArrayList<ShotRow>()
     private val rules = ArrayList<RuleRow>()
+    private val knowledge = ArrayList<KnowledgeRow>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,6 +62,21 @@ class PersonaActivity : Activity() {
                     "只影响「问答样例」和「行为准则」两项；身份、语气、禁止词仍在设置页。"
             )
         )
+
+        // ---- 我的情况 ----
+        content.addView(section("我的情况（模型能说的事实）"))
+        content.addView(
+            note(
+                "模型只能用这里写的事实回话。这里太少，问什么它都只能绕着那几句 —— " +
+                    "也就是「回复模板化」「总是拿同一个借口敷衍」。\n" +
+                    "建议 8~12 条：工作、住哪、作息、爱吃什么、养不养宠物、最近在追什么、" +
+                    "周末一般干嘛、家里人…\n" +
+                    "写你真实的情况就行，不用编 —— 编的聊深了会露。"
+            )
+        )
+        knowledgeList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(knowledgeList)
+        content.addView(ghostButton("＋ 加一条情况") { addKnowledgeRow("", "") })
 
         // ---- 问答样例 ----
         content.addView(section("问答样例"))
@@ -115,6 +135,10 @@ class PersonaActivity : Activity() {
     private fun loadCurrent() {
         val persona = PersonaLoader.resolve(this, AppConfig(this)).persona
 
+        knowledge.clear()
+        knowledgeList.removeAllViews()
+        persona.knowledge.forEach { addKnowledgeRow(it.topic, it.answer) }
+
         shots.clear()
         shotList.removeAllViews()
         persona.fewShot.forEach { addShotRow(it.q, it.a) }
@@ -124,7 +148,7 @@ class PersonaActivity : Activity() {
         ruleList.removeAllViews()
         persona.rules.forEach { addRuleRow(it) }
 
-        titleView.text = "话术管理（${persona.fewShot.size} 条样例 / ${persona.rules.size} 条准则）"
+        titleView.text = "话术管理（${persona.knowledge.size} 条情况 / ${persona.fewShot.size} 条样例 / ${persona.rules.size} 条准则）"
     }
 
     private fun save() {
@@ -143,9 +167,19 @@ class PersonaActivity : Activity() {
             return
         }
 
-        val ok = PersonaStore.save(this, fewShot, ruleTexts)
+        val items = knowledge.mapNotNull {
+            val topic = it.topic.text.toString().trim()
+            val answer = it.answer.text.toString().trim()
+            if (topic.isEmpty() || answer.isEmpty()) null else KnowledgeItem(topic, listOf(topic), answer)
+        }
+
+        val ok = PersonaStore.save(this, fewShot, ruleTexts, items)
         if (ok) {
-            Toast.makeText(this, "已保存（${fewShot.size} 条样例 / ${ruleTexts.size} 条准则）", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "已保存（${items.size} 条情况 / ${fewShot.size} 条样例 / ${ruleTexts.size} 条准则）",
+                Toast.LENGTH_SHORT,
+            ).show()
             finish()
         } else {
             Toast.makeText(this, "保存失败：写不进 filesDir", Toast.LENGTH_LONG).show()
@@ -187,6 +221,35 @@ class PersonaActivity : Activity() {
         row.addView(del, LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT))
         shotList.addView(row)
         shots.add(ShotRow(qEt, aEt, row))
+    }
+
+    private fun addKnowledgeRow(topic: String, answer: String) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val topicEt = EditText(this).apply {
+            setText(topic)
+            hint = "哪方面（工作/住哪/爱吃）"
+            setSingleLine()
+        }
+        val answerEt = EditText(this).apply {
+            setText(answer)
+            hint = "具体怎么说"
+            setSingleLine()
+        }
+        val del = Button(this).apply {
+            this.text = "×"
+            setOnClickListener {
+                knowledge.firstOrNull { it.topic === topicEt }?.let { knowledge.remove(it) }
+                knowledgeList.removeView(row)
+            }
+        }
+        row.addView(topicEt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(answerEt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2f))
+        row.addView(del, LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT))
+        knowledgeList.addView(row)
+        knowledge.add(KnowledgeRow(topicEt, answerEt, row))
     }
 
     private fun addRuleRow(rule: String) {

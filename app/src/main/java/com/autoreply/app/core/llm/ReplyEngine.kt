@@ -84,7 +84,10 @@ class ReplyEngine(
             return Result.Draft(groups[idx].joinToString("。"), 1, 0, 0, 0)
         }
 
-        val system = buildSystem(persona, config.maxReplyChars)
+        // 长度跟着对方走：对方说了一大段，回一句 15 字会显得敷衍；
+        // 对方就几个字，回 70 字又像在写小作文。
+        // 这是真人最自然的节奏，也是"接不上话"和"啰嗦"两个毛病的同一个解。
+        val system = buildSystem(persona, adaptiveMaxChars(turns, config.maxReplyChars))
         val baseUser = buildUser(turns)
         val client = LlmClient(effectiveBaseUrl, config.llmApiKey, config.llmModel, config.llmProxy)
 
@@ -165,6 +168,23 @@ class ReplyEngine(
     val isDrill: Boolean
         get() = config.drillMode
 
+    /**
+     * 按对方这条消息的长度决定回复上限。
+     *
+     * 固定 35 字的问题是两头不讨好：
+     * 对方倾诉了一大段（"不是的妹妹，我和你说的是真的…"），回一句「这样啊」像没听；
+     * 对方只回一个「嗯」，回 35 字又太热情。
+     */
+    private fun adaptiveMaxChars(turns: List<Turn>, base: Int): Int {
+        val len = turns.lastOrNull { it.fromOther }?.text?.length ?: 0
+        return when {
+            len >= 40 -> (base * 2).coerceIn(40, 90)
+            len >= 15 -> base
+            len >= 5 -> (base * 0.8).toInt().coerceAtLeast(15)
+            else -> (base * 0.6).toInt().coerceAtLeast(10)
+        }
+    }
+
     /** 给模型看的"现在几点"，顺带把明显不合时宜的说法堵住。 */
     private fun nowDescription(): String {
         val cal = java.util.Calendar.getInstance()
@@ -204,14 +224,12 @@ class ReplyEngine(
     private fun buildSystem(persona: Persona, maxChars: Int): String = buildString {
         appendLine(persona.identity.trim())
 
-        // 把"现在几点"告诉模型。
+        // 注：「现在几点」放在 buildUser 里，不放这里。
         //
-        // 不加的话它会一直用「刚下班」「还没下班呢」这类话 —— 因为 few_shot 里
-        // 有好几条下班场景，模型照着语感往下写，早上九点也在说下班。
-        // 模型本身没有时钟，这件事只能靠提示词告诉它。
-        appendLine()
-        appendLine("# 现在的时间")
-        appendLine(nowDescription())
+        // system 提示词是**按前缀命中缓存**的，里面只要有一个字随时间变
+        //（哪怕只是"10点"→"11点"），整段都要按未命中重算，费用翻倍。
+        // 挪到 user 消息里：user 本来就每条都不同，缓存损失为零，
+        // 而 system 完全稳定 —— 一天下来能省掉几十次全量重算。
         appendLine()
         appendLine(persona.styleRules(maxChars))
 
@@ -278,6 +296,12 @@ class ReplyEngine(
     }
 
     private fun buildUser(turns: List<Turn>): String = buildString {
+        // 现在几点。放这里而不是 system：system 变动会让整段缓存失效（见上面的注释）。
+        // 模型自己没有时钟，不说的话它早上九点也在讲"刚下班"。
+        appendLine("# 现在")
+        appendLine(nowDescription())
+        appendLine()
+
         // 二次招呼：你们已经在聊了，对方（或者平台的系统招呼）又来一句"你好"。
         //
         // **不跳过，换个方式接**。跳过等于不理人；而回「你好啊」等于重新自我介绍 ——

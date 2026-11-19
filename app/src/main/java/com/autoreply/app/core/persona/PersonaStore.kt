@@ -30,6 +30,7 @@ object PersonaStore {
     data class Override(
         val fewShot: List<FewShot>?,
         val rules: List<String>?,
+        val knowledge: List<KnowledgeItem>?,
     )
 
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)
@@ -54,7 +55,18 @@ object PersonaStore {
                     arr.optString(i, "").trim().ifEmpty { null }
                 }
             }
-            Override(shots, rules)
+            // 关键词不单独让用户填：用它的话题名当关键词就够判断
+            // 「对方是不是在问这件事」，多一个输入框只会多一处要维护的东西。
+            val knowledge = o.optJSONArray("knowledge")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i ->
+                    val item = arr.optJSONObject(i) ?: return@mapNotNull null
+                    val topic = item.optString("topic", "").trim()
+                    val answer = item.optString("answer", "").trim()
+                    if (topic.isEmpty() || answer.isEmpty()) null
+                    else KnowledgeItem(topic, listOf(topic), answer)
+                }
+            }
+            Override(shots, rules, knowledge)
         } catch (_: Exception) {
             // 文件坏了就当没改过，不要让整个回复流程因为一个坏 json 起不来
             null
@@ -62,7 +74,12 @@ object PersonaStore {
     }
 
     /** @return 是否写成功。写不进去要让用户知道，不能默默失败。 */
-    fun save(context: Context, fewShot: List<FewShot>, rules: List<String>): Boolean = try {
+    fun save(
+        context: Context,
+        fewShot: List<FewShot>,
+        rules: List<String>,
+        knowledge: List<KnowledgeItem> = emptyList(),
+    ): Boolean = try {
         val o = JSONObject()
         o.put("few_shot", JSONArray().apply {
             fewShot.forEach {
@@ -71,6 +88,11 @@ object PersonaStore {
         })
         o.put("rules", JSONArray().apply {
             rules.forEach { put(it) }
+        })
+        o.put("knowledge", JSONArray().apply {
+            knowledge.forEach {
+                put(JSONObject().put("topic", it.topic).put("answer", it.answer))
+            }
         })
         file(context).writeText(o.toString(2))
         true

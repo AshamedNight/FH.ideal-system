@@ -30,6 +30,7 @@ object PersonaLoader {
         val merged = builtin.persona.copy(
             fewShot = ov.fewShot ?: builtin.persona.fewShot,
             rules = ov.rules ?: builtin.persona.rules,
+            knowledge = ov.knowledge ?: builtin.persona.knowledge,
         )
         return Loaded(merged, builtin.source + " + 本地编辑")
     }
