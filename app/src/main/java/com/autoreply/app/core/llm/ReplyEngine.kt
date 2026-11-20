@@ -93,7 +93,18 @@ class ReplyEngine(
             val idx = kotlin.math.abs(
                 turns.lastOrNull { it.fromOther }?.text.orEmpty().hashCode()
             ) % groups.size
-            return Result.Draft(groups[idx].joinToString("。"), 1, 0, 0, 0)
+            // **用换行拼接，不用句号。**
+            //
+            // 踩过的坑：这里原来是 `joinToString("。")` —— 拿句号当"拼接符"，
+            // 只是想借它让下游 SentenceSplitter 拆成几条。但配置里本来就带标点的
+            // 那句会变成「干嘛呢？。」：问号已经收尾了，后面又跟一个拼接带进来的句号。
+            // 而且只有**夹在中间**的那句看得出来 —— 最后一句后面没有分隔符，
+            // 第一句多出来的句号看着又像正常的收尾，于是这个问题只在第二句显形。
+            //
+            // 换行在 SentenceSplitter 里同样是硬拆点，还会被 trim 掉、不会出现在
+            // 输入框里：拆成几条发这件事完全不受影响，但每句的标点只归它自己，
+            // 你写什么就发什么。
+            return Result.Draft(groups[idx].joinToString("\n"), 1, 0, 0, 0)
         }
 
         // 长度跟着对方走：对方说了一大段，回一句 15 字会显得敷衍；

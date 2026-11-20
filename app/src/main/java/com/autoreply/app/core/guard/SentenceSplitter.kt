@@ -35,8 +35,35 @@ object SentenceSplitter {
     /** 软拆点两边各自至少这么多字才值得断句。 */
     private const val SOFT_MIN_CHARS = 5
 
+    /** 已经算"句子收尾"的字符。紧跟在这些后面的句号是多余的 —— 见 [tidy]。 */
+    private val TERMINATORS = setOf('。', '？', '！', '…', '?', '!')
+
     /** 旧的合并口径保留给「去段尾标点」使用。 */
     private val SPLITTERS = HARD + SOFT
+
+    /**
+     * 去掉"重复收尾"：紧跟在另一个结束标点后面的句号直接删。
+     *
+     * 这种字不可能是人打出来的，只会是**上游拿标点当拼接符**带进来的：
+     * 固定开场白原来是 `joinToString("。")`，配置里写着「干嘛呢？」的那句
+     * 就变成「干嘛呢？。」—— 真机截图里输入框就是这么显示的。
+     *
+     * 为什么在断句这一层再兜一次，而不是只改上游：`joinToString("。")`
+     * 这种写法很容易被复制到新代码里（本文件里也差点被当成"让下游能拆"的
+     * 通用手段）。这里兜住之后，不管句子从模型来、从话术来、还是从样例拼来，
+     * 输入框里都不会出现双标点。
+     *
+     * 只删「。跟在 。？！… 后面」，不动「？！」「…… 」这种正常的连用。
+     */
+    private fun tidy(raw: String): String {
+        if (raw.length < 2) return raw
+        val out = StringBuilder(raw.length)
+        for (ch in raw) {
+            if (ch == '。' && out.isNotEmpty() && out[out.length - 1] in TERMINATORS) continue
+            out.append(ch)
+        }
+        return out.toString()
+    }
 
     /**
      * 少于这个字数的段不值得单独发，并进相邻段。
@@ -54,7 +81,7 @@ object SentenceSplitter {
      * @return 1~3 段。原文本身不够长、或没有可拆的标点时，原样返回一条。
      */
     fun split(raw: String): List<String> {
-        val text = raw.trim()
+        val text = tidy(raw.trim())
         if (text.isEmpty()) return listOf(text)
 
         // 逐字符搬运：遇到拆点就收一段，标点留在段尾（不丢）

@@ -22,8 +22,8 @@ import com.autoreply.app.core.persona.Persona
  *
  * ## 会故意"多说一句"
  *
- * 开场和多轮的隔轮会各补一句（「在吗？」「你呢」），返回时用句号连接 ——
- * 外面的 SentenceSplitter 会拆成两条，于是能测到"发完第一条自动填第二条"
+ * 开场和多轮的隔轮会各补一句（「在吗？」「你呢」），返回时用**换行**连接 ——
+ * 外面 SentenceSplitter 把换行当硬拆点，于是能测到"发完第一条自动填第二条"
  * 这条链路。真人本来就很少一问一答地卡着发。
  */
 object DrillReplier {
@@ -78,7 +78,9 @@ object DrillReplier {
         if (best != null && score >= MATCH_THRESHOLD && round <= 1) {
             val sameQ = persona.fewShot.filter { it.q == best.q }
             if (sameQ.size > 1) {
-                return sameQ.joinToString("。") { it.a }
+                // 换行分隔，不用句号 —— 答法本身可能已经以「。」「？」收尾，
+                // 再补一个句号就成了「？。」（同一个坑，见 ReplyEngine 里的开场白）
+                return sameQ.joinToString("\n") { it.a }
             }
         }
 
@@ -102,8 +104,11 @@ object DrillReplier {
 
         // ---- 让它像"真人连发两条"，而不是一问一答的客服 ----
         //
-        // 返回的字符串带句号，外面会经过 SentenceSplitter 拆成 2 段，
-        // 于是"填第一条 → 你点发送 → 自动填第二条"。整套断句机制直接复用。
+        // 两句之间放**换行**（不是句号），外面 SentenceSplitter 把换行当硬拆点、
+        // 拆成 2 段，于是"填第一条 → 你点发送 → 自动填第二条"。整套断句机制直接复用。
+        //
+        // 为什么不用句号当连接符：答法自己可能就以「。」或「？」收尾，
+        // 补一个句号会拼出「？。」这种双标点（固定开场白踩过同一个坑）。
         //
         // 只在两种场合补第二句：
         //   1. 开场（对方说的第一句）—— 真人打招呼很少只说一句就等回音
@@ -112,10 +117,10 @@ object DrillReplier {
         val alreadyAsks = answer.contains("你")
 
         if (round <= 1 && !hasQuestion) {
-            return answer + "。" + OPENERS[round % OPENERS.size]
+            return answer + "\n" + OPENERS[round % OPENERS.size]
         }
         if (round % 2 == 0 && !hasQuestion && !alreadyAsks) {
-            return answer + "。" + TAILS[round % TAILS.size]
+            return answer + "\n" + TAILS[round % TAILS.size]
         }
         return answer
     }
