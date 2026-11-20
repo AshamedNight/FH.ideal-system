@@ -777,6 +777,23 @@ class CaptureService : AccessibilityService() {
      * 用户开分屏/小窗时，目标 App 明明就在屏幕上，rootInActiveWindow
      * 返回的却可能是标题栏或另一个窗口。先看活动窗口，不是就遍历 windows 按包名找。
      */
+    /**
+     * 该 App 的所有窗口根。弹窗盖住时，输入框往往在"下面那个窗口"里。
+     */
+    fun allTargetRoots(): List<AccessibilityNodeInfo> {
+        val out = ArrayList<AccessibilityNodeInfo>(4)
+        runCatching {
+            rootInActiveWindow?.let { if (isTarget(it.packageName?.toString())) out.add(it) }
+            windows?.forEach { w ->
+                runCatching {
+                    val r = w.root
+                    if (r != null && isTarget(r.packageName?.toString())) out.add(r)
+                }
+            }
+        }
+        return out
+    }
+
     fun targetRoot(): AccessibilityNodeInfo? {
         val active = rootInActiveWindow
         val activePkg = active?.packageName?.toString()

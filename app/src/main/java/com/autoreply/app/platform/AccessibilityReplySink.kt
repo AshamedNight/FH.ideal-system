@@ -26,9 +26,11 @@ class AccessibilityReplySink(
     }
 
     override fun fill(text: String): FillResult {
-        val root = service.targetRoot()
-            ?: return FillResult.Unavailable("目标界面不在前台")
-        return NodeQuery.fillOnly(root, profile, text)
+        // 把所有窗口都交给 fillOnly：平台弹浮层时 rootInActiveWindow 是那层浮层，
+        // 里面没有输入框；真正的聊天窗口在它下面，仍在这个 App 的窗口列表里。
+        val roots = service.allTargetRoots()
+        if (roots.isEmpty()) return FillResult.Unavailable("目标界面不在前台")
+        return NodeQuery.fillOnly(roots, profile, text)
     }
 
     override fun copyToClipboard(text: String): Boolean = try {

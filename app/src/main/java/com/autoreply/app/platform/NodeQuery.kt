@@ -237,10 +237,26 @@ object NodeQuery {
         root: AccessibilityNodeInfo,
         profile: PlatformProfile,
         text: String,
+    ): FillResult = fillOnly(listOf(root), profile, text)
+
+    /**
+     * 同上，但接受多个候选根。
+     *
+     * 为什么需要：平台经常在聊天页顶上弹一个浮层（"平台倡导真实交友"、
+     * "距离你只有 1.4km，快去看看吧"这类）。那层是**同一个包**的窗口，
+     * `rootInActiveWindow` 会返回它 —— 而它里面没有输入框，
+     * 于是「无障碍填不进去」。
+     *
+     * 把该 App 的所有窗口都当候选，谁有输入框就用谁。
+     */
+    fun fillOnly(
+        roots: List<AccessibilityNodeInfo>,
+        profile: PlatformProfile,
+        text: String,
     ): FillResult {
-        val input = firstEditable(root, profile.input)
+        val input = roots.firstNotNullOfOrNull { firstEditable(it, profile.input) }
             ?: return FillResult.Unavailable(
-                "找不到可写入的输入框（命中的节点是容器，里面没有 EditText）"
+                "找不到可写入的输入框（弹窗挡住了？输入框可能在另一个窗口里）"
             )
 
         val existing = input.text?.toString()?.trim().orEmpty()
