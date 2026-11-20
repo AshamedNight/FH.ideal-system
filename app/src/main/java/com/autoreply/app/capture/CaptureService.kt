@@ -577,6 +577,12 @@ class CaptureService : AccessibilityService() {
         )
         // 新的一段等于重新开始等发送，看门狗要重新计时
         if (batchActive) armBatchWatchdog()
+        // 队列里还有就为它排兜底。
+        //
+        // 不排的话，第三段只能靠"检测到发送"这一条路 ——
+        // 而检测一漏（列表刷新慢、刚好在看别的地方），第三段就永远不出现。
+        // 实测三句开场白：第一段、第二段都出来了，第三段没了。
+        if (com.autoreply.app.core.guard.DraftQueue.size() > 0) scheduleNextSegment()
         return true
     }
 

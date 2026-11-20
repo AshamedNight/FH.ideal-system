@@ -213,6 +213,9 @@ class ReplyRunner(
                     dedup.mark(peer, messageText, now)
                     // 同理，5 秒防抖也要生效，否则界面变化还会继续触发
                     service.noteFill()
+                    // 剪贴板/排队一样要等用户去发 —— 兜底不能只在 written 分支排。
+                    // 不排的话，没切输入法时第二段之后就再也没有任何保底。
+                    service.scheduleNextSegment()
                 }
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 

@@ -275,6 +275,12 @@ class MainActivity : Activity() {
                             service.noteFill()
                             // 手动模式也给"下一段"排个兜底
                             service.scheduleNextSegment()
+                        } else {
+                            // 剪贴板/排队路径：一样要等用户去发，兜底不能缺 ——
+                            // 否则没切输入法时，第二段之后就再无保底
+                            dedup.mark(peer, lastOther.text, now)
+                            service.noteFill()
+                            service.scheduleNextSegment()
                         }
                         if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
 
