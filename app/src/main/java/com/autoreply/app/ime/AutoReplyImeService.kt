@@ -183,13 +183,42 @@ class AutoReplyImeService : InputMethodService() {
                 // null = 这个输入框不支持回读，没法验证。不报错，只说明情况
                 before == null -> statusView?.text = "已写入（无法回读验证）"
                 before.isEmpty() -> {
-                    val cm = getSystemService(android.content.ClipboardManager::class.java)
-                    cm?.setPrimaryClip(android.content.ClipData.newPlainText("AutoReply", text))
-                    statusView?.text = "被 App 清空了 · 草稿已放剪贴板"
+                    val ok = copyDraft(text)
+                    // 必须带上草稿开头：用户唯一能判断"这是不是刚写的那条"的依据。
+                    // 原来只说"草稿已放剪贴板"，粘出来是旧话术时完全没法分辨
+                    // 是没写进剪贴板、还是自己在历史里点错了。
+                    statusView?.text = if (ok) {
+                        "被 App 清空了 · 剪贴板：${text.take(12)}"
+                    } else {
+                        "被 App 清空了 · 剪贴板没写进去（被别的 App 占用？）"
+                    }
                 }
                 else -> statusView?.text = "已写入 ${text.take(12)}"
             }
         }, 250L)
+    }
+
+    /**
+     * 写剪贴板并**回读校验**。
+     *
+     * 原来这里直接 `setPrimaryClip` 就当成功了。但失败是不抛异常的：
+     * Android 10+ 限制后台应用写剪贴板；部分 ROM 的剪贴板历史满（150 条）后也会拒收。
+     * 结果就是界面写着"草稿已放剪贴板"，用户长按粘出来的却是上一条旧话术 ——
+     * 看起来像"改了设置不生效"，实际是这条草稿压根没进去。
+     */
+    private fun copyDraft(text: String): Boolean {
+        val cm = getSystemService(android.content.ClipboardManager::class.java) ?: return false
+        return try {
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("AutoReply", text))
+            val back = cm.primaryClip
+                ?.takeIf { it.itemCount > 0 }
+                ?.getItemAt(0)
+                ?.text
+                ?.toString()
+            back == text
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**

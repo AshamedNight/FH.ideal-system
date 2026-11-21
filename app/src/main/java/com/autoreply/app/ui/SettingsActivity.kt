@@ -205,7 +205,18 @@ class SettingsActivity : Activity() {
         // 20 条手打进手机太难受。内置库直接灌进来，改哪句再手动改。
         root.addView(action("载入内置 20 条钩子模板") {
             inputs["greetingLines"]?.setText(GreetingHooks.DEFAULT.joinToString("\n"))
-            Toast.makeText(this@SettingsActivity, "已载入，点保存生效", Toast.LENGTH_SHORT).show()
+            // **立刻落盘**，不等下面的「保存」。
+            //
+            // 这个按钮的语义是"改用内置库"，本身就是一次明确的决定，不是"改个草稿"。
+            // 之前只填输入框，而「保存」在这一页最底部（13 段之后，要滚很久），
+            // 用户载入完就退回去了 —— config 里还是老话术，
+            // 表现就是"载入了新库，发出去的还是旧的那几句"。
+            config.greetingLines = GreetingHooks.DEFAULT
+            Toast.makeText(
+                this@SettingsActivity,
+                "已载入 20 条并立即生效（其他项仍需点保存）",
+                Toast.LENGTH_SHORT,
+            ).show()
         })
 
         root.addView(section("人设"))
