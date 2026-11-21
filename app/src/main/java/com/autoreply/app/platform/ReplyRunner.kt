@@ -124,6 +124,9 @@ class ReplyRunner(
                     // 只放开护栏是不够的 —— 连发到第 16 条还是会卡在"精力低"。
                     respectEnergy = !(manual || config.drillMode),
                     respectCooldown = !(manual || config.drillMode),
+                    // 昵称只给开场白的 {昵称} 槽位用。读不到就空着 ——
+                    // 带该槽位的那几条会被跳过，不会把花括号发出去
+                    peer = peer,
                 )
                 val trace = flow.lastTrace
                 mainHandler.post {
@@ -169,7 +172,14 @@ class ReplyRunner(
             is ReplyFlow.Outcome.Fill -> {
                 // 断句：一句话拆成 2~3 条发，模仿真人"想到一句发一句"。
                 // 只填第一段，剩下的排队 —— 每段都要你单独点一次发送。
-                val parts = SentenceSplitter.split(outcome.text)
+                //
+                // 固定开场白例外（single=true）：库里每一行都是写好的一整句，
+                // 按逗号拆开会把问句甩到第二条，用户只点一次就丢钩子。
+                val parts = if (outcome.single) {
+                    listOf(outcome.text)
+                } else {
+                    SentenceSplitter.split(outcome.text)
+                }
                 DraftQueue.reset(parts.drop(1))
 
                 // 两条通道按顺序试：无障碍 → 输入法 → 复制到剪贴板

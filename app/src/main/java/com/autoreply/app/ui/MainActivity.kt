@@ -231,6 +231,7 @@ class MainActivity : Activity() {
                 // 每小时上限与熔断仍然生效（那是真风险护栏）。
                 respectEnergy = false,
                 respectCooldown = false,
+                peer = peer,
             )
             // trace 必须在这里取：下一次 decide 会清空它
             val trace = flow.lastTrace
@@ -249,7 +250,12 @@ class MainActivity : Activity() {
                         // 断句：拆成 2~3 条发，只填第一段，其余排队等你发完再填。
                         // 和 ReplyRunner 里是同一套逻辑 —— 手动/自动两条路必须一致，
                         // 否则"手动能拆、自动不拆"这种差异查起来最费劲。
-                        val parts = SentenceSplitter.split(outcome.text)
+                        // 固定开场白例外：库里一行就是一整句，拆开会丢问句。
+                        val parts = if (outcome.single) {
+                            listOf(outcome.text)
+                        } else {
+                            SentenceSplitter.split(outcome.text)
+                        }
                         DraftQueue.reset(parts.drop(1))
 
                         // 两条通道：无障碍优先，失败自动落到输入法

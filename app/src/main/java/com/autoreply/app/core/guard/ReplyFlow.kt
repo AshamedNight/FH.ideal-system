@@ -47,6 +47,8 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
             val inputTokens: Int = 0,
             val outputTokens: Int = 0,
             val estimatedInputTokens: Int = 0,
+            /** 已经是完整一条，不要再断句。见 [ReplyEngine.Result.Draft.single]。 */
+            val single: Boolean = false,
         ) : Outcome()
 
         /** 生成了，但风险太高不自动填。只把内容摆出来让人自己决定。 */
@@ -99,6 +101,8 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
         now: Long = System.currentTimeMillis(),
         respectEnergy: Boolean = true,
         respectCooldown: Boolean = true,
+        /** 对方昵称，只往上传给开场白的 `{昵称}` 槽位。读不到就留空。 */
+        peer: String = "",
     ): Outcome {
         traceBuffer.clear()
 
@@ -167,7 +171,7 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
         }
 
         // ---- 4. 生成（内部已过输入边界与禁忌词） ----
-        val result = engine.generate(turns)
+        val result = engine.generate(turns, peer)
         val draftRes = when (result) {
             is ReplyEngine.Result.Blocked -> {
                 step("④ 生成：拦下 — ${result.reason}")
@@ -199,6 +203,7 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
                 inputTokens = draftRes.inputTokens,
                 outputTokens = draftRes.outputTokens,
                 estimatedInputTokens = draftRes.estimatedInputTokens,
+                single = draftRes.single,
             )
         } else {
             step("⑤ 风险：${risk.level}（${risk.hits.joinToString("、")}）→ 不填")

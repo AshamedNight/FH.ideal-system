@@ -37,6 +37,7 @@ KNOWN = {
     "ReplyEngine": "com.autoreply.app.core.llm.ReplyEngine",
     "Turn": "com.autoreply.app.core.llm.Turn",
     "LlmClient": "com.autoreply.app.core.llm.LlmClient",
+    "GreetingHooks": "com.autoreply.app.core.llm.GreetingHooks",
     # core/persona
     "PersonaLoader": "com.autoreply.app.core.persona.PersonaLoader",
     "PersonaStore": "com.autoreply.app.core.persona.PersonaStore",

@@ -45,6 +45,14 @@ class ReplyEngine(
             val inputTokens: Int = 0,
             val outputTokens: Int = 0,
             val estimatedInputTokens: Int = 0,
+            /**
+             * 这句已经是一条写好的完整消息，**不要再交给 SentenceSplitter 拆**。
+             *
+             * 只有固定开场白会置 true。库里的每一行是连着写的（铺垫 + 问句），
+             * "做手工做到现在，你有上瘾的事没" 这种按逗号拆成两条发出去，
+             * 用户只点一次发送就只发出前半句 —— 问句丢了，这句开场白等于白发。
+             */
+            val single: Boolean = false,
         ) : Result()
         /** 不该回：要么没有对方的消息，要么触了输入侧边界。 */
         data class Blocked(val reason: String) : Result()
@@ -53,8 +61,11 @@ class ReplyEngine(
 
     /**
      * 同步执行，会阻塞（网络请求）。调用方必须放在后台线程。
+     *
+     * @param peer 对方昵称，只给开场白的 `{昵称}` 槽位用。读不到就传空 ——
+     *   带该槽位的那几条会被跳过，而不是把花括号发出去。
      */
-    fun generate(turns: List<Turn>): Result {
+    fun generate(turns: List<Turn>, peer: String = ""): Result {
         val last = turns.lastOrNull { it.fromOther }
             ?: return Result.Blocked("没有对方发来的消息")
 
@@ -85,26 +96,32 @@ class ReplyEngine(
         if (config.greetingEnabled && !iSaidAlready && peerOpenedWithGreeting &&
             greetings.isNotEmpty()
         ) {
-            // **三句一组**：真人打招呼常是两三句连着蹦（「在吗？」「刚看到你」
-            // 「认识一下」），比一句一句等回音自然。
-            // 填 1~3 句就是一组全发；填 6 句就分两组，按昵称取模选一组 ——
-            // 同一个人始终同一组，不会重进一次换一套。
-            val groups = greetings.chunked(3)
-            val idx = kotlin.math.abs(
-                turns.lastOrNull { it.fromOther }?.text.orEmpty().hashCode()
-            ) % groups.size
-            // **用换行拼接，不用句号。**
+            // **一条一次，真轮换。**
             //
-            // 踩过的坑：这里原来是 `joinToString("。")` —— 拿句号当"拼接符"，
-            // 只是想借它让下游 SentenceSplitter 拆成几条。但配置里本来就带标点的
-            // 那句会变成「干嘛呢？。」：问号已经收尾了，后面又跟一个拼接带进来的句号。
-            // 而且只有**夹在中间**的那句看得出来 —— 最后一句后面没有分隔符，
-            // 第一句多出来的句号看着又像正常的收尾，于是这个问题只在第二句显形。
+            // 这里以前是 `chunked(3)` + 拼接：三句一组连着发，组号由
+            // 「对方那句话的 hashCode」取模决定。两个后果都不好：
+            //   - 轮换形同虚设：所有说「你好」的人 hashCode 相同，永远同一组，
+            //     20 条的库实际只用得到一两条
+            //   - 对方还没回就连发三条，是整套行为里最像脚本的一种
             //
-            // 换行在 SentenceSplitter 里同样是硬拆点，还会被 trim 掉、不会出现在
-            // 输入框里：拆成几条发这件事完全不受影响，但每句的标点只归它自己，
-            // 你写什么就发什么。
-            return Result.Draft(groups[idx].joinToString("\n"), 1, 0, 0, 0)
+            // 现在改成游标依次取（[com.autoreply.app.core.AppConfig.greetingCursor]），
+            // 取到能填满槽位的那条就发，一条库项 = 一条消息。
+            val hooks = greetings
+            val start = config.greetingCursor
+            val echo = turns.lastOrNull { it.fromOther }?.text.orEmpty()
+            for (offset in hooks.indices) {
+                val i = (start + offset) % hooks.size
+                // 槽位填不上就试下一条 —— 绝不能把「{昵称}，这名字谁给你起的」
+                // 原样发出去，一次就够毁掉这个号。
+                val filled = GreetingHooks.fill(hooks[i], peer, echo, timeWord()) ?: continue
+                config.greetingCursor = (i + 1) % hooks.size
+                // single = true：库里的每一行都是写好的一整句，
+                // 不再让 SentenceSplitter 按逗号拆开（拆开会把问句甩到第二条，
+                // 用户只发第一条时钩子就没了）
+                return Result.Draft(filled, 1, 0, 0, 0, single = true)
+            }
+            // 一条都填不满（例如整库都带 {昵称}、而昵称没读到）→ 交给模型写，
+            // 不硬发。这一路走下去会多花一次 token，但比发一条带花括号的话强。
         }
 
         // 长度跟着对方走：对方说了一大段，回一句 15 字会显得敷衍；
@@ -208,8 +225,12 @@ class ReplyEngine(
         }
     }
 
-    /** 给模型看的"现在几点"，顺带把明显不合时宜的说法堵住。 */
-    private fun nowDescription(): String {
+    /**
+     * 小时数 + 时段词。两处都要用（给模型的完整时间描述、开场白的 `{时段}` 槽位），
+     * 拆出来是为了让"设置里手动指定时段"这件事只有一处实现 ——
+     * 两份 `when` 早晚会走偏，那时候模型以为现在是晚上、开场白却写着"凌晨"。
+     */
+    private fun hourAndPeriod(): Pair<Int, String> {
         val cal = java.util.Calendar.getInstance()
 
         // 设置里手动指定了时段就用那个，否则跟系统时钟。
@@ -231,6 +252,16 @@ class ReplyEngine(
             in 18..22 -> "晚上"
             else -> "深夜"
         }
+        return hour to period
+    }
+
+    /** 只取时段词，给开场白的 `{时段}` 槽位。 */
+    private fun timeWord(): String = hourAndPeriod().second
+
+    /** 给模型看的"现在几点"，顺带把明显不合时宜的说法堵住。 */
+    private fun nowDescription(): String {
+        val cal = java.util.Calendar.getInstance()
+        val (hour, period) = hourAndPeriod()
         val weekend = when (cal.get(java.util.Calendar.DAY_OF_WEEK)) {
             java.util.Calendar.SATURDAY, java.util.Calendar.SUNDAY -> "，周末"
             else -> ""

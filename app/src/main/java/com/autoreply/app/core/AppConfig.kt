@@ -130,7 +130,8 @@ class AppConfig(context: Context) {
      * 而且同一批人收到同一套招呼，比每人一段风格飘忽的开场更像同一个人。
      * 另外它不消耗 token：一天打几十个招呼，这一项能省掉几十次调用。
      *
-     * 同一句对同一个人是固定的（按昵称取模），不会反复变。
+     * **一行 = 一条要发出去的消息**（不再三句一组合并连发）。
+     * 支持 {昵称} {原话} {时段} 三个槽位，见 [com.autoreply.app.core.llm.GreetingHooks]。
      */
     var greetingLines: List<String>
         get() = (sp.getString(KEY_GREETINGS, "") ?: "")
@@ -140,6 +141,21 @@ class AppConfig(context: Context) {
         set(value) = sp.edit()
             .putString(KEY_GREETINGS, value.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n"))
             .apply()
+
+    /**
+     * 开场白库的轮换游标。
+     *
+     * 存在的理由：原来是拿「对方那句话的 hashCode」取模选一条，结果所有说
+     * 「你好」的人 hashCode 一样、永远落到同一条 —— 库再长也只有一两条被用到，
+     * 等于没有轮换。改成游标之后，第 1 个会话用第 1 条、第 2 个用第 2 条，
+     * 走到底再绕回来，20 条就是真的 20 条。
+     *
+     * 持久化是必要的：不存的话每次重启都从第一条开始，
+     * 而用户通常是一次开一晚上 —— 那反而变成"每晚都用同一条开头"。
+     */
+    var greetingCursor: Int
+        get() = sp.getInt(KEY_GREETING_CURSOR, 0)
+        set(value) = sp.edit().putInt(KEY_GREETING_CURSOR, value).apply()
 
     /**
      * 目标平台包名，可多个（一行一个）。
@@ -285,6 +301,7 @@ class AppConfig(context: Context) {
         private const val KEY_DRILL = "drill_mode"
         private const val KEY_GREETINGS = "greeting_lines"
         private const val KEY_GREETING_ON = "greeting_enabled"
+        private const val KEY_GREETING_CURSOR = "greeting_cursor"
         private const val KEY_ENERGY_LOCKED = "energy_locked"
         private const val KEY_TIME_OF_DAY = "time_of_day"
         private const val KEY_ENERGY_VALUE = "energy_locked_value"

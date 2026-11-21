@@ -16,6 +16,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.autoreply.app.R
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.core.llm.GreetingHooks
 
 /**
  * 设置页。
@@ -150,28 +151,41 @@ class SettingsActivity : Activity() {
             )
         )
 
-        root.addView(section("固定开场白"))
+        root.addView(section("开场白（钩子库）"))
         root.addView(
             note(
-                "一行一句。填了就用这几句开口（不调模型，也不花 token）；留空则交给模型写。\n" +
-                    "同一个人始终收到同一句（按昵称取模），不会反复变。\n" +
-                    "建议两句一组：一句招呼 + 一句问话，像「突然想认识你」「在吗？」\n" +
-                    "每句尽量 15 字以内 —— 长了发出去像小作文，跟真人打字节奏不符。"
+                "一行 = 一条要发出去的消息。轮换着用：第 1 个会话用第 1 条，第 2 个用第 2 条，走到底再绕回来。\n" +
+                    "填了就不调模型、不花 token；留空则交给模型写。\n\n" +
+                    "支持三个槽位，填不上就自动跳过那一条（不会把花括号发出去）：\n" +
+                    "　{昵称}　对方昵称，读不到就不发这条\n" +
+                    "　{原话}　对方刚说的那句话\n" +
+                    "　{时段}　凌晨 / 早上 / 上午 / 中午 / 下午 / 晚上 / 深夜\n\n" +
+                    "写钩子的标准：具体、不奉承、留一个能接的话头。\n" +
+                    "「你好漂亮」「在吗」这类不占坑位 —— 它们不产生任何信息，对方没有理由回。\n" +
+                    "每句尽量 15 字以内，长了像小作文，跟真人打字节奏不符。"
             )
         )
         root.addView(android.widget.CheckBox(this).apply {
-            text = "启用固定开场白"
+            text = "启用开场白"
             isChecked = config.greetingEnabled
             setOnCheckedChangeListener { _, on -> config.greetingEnabled = on }
         })
         root.addView(
             field(
-                "greetingLines", "开场白（一行一句，可留空）",
+                "greetingLines", "开场白库（一行一条，可留空）",
                 config.greetingLines.joinToString("\n"),
                 InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE,
                 singleLine = false,
             )
         )
+        // 20 条手打进手机太难受。内置库直接灌进来，改哪句再手动改。
+        root.addView(Button(this).apply {
+            text = "载入内置 20 条钩子模板"
+            setOnClickListener {
+                inputs["greetingLines"]?.setText(GreetingHooks.DEFAULT.joinToString("\n"))
+                Toast.makeText(this@SettingsActivity, "已载入，点保存生效", Toast.LENGTH_SHORT).show()
+            }
+        })
 
         root.addView(section("人设"))
 
