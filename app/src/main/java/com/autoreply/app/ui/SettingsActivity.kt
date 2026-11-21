@@ -7,6 +7,7 @@ import android.text.InputType
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -23,6 +24,10 @@ import com.autoreply.app.core.llm.GreetingHooks
  *
  * 全部用代码搭 UI 而不是 XML：这些字段会随需求频繁增删，
  * 集中在一个文件里改比在 layout 和代码之间来回跳更快，也不会漏改 id。
+ *
+ * 视觉与首页共用同一套 token（[R.style.TextDisplay] / [R.style.TextNote] /
+ * [R.style.PrimaryButton] / [R.style.OutlineButton] / [R.drawable.bg_input]）。
+ * 想让两页不像两个 App，就必须共用同一组地基，而不是各写各的 setTextSize。
  */
 class SettingsActivity : Activity() {
 
@@ -30,14 +35,39 @@ class SettingsActivity : Activity() {
     private val inputs = LinkedHashMap<String, EditText>()
     private lateinit var levelGroup: RadioGroup
 
+    /**
+     * 段落编号。这一页有十几段，编号比加粗更能让人知道"读到哪儿了"，
+     * 也是这套纸感设计里唯一的序号系统 —— 不用在调用处手写 01/02。
+     */
+    private var sectionIndex = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         config = AppConfig(this)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(28))
+            setPadding(dp(20), dp(22), dp(20), dp(36))
         }
+
+        // 顶栏：和首页同一套骨架（等宽小标签 + 一条深线 + 27sp 标题）
+        root.addView(label("SETTINGS · 设置"))
+        root.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1)
+            ).apply { topMargin = dp(8) }
+            setBackgroundColor(getColor(R.color.ink))
+        })
+        root.addView(TextView(this).apply {
+            text = "设置"
+            setTextAppearance(R.style.TextDisplay)
+            setPadding(0, dp(16), 0, 0)
+        })
+        root.addView(TextView(this).apply {
+            text = "改完点最下面的「保存」。只存在本机，不上传。"
+            setTextAppearance(R.style.TextNote)
+            setPadding(0, dp(8), 0, 0)
+        })
 
         root.addView(section("风险档位"))
         root.addView(note("档位决定程序能自动做到哪一步。发送永远由你点，任何档位都不会替你发。"))
@@ -64,11 +94,9 @@ class SettingsActivity : Activity() {
         root.addView(field("batchSize", "连点一次处理几个（≤20）", config.batchSize.toString(), InputType.TYPE_CLASS_NUMBER))
         root.addView(note("实际间隔会在最短值上乘 0.7~1.8 的随机系数，不要设成整齐数字。\n这几个值只在「自动触发」时起作用；手动点「生成并填入」只受每小时上限约束，不会被冷却或精力拦住。\n平台报警后的熔断（30 分钟）任何时候都生效，那才是真正需要等的东西。"))
         root.addView(section("演练模式"))
-        root.addView(android.widget.CheckBox(this).apply {
-            text = "演练模式：不调模型、不限速（只测流程）"
-            isChecked = config.drillMode
-            setOnCheckedChangeListener { _, on -> config.drillMode = on }
-        })
+        root.addView(
+            check("演练模式：不调模型、不限速（只测流程）", config.drillMode) { config.drillMode = it }
+        )
         root.addView(
             note(
                 "开着它：回复按你在「话术管理」里配的问答样例拼出来，不联网、不花 Key 的钱；\n" +
@@ -80,12 +108,9 @@ class SettingsActivity : Activity() {
             )
         )
 
-        root.addView(Button(this).apply {
-            text = "清除冷却（程序自己歇的那段）"
-            setOnClickListener {
-                com.autoreply.app.core.guard.PacerGuard(this@SettingsActivity, config).clearCooldown()
-                Toast.makeText(this@SettingsActivity, "冷却已清除，可以继续了", Toast.LENGTH_SHORT).show()
-            }
+        root.addView(action("清除冷却（程序自己歇的那段）") {
+            com.autoreply.app.core.guard.PacerGuard(this@SettingsActivity, config).clearCooldown()
+            Toast.makeText(this@SettingsActivity, "冷却已清除，可以继续了", Toast.LENGTH_SHORT).show()
         })
 
         root.addView(section("模型"))
@@ -114,6 +139,9 @@ class SettingsActivity : Activity() {
         timeOptions.forEach { (value, label) ->
             val rb = RadioButton(this).apply {
                 text = label
+                textSize = 13f
+                setTextColor(getColor(R.color.ink))
+                setPadding(0, dp(6), 0, dp(6))
                 id = View.generateViewId()
                 tag = value
                 isChecked = config.timeOfDay == value
@@ -131,11 +159,9 @@ class SettingsActivity : Activity() {
         root.addView(timeGroup)
 
         root.addView(section("精力"))
-        root.addView(android.widget.CheckBox(this).apply {
-            text = "锁定精力（测试时用）"
-            isChecked = config.energyLocked
-            setOnCheckedChangeListener { _, on -> config.energyLocked = on }
-        })
+        root.addView(
+            check("锁定精力（测试时用）", config.energyLocked) { config.energyLocked = it }
+        )
         root.addView(
             note(
                 "开启后精力不再消耗、也不随时间恢复，永远等于下面这个值；\n" +
@@ -165,11 +191,9 @@ class SettingsActivity : Activity() {
                     "每句尽量 15 字以内，长了像小作文，跟真人打字节奏不符。"
             )
         )
-        root.addView(android.widget.CheckBox(this).apply {
-            text = "启用开场白"
-            isChecked = config.greetingEnabled
-            setOnCheckedChangeListener { _, on -> config.greetingEnabled = on }
-        })
+        root.addView(
+            check("启用开场白", config.greetingEnabled) { config.greetingEnabled = it }
+        )
         root.addView(
             field(
                 "greetingLines", "开场白库（一行一条，可留空）",
@@ -179,23 +203,17 @@ class SettingsActivity : Activity() {
             )
         )
         // 20 条手打进手机太难受。内置库直接灌进来，改哪句再手动改。
-        root.addView(Button(this).apply {
-            text = "载入内置 20 条钩子模板"
-            setOnClickListener {
-                inputs["greetingLines"]?.setText(GreetingHooks.DEFAULT.joinToString("\n"))
-                Toast.makeText(this@SettingsActivity, "已载入，点保存生效", Toast.LENGTH_SHORT).show()
-            }
+        root.addView(action("载入内置 20 条钩子模板") {
+            inputs["greetingLines"]?.setText(GreetingHooks.DEFAULT.joinToString("\n"))
+            Toast.makeText(this@SettingsActivity, "已载入，点保存生效", Toast.LENGTH_SHORT).show()
         })
 
         root.addView(section("人设"))
 
         // 话术管理单独一页：样例和准则会改得很频繁，塞进这个已经很长的页面
         // 会把其他设置冲散
-        root.addView(Button(this).apply {
-            text = "话术管理（问答样例 / 行为准则）"
-            setOnClickListener {
-                startActivity(Intent(this@SettingsActivity, PersonaActivity::class.java))
-            }
+        root.addView(action("话术管理（问答样例 / 行为准则）") {
+            startActivity(Intent(this@SettingsActivity, PersonaActivity::class.java))
         })
         root.addView(multi("persona", config.persona, 8))
         root.addView(note("用「你是……」开头描述这个人是什么身份、怎么说话、绝不说什么。不要写「请帮我生成回复」，那是任务不是人设。"))
@@ -211,40 +229,35 @@ class SettingsActivity : Activity() {
         root.addView(field("maxReplyChars", "回复最长字数", config.maxReplyChars.toString(), InputType.TYPE_CLASS_NUMBER))
 
         root.addView(section("输入法（可选，但某些平台必须）"))
-        root.addView(Button(this).apply {
-            text = "去切换默认输入法"
-            setOnClickListener {
-                // 直接跳到系统输入法设置页。没有公开 API 能"自动切"，
-                // 那是 WRITE_SECURE_SETTINGS 才能做的事，普通 App 做不到。
-                runCatching {
-                    startActivity(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS))
-                }.onFailure {
-                    Toast.makeText(
-                        this@SettingsActivity,
-                        "这台机器打不开输入法设置，手动去 设置 → 语言和输入法",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
+        root.addView(action("去切换默认输入法") {
+            // 直接跳到系统输入法设置页。没有公开 API 能"自动切"，
+            // 那是 WRITE_SECURE_SETTINGS 才能做的事，普通 App 做不到。
+            runCatching {
+                startActivity(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS))
+            }.onFailure {
+                Toast.makeText(
+                    this@SettingsActivity,
+                    "这台机器打不开输入法设置，手动去 设置 → 语言和输入法",
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         })
         root.addView(note("只有「输入框对无障碍不可见」的平台才需要它（同城夜聊这类）。抖音、moyi 不需要。\n切过去之后，AutoReply 的草稿会通过输入法上屏 —— 和真键盘打字是同一条通道。\n平时想正常打字，用键盘上的地球图标即可切回你自己的输入法。"))
 
         root.addView(section("状态复位"))
-        root.addView(Button(this).apply {
-            text = "重置精力（我休息好了）"
-            setOnClickListener {
-                com.autoreply.app.core.guard.Energy(this@SettingsActivity).reset()
-                Toast.makeText(this@SettingsActivity, "精力已回满", Toast.LENGTH_SHORT).show()
-            }
+        root.addView(action("重置精力（我休息好了）") {
+            com.autoreply.app.core.guard.Energy(this@SettingsActivity).reset()
+            Toast.makeText(this@SettingsActivity, "精力已回满", Toast.LENGTH_SHORT).show()
         })
         root.addView(note("精力只影响「自动」回复的节奏：越低越拖，低到 0.30 以下就完全不自动动。连续测几次会掉到 0.28，那时自动触发会被压住 —— 点这个按钮相当于「我休息好了」。\n手动点「生成并填入」不受精力影响。"))
 
-        root.addView(Button(this).apply {
-            text = "保存"
-            setOnClickListener { save() }
-        })
+        // 全页唯一的实心按钮：保存。上面那一堆都是改，只有这一步是"落盘"。
+        root.addView(primary("保存") { save() })
 
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(ScrollView(this).apply {
+            setBackgroundColor(getColor(R.color.paper))
+            addView(root)
+        })
     }
 
     private fun save() {
@@ -293,25 +306,97 @@ class SettingsActivity : Activity() {
                 else -> R.id.rb_level_1
             }
             text = title
+            textSize = 13f
+            setTextColor(getColor(R.color.ink))
+            setPadding(0, dp(8), 0, 0)
             isChecked = config.level == value
         }
         levelGroup.addView(rb)
         levelGroup.addView(note("　$desc"))
     }
 
-    private fun section(title: String): TextView = TextView(this).apply {
-        text = title
-        textSize = 15f
-        setPadding(0, dp(18), 0, dp(4))
-        setTextColor(0xFF0F6E56.toInt())
+    private fun section(title: String): ViewGroup {
+        sectionIndex++
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, dp(28), 0, dp(10))
+            addView(mono("%02d".format(sectionIndex)).apply {
+                setTextColor(getColor(R.color.ink))
+            })
+            addView(View(this@SettingsActivity).apply {
+                layoutParams = LinearLayout.LayoutParams(0, dp(1), 1f).apply {
+                    marginStart = dp(10)
+                    marginEnd = dp(10)
+                }
+                setBackgroundColor(getColor(R.color.rule))
+            })
+            addView(mono(title))
+        }
+    }
+
+    /** 等宽小标签：11sp + 0.12 字距。中文没有大小写，层级只能靠这两样做出来。 */
+    private fun mono(text: String): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 11f
+        typeface = android.graphics.Typeface.MONOSPACE
+        letterSpacing = 0.12f
+        setTextColor(getColor(R.color.ink_faint))
+        includeFontPadding = false
     }
 
     private fun note(text: String): TextView = TextView(this).apply {
         this.text = text
-        textSize = 11f
-        setTextColor(0xFF6B6B6B.toInt())
-        setPadding(0, dp(2), 0, dp(6))
+        textSize = 12f
+        setTextColor(getColor(R.color.ink_soft))
+        setLineSpacing(dp(3).toFloat(), 1f)
+        setPadding(0, dp(2), 0, dp(8))
     }
+
+    /** 勾选框统一样式。原来直接 new CheckBox，字号颜色跟着系统主题走，和别处不搭。 */
+    private fun check(text: String, checked: Boolean, onToggle: (Boolean) -> Unit): CheckBox =
+        CheckBox(this).apply {
+            this.text = text
+            textSize = 13f
+            setTextColor(getColor(R.color.ink))
+            setPadding(0, dp(8), 0, dp(8))
+            isChecked = checked
+            setOnCheckedChangeListener { _, on -> onToggle(on) }
+        }
+
+    /** 描边按钮：次要操作（清除冷却、切输入法、重置精力、载入模板…）。 */
+    private fun action(text: String, onClick: () -> Unit): Button =
+        Button(this, null, 0, R.style.OutlineButton).apply {
+            this.text = text
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(40)
+            ).apply { topMargin = dp(10) }
+            setOnClickListener { onClick() }
+        }
+
+    /** 实心按钮：全页只留给「保存」。上面那一堆都是改，只有这一步是落盘。 */
+    private fun primary(text: String, onClick: () -> Unit): Button =
+        Button(this, null, 0, R.style.PrimaryButton).apply {
+            this.text = text
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(48)
+            ).apply { topMargin = dp(32) }
+            setOnClickListener { onClick() }
+        }
+
+    /** 输入框底样式：白底 + 1px 描边，聚焦时描边转墨黑（选择器在 bg_input.xml）。 */
+    private fun editBase(value: String, inputType: Int, lines: Int): EditText =
+        EditText(this).apply {
+            setText(value)
+            this.inputType = inputType
+            textSize = 13f
+            setTextColor(getColor(R.color.ink))
+            setHintTextColor(getColor(R.color.ink_faint))
+            setBackgroundResource(R.drawable.bg_input)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
+            if (lines > 1) minLines = lines
+        }
 
     private fun field(
         key: String,
@@ -322,17 +407,11 @@ class SettingsActivity : Activity() {
     ): ViewGroup {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(4), 0, dp(4))
+            setPadding(0, dp(6), 0, dp(6))
         }
-        box.addView(TextView(this).apply {
-            text = label
-            textSize = 12f
-            setTextColor(0xFF1A1A1A.toInt())
-        })
-        val edit = EditText(this).apply {
-            setText(value)
-            this.inputType = inputType
-            textSize = 13f
+        // 字段名做成等宽小标签，和段落头同一套语气；值才是 13sp 的正文
+        box.addView(mono(label).apply { setPadding(0, 0, 0, dp(6)) })
+        val edit = editBase(value, inputType, 1).apply {
             // 多行字段（开场白一行一句）必须放行换行，否则全被压成一行
             setSingleLine(singleLine)
             if (!singleLine) maxLines = 6
@@ -343,12 +422,13 @@ class SettingsActivity : Activity() {
     }
 
     private fun multi(key: String, value: String, lines: Int): EditText {
-        val edit = EditText(this).apply {
-            setText(value)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            textSize = 13f
+        val edit = editBase(
+            value,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE,
+            lines,
+        ).apply {
+            // 多行块从顶部开始写，否则光标停在中间看着像坏了
             gravity = android.view.Gravity.TOP or android.view.Gravity.START
-            minLines = lines
         }
         inputs[key] = edit
         return edit
