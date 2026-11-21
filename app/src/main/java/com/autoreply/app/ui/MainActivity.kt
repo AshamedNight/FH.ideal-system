@@ -197,17 +197,22 @@ class MainActivity : Activity() {
         }
 
         val dedup = ReplyDedup(this)
-        if (dedup.isDuplicate(peer, lastOther.text, now)) {
-            val who = peer.ifEmpty { "这个会话" }
-            output.text = buildString {
-                append("「$who」这条已经处理过（30 分钟内不重复），不重复生成。\n\n")
-                append("内容：").append(lastOther.text.take(40))
-                append("\n\n（要重来就等 30 分钟，或等对方发新消息）")
-            }
-            return
-        }
+        // **手动点击越过去重窗口。**
+        //
+        // 去重是给"自动触发"用的：界面一变就重新生成，同一条消息会被回好几遍。
+        // 但手动点「生成并填入」是用户明确要求重来 —— 卡住不动的时候，
+        // 这是唯一能自救的动作。原来这里直接 return，于是"卡住"就真的没救了：
+        // 只能等满 30 分钟，或者等对方再发一句。
+        //
+        // 代价是连点两次会得到两条意思相近的草稿；手动本来就是一次一击，换得来。
+        val wasHandled = dedup.isDuplicate(peer, lastOther.text, now)
 
-        output.text = "正在判定…（对方最后一句：${lastOther.text.take(24)}）"
+        output.text = buildString {
+            if (wasHandled) {
+                append("（这条 30 分钟内处理过，这次是你手动要求重来）\n")
+            }
+            append("正在判定…（对方最后一句：").append(lastOther.text.take(24)).append("）")
+        }
 
         // 「我上一句是多久之前说的」只认**确认发出**的时间。
         // 之前用的是"上次生成草稿"的时间，导致连点几次测试（一条都没发）就被判成
