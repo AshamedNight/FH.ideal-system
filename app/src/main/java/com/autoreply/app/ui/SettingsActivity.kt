@@ -51,7 +51,7 @@ class SettingsActivity : Activity() {
         }
 
         // 顶栏：和首页同一套骨架（等宽小标签 + 一条深线 + 27sp 标题）
-        root.addView(label("SETTINGS · 设置"))
+        root.addView(mono("SETTINGS · 设置"))
         root.addView(View(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(1)

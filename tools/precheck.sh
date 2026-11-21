@@ -89,9 +89,19 @@ else
     say "  （没有 python，跳过）"
 fi
 
+say "== 8. addView 里调的构造函数是否真的存在 =="
+# 三页 UI 全是代码搭的：addView(xxx(...)) 里的 xxx 必然是同文件的私有函数。
+# 改了函数名却漏改调用处时，Kotlin 只甩一句 Unresolved reference，
+# 而那是 CI 跑几分钟之后才看到的（这次就是：label() 改成 mono() 漏了顶栏那行）。
+if command -v python >/dev/null 2>&1; then
+    python tools/check_local_calls.py || fail=1
+else
+    say "  （没有 python，跳过）"
+fi
+
 echo
 if [ $fail -ne 0 ]; then
     say "自检未通过 —— 修掉再 push，否则 CI 会白跑一轮。"
     exit 1
 fi
-say "自检全部通过。注意：这只覆盖「必现失败」和「漏 import」，其余类型错误仍只能靠 CI。"
+say "自检全部通过。注意：只覆盖「必现失败」「漏 import」「缺构造函数」，其余类型错误仍只能靠 CI。"
