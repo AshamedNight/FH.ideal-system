@@ -1,27 +1,101 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:colorPrimary">@color/brand</item>
-        <item name="android:colorPrimaryDark">@color/brand_dark</item>
-        <item name="android:colorAccent">@color/brand</item>
-        <item name="android:windowBackground">@color/bg</item>
-        <item name="android:statusBarColor">@color/brand_dark</item>
-        <item name="android:textColorPrimary">@color/text_primary</item>
-        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:colorPrimary">@color/ink</item>
+        <item name="android:colorPrimaryDark">@color/paper</item>
+        <item name="android:colorAccent">@color/brand_dark</item>
+        <item name="android:windowBackground">@color/paper</item>
+        <!-- 状态栏跟着纸色走 + 深色图标：原来那条深绿状态栏是"没做完"最明显的一处，
+             它跟页面底色硬切了一道边。改成一体的米白后，整屏才是一个整体。 -->
+        <item name="android:statusBarColor">@color/paper</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/ink_soft</item>
+        <item name="android:colorControlNormal">@color/ink_soft</item>
+    </style>
+
+    <!-- ===== 文字层级 =====
+         原来只有 22/14/12 三档，标题和正文挤在一起，扫不出重点。
+         现在拆成四档，每档只干一件事：27 标题 / 13 正文 / 12 备注 / 11 等宽标签。 -->
+
+    <style name="TextDisplay">
+        <item name="android:textSize">27sp</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:letterSpacing">-0.01</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="TextBody">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:lineSpacingExtra">3dp</item>
+    </style>
+
+    <style name="TextNote">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/ink_soft</item>
+        <item name="android:lineSpacingExtra">3dp</item>
+    </style>
+
+    <!-- 等宽 + 加字距的小标签。中文没有大小写，只能靠字距和字号拉开层次，
+         这是整套设计里最便宜的"高级感"来源。 -->
+    <style name="TextMono">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.12</item>
+        <item name="android:textColor">@color/ink_faint</item>
+    </style>
+
+    <style name="TextMonoNum">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:textColor">@color/ink</item>
+    </style>
+
+    <!-- ===== 按钮 =====
+         三段权重，不要三个同权重的默认按钮 —— 那正是"不知道该点哪个"的来源。 -->
+    <style name="ButtonBase" parent="@android:style/Widget.Material.Button">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="android:gravity">center</item>
+        <!-- 三段都关掉默认的投影动画和最小尺寸：系统按钮的 minHeight/minWidth
+             会把我们的高度撑回去，看起来就还是系统按钮 -->
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
+    </style>
+
+    <style name="PrimaryButton" parent="ButtonBase">
+        <item name="android:background">@drawable/bg_btn_primary</item>
+        <item name="android:textColor">@color/paper</item>
+        <item name="android:height">44dp</item>
+    </style>
+
+    <style name="OutlineButton" parent="ButtonBase">
+        <item name="android:background">@drawable/bg_btn_outline</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:height">40dp</item>
+    </style>
+
+    <!-- 调试类操作降为文字链：它们不该和日常操作抢注意力 -->
+    <style name="GhostButton" parent="ButtonBase">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:textColor">@color/ink_soft</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:height">36dp</item>
     </style>
 
     <style name="Card">
-        <item name="android:background">@color/surface</item>
+        <item name="android:background">@drawable/bg_card</item>
         <item name="android:padding">16dp</item>
         <item name="android:layout_marginBottom">12dp</item>
-    </style>
-
-    <style name="PrimaryButton" parent="@android:style/Widget.Material.Button">
-        <item name="android:backgroundTint">@color/brand</item>
-        <item name="android:textColor">#FFFFFF</item>
-    </style>
-
-    <style name="GhostButton" parent="@android:style/Widget.Material.Button.Borderless">
-        <item name="android:textColor">@color/brand_dark</item>
     </style>
 </resources>

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 原有色保留：别处仍在引用，删掉会让 precheck 的颜色引用检查失败 -->
     <color name="brand">#1D9E75</color>
     <color name="brand_dark">#0F6E56</color>
     <color name="bg">#F7F7F5</color>
@@ -9,4 +10,18 @@
     <color name="danger">#C0392B</color>
     <color name="warn">#B9770E</color>
     <color name="divider">#E3E3E0</color>
+
+    <!-- ===== 纸感体系 =====
+         底色不是纯白也不是灰，而是带一点暖的米白 —— 纯白在 AMOLED 上刺眼，
+         中性灰又像系统设置页。米白才有"纸"的暗示，也是这套设计唯一的性格来源。 -->
+    <color name="paper">#FAF8F3</color>
+    <color name="paper_deep">#F3EFE6</color>
+    <color name="ink">#2C2C2A</color>
+    <color name="ink_soft">#6B6B6B</color>
+    <color name="ink_faint">#8C8778</color>
+    <color name="rule">#E6E1D6</color>
+    <color name="rule_dash">#D8D3C7</color>
+    <color name="chip_on_bg">#EFF6F1</color>
+    <color name="chip_on_line">#9FE1CB</color>
+    <color name="chip_on_text">#0F6E56</color>
 </resources>

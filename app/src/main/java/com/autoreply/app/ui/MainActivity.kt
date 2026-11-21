@@ -667,16 +667,30 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
+    /**
+     * 状态胶囊的配色：连上 = 浅绿底，没连 = 纸底描边。
+     *
+     * 只改外观，文字仍然由 [refresh] 里的 getString 决定 —— 判定逻辑一处都没动。
+     * 为什么值得为这八行单开一个函数：状态原来是一行灰字，得逐字读才知道好没好；
+     * 换成颜色之后扫一眼就够。这是"像不像成品"最便宜的差别。
+     */
+    private fun styleChip(v: TextView, on: Boolean) {
+        v.setBackgroundResource(if (on) R.drawable.bg_chip_on else R.drawable.bg_chip_off)
+        v.setTextColor(if (on) getColor(R.color.chip_on_text) else getColor(R.color.ink_soft))
+    }
+
     private fun refresh() {
         val accessibilityOn = CaptureService.instance != null
         statusService.text = getString(
             if (accessibilityOn) R.string.status_service_on else R.string.status_service_off
         )
+        styleChip(statusService, accessibilityOn)
 
         val notifyOn = isNotificationListenerEnabled()
         statusNotify.text = getString(
             if (notifyOn) R.string.status_notify_on else R.string.status_notify_off
         )
+        styleChip(statusNotify, notifyOn)
 
         statusLevel.text = when (config.level) {
             AppConfig.LEVEL_FILL_ONLY -> getString(R.string.level_0)

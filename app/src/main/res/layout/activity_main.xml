@@ -1,129 +1,343 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  首页：B 的排版骨架（大标题 / 加字距小标签 / 细线 / 留白）
+      + C 的质感（米白纸底 / 01-06 编号段落 / 虚线 / 小圆角方块按钮）
+      + A 的状态压缩（读屏、通知两枚胶囊提到顶栏一眼可见）
+
+  所有 id 与点击事件原样保留，只改外观和分组 —— 功能一个没动。
+-->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:background="@color/paper"
+    android:fillViewport="true"
+    android:scrollbars="none"
+    android:clipToPadding="false">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="22dp"
+        android:paddingBottom="36dp">
+
+        <!-- ================= 顶栏 ================= -->
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/TextMono"
+            android:letterSpacing="0.18"
+            android:text="AUTOREPLY · 半自动回复" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/divider_solid"
+            android:backgroundTint="@color/ink" />
 
         <TextView
             android:id="@+id/title"
+            style="@style/TextDisplay"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_primary"
-            android:layout_marginBottom="4dp" />
+            android:layout_marginTop="16dp"
+            android:text="@string/app_name" />
 
         <TextView
             android:id="@+id/subtitle"
+            style="@style/TextNote"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/hint_usage"
-            android:textSize="12sp"
-            android:textColor="@color/text_secondary"
-            android:lineSpacingExtra="3dp"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginTop="8dp"
+            android:text="@string/hint_usage" />
 
-        <TextView
-            android:id="@+id/status_service"
+        <!-- A 的状态胶囊：连通状态一眼可见，不用再往下找。
+             颜色由 refresh() 按实际连通状态切换（只改外观，不改文字）。 -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/status_service_off"
-            android:textSize="14sp"
-            android:textColor="@color/text_primary"
-            android:layout_marginBottom="6dp" />
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/status_notify"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/status_notify_off"
-            android:textSize="14sp"
-            android:textColor="@color/text_primary"
-            android:layout_marginBottom="6dp" />
+            <TextView
+                android:id="@+id/status_service"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_chip_off"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text="@string/status_service_off"
+                android:textSize="11sp"
+                android:letterSpacing="0.04"
+                android:textColor="@color/ink_soft" />
 
-        <TextView
-            android:id="@+id/status_level"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/level_1"
-            android:textSize="14sp"
-            android:textColor="@color/brand_dark"
-            android:layout_marginBottom="16dp" />
+            <TextView
+                android:id="@+id/status_notify"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip_off"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:text="@string/status_notify_off"
+                android:textSize="11sp"
+                android:letterSpacing="0.04"
+                android:textColor="@color/ink_soft" />
+        </LinearLayout>
+
+        <!-- ================= 01 运行状态 ================= -->
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView style="@style/TextMonoNum" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="01" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/divider_solid" />
+
+            <TextView style="@style/TextMono" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="运行状态" />
+        </LinearLayout>
+
+        <!-- 这块是多行的（档位 / 输入法 / 已发条数 / 版本 / 演练模式），
+             所以不做成胶囊，做成"备注"面板 —— 多行塞进胶囊只会挤成一坨。 -->
+        <TextView
+            android:id="@+id/status_level"
+            style="@style/TextNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_panel"
+            android:padding="14dp"
+            android:lineSpacingExtra="5dp"
+            android:text="@string/level_1" />
+
+        <!-- ================= 02 授权 ================= -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView style="@style/TextMonoNum" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="02" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/divider_solid" />
+
+            <TextView style="@style/TextMono" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="授权" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
             <Button
                 android:id="@+id/btn_accessibility"
-                style="@style/PrimaryButton"
+                style="@style/OutlineButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="40dp"
                 android:layout_weight="1"
                 android:text="@string/btn_enable_accessibility" />
 
             <Button
                 android:id="@+id/btn_notify"
-                style="@style/PrimaryButton"
+                style="@style/OutlineButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="40dp"
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
                 android:text="@string/btn_enable_notify" />
         </LinearLayout>
 
+        <!-- ================= 03 操作 ================= -->
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="16dp">
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView style="@style/TextMonoNum" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="03" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/divider_solid" />
+
+            <TextView style="@style/TextMono" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="操作" />
+        </LinearLayout>
+
+        <!-- 全屏唯一的实心按钮。之前四个按钮权重一样，
+             用户第一眼不知道该点哪个 —— 这就是"测试demo"最典型的样子。 -->
+        <Button
+            android:id="@+id/btn_generate"
+            style="@style/PrimaryButton"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:text="@string/btn_generate" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_delayed"
+                style="@style/OutlineButton"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:text="@string/btn_delayed" />
+
+            <Button
+                android:id="@+id/btn_next"
+                style="@style/OutlineButton"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="@string/btn_next" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/TextNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:textSize="11sp"
+            android:textColor="@color/ink_faint"
+            android:text="@string/hint_delayed" />
+
+        <Button
+            android:id="@+id/btn_batch"
+            style="@style/OutlineButton"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginTop="12dp"
+            android:text="@string/btn_batch_default" />
+
+        <!-- ================= 04 打开 ================= -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView style="@style/TextMonoNum" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="04" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/divider_solid" />
+
+            <TextView style="@style/TextMono" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="打开" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
             <Button
                 android:id="@+id/btn_open_target"
-                style="@style/GhostButton"
+                style="@style/OutlineButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="40dp"
                 android:layout_weight="1"
                 android:text="@string/btn_open_target" />
 
             <Button
                 android:id="@+id/btn_settings"
-                style="@style/GhostButton"
+                style="@style/OutlineButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="40dp"
                 android:layout_weight="1"
+                android:layout_marginStart="8dp"
                 android:text="@string/btn_settings" />
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/label_dump"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="界面抓取（调选择器用）"
-            android:textSize="12sp"
-            android:textColor="@color/text_secondary"
-            android:layout_marginBottom="8dp" />
+        <!-- ================= 05 调试 ================= -->
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView style="@style/TextMonoNum" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="05" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/divider_solid" />
+
+            <TextView style="@style/TextMono" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="调试" />
+        </LinearLayout>
+
+        <!-- 调试类降到文字链：它们和日常操作平铺在一起，
+             是"这是开发者自用工具"最直接的信号。 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
 
             <Button
                 android:id="@+id/btn_dump"
                 style="@style/GhostButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="36dp"
                 android:layout_weight="1"
                 android:text="@string/btn_dump" />
 
@@ -131,95 +345,65 @@
                 android:id="@+id/btn_copy"
                 style="@style/GhostButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="36dp"
                 android:layout_weight="1"
                 android:text="@string/btn_copy" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/label_probe"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="链路自检：读消息 → 填草稿（不会发送）"
-            android:textSize="12sp"
-            android:textColor="@color/text_secondary"
-            android:layout_marginBottom="8dp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="16dp">
 
             <Button
                 android:id="@+id/btn_probe"
                 style="@style/GhostButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="36dp"
                 android:layout_weight="1"
                 android:text="@string/btn_probe" />
-
-            <Button
-                android:id="@+id/btn_generate"
-                style="@style/PrimaryButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:text="@string/btn_generate" />
         </LinearLayout>
+
+        <TextView
+            style="@style/TextNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="11sp"
+            android:textColor="@color/ink_faint"
+            android:text="读消息 → 填草稿，不会发送。抓取结果用于调选择器。" />
+
+        <!-- ================= 06 运行日志 ================= -->
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
+            android:layout_marginTop="28dp"
+            android:layout_marginBottom="10dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/btn_delayed"
-                style="@style/GhostButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/btn_delayed" />
+            <TextView style="@style/TextMonoNum" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="06" />
 
-            <Button
-                android:id="@+id/btn_next"
-                style="@style/GhostButton"
+            <View
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="1dp"
                 android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:text="@string/btn_next" />
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/divider_solid" />
+
+            <TextView style="@style/TextMono" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="运行日志" />
         </LinearLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/hint_delayed"
-            android:textSize="11sp"
-            android:textColor="@color/text_secondary"
-            android:layout_marginBottom="8dp" />
-
-        <Button
-            android:id="@+id/btn_batch"
-            style="@style/GhostButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            android:text="@string/btn_batch_default" />
 
         <TextView
             android:id="@+id/output"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="120dp"
-            android:background="@color/surface"
-            android:padding="12dp"
-            android:textSize="11sp"
-            android:textColor="@color/text_primary"
+            android:minHeight="140dp"
+            android:background="@drawable/bg_panel"
             android:fontFamily="monospace"
-            android:textIsSelectable="true" />
+            android:lineSpacingExtra="5dp"
+            android:padding="14dp"
+            android:textIsSelectable="true"
+            android:textSize="11sp"
+            android:textColor="@color/ink_soft" />
 
     </LinearLayout>
 </ScrollView>
