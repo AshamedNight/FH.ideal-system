@@ -245,12 +245,21 @@ object NodeQuery {
      */
     private fun looksLikeSystemNotice(text: String): Boolean {
         val t = text.trim()
-        // **先卡长度**：真人被这套规则误伤的典型是「你怎么还没回复我」（10 字），
+        // 系统发送者：这类**根本不看长度**，命中就丢。
+        // 「缘分小助手」会以真人气泡的形式推一句招呼 —— 被当成对方说话时，
+        // 程序会以为"对方第一次打招呼"，回一句开场白；而对方其实什么都没说。
+        if (SYSTEM_SENDERS.any { t.contains(it) }) return true
+        // **再卡长度**：真人被这套规则误伤的典型是「你怎么还没回复我」（10 字），
         // 而平台文案基本都是完整的一句推销，很少短于 14 字。
         // 有了这个门槛，"还没回复""金币"这些词才敢放进词表。
         if (t.length < 14) return false
         return SYSTEM_NOTICE_HINTS.any { t.contains(it) }
     }
+
+    /** 平台自己的发送者名。真人不会自称这些，所以不看长度直接丢。 */
+    private val SYSTEM_SENDERS = listOf(
+        "缘分小助手", "缘分天使", "丘比特", "系统消息", "平台助手",
+    )
 
     private val SYSTEM_NOTICE_HINTS = listOf(
         "红包奖励", "金币收益", "金币", "额外红包",

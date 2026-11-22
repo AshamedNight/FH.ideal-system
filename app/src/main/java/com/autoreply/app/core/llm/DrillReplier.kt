@@ -126,14 +126,40 @@ object DrillReplier {
     private val TAILS = listOf("你呢", "你平时忙不忙", "你做什么的")
 
     /**
+     * 二次招呼：**已经聊着了**，对方又来一句「你好」。
+     *
+     * 这时候绝不能查表。样例里 `q="你好"` 配的是「突然有点想认识你」「在吗？」——
+     * 那是开场型答案，已经说过一遍了。真人这时候只会说「在呢」「刚看到」。
+     * 真机现象：聊到一半对方（或平台小助手）又来一句招呼，输入框里又冒出开场白。
+     */
+    private val REJOIN = listOf(
+        "在呢", "刚看到", "刚忙完", "在的 你说", "嗯 在", "刚拿起手机",
+    )
+
+    /**
      * @param round 当前会话里对方说过几句。
      * @param nudge 每次生成 +1 的扰动（[com.autoreply.app.core.AppConfig.drillNudge]）。
      *   **没有它，"同一条消息连点两次得到同一句"是必然的** —— round 由对话轮次决定，
      *   同一句话重复生成时它根本不变。真实模型每次都不一样，所以只有演练模式需要。
+     * @param alreadyTalking 我已经在这个会话说过话了。
+     * @param peerJustGreeted 对方最后一句是纯招呼。由 ReplyEngine 的 `isJustGreeting` 算好传进来 ——
+     *   这里**不重复实现一份判定**，两份早晚会走偏。
      */
-    fun reply(persona: Persona, lastOther: String, round: Int, nudge: Int = 0): String {
+    fun reply(
+        persona: Persona,
+        lastOther: String,
+        round: Int,
+        nudge: Int = 0,
+        alreadyTalking: Boolean = false,
+        peerJustGreeted: Boolean = false,
+    ): String {
         val target = lastOther.trim()
         if (target.isEmpty()) return "嗯"
+
+        // 已经在聊了，对方又来一句纯招呼 → 先说"在"，别再说开场白
+        if (alreadyTalking && peerJustGreeted) {
+            return pick(REJOIN, target, round, nudge)
+        }
 
         // **先查表**。当初把"短消息直接走应声池"写在前面，
         // 结果「你好」「在吗」这两个最常开场的两句被截在查表之前，

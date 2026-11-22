@@ -32,13 +32,20 @@ HINTS = kotlin_list(read("app/src/main/java/com/autoreply/app/platform/NodeQuery
                     "SYSTEM_NOTICE_HINTS")
 drill = read("app/src/main/java/com/autoreply/app/core/llm/DrillReplier.kt")
 INVITE = kotlin_list(drill, "INVITE_WORDS")
-POOLS = {n: kotlin_list(drill, n) for n in ("DEFLECT", "TOPICS", "ACK", "FOLLOW_UP")}
+POOLS = {n: kotlin_list(drill, n)
+         for n in ("DEFLECT", "TOPICS", "ACK", "FOLLOW_UP", "REJOIN")}
+
+SENDERS = kotlin_list(read("app/src/main/java/com/autoreply/app/platform/NodeQuery.kt"),
+                      "SYSTEM_SENDERS")
 
 MIN_NOTICE_LEN = 14
 
 
 def is_system(text):
     t = text.strip()
+    # 系统发送者不看长度
+    if any(s in t for s in SENDERS):
+        return True
     if len(t) < MIN_NOTICE_LEN:
         return False
     return any(h in t for h in HINTS)
@@ -82,8 +89,21 @@ for text, want in [
     ("今天加班到十点才到家", False),
     ("我平时就爱在家待着看看剧", False),
     ("晚上出来放松放松", False),
+    ("缘分小助手：有人对你感兴趣", True),
+    ("丘比特牵线成功", True),
 ]:
     expect(text[:30], is_system(text), want)
+
+print("\n【1b】二次招呼不能再回开场白（REJOIN 池）")
+few_shot_answers = ["突然有点想认识你", "在吗？"]
+for r in range(4):
+    got = pick(POOLS["REJOIN"], "你好", r, 0)
+    print(f"  第{r + 1}次 → {got}")
+    if got in few_shot_answers:
+        fail += 1
+        print("  ✗ 又发出了开场白样例")
+print(f"  REJOIN 池 {len(POOLS['REJOIN'])} 条")
+expect("池子不该为空", len(POOLS["REJOIN"]) > 0, True)
 
 print(f"\n【2】邀约判定（{len(INVITE)} 个词组）")
 for text, want in [

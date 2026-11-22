@@ -160,7 +160,13 @@ class ReplyEngine(
                 val nudge = config.drillNudge
                 config.drillNudge = nudge + 1
                 LlmClient.Result.Ok(
-                    DrillReplier.reply(persona, last.text, turns.count { it.fromOther }, nudge)
+                    DrillReplier.reply(
+                        persona, last.text, turns.count { it.fromOther }, nudge,
+                        // 二次招呼不能再走"查表拿开场白"：样例里 q=你好 的答案是
+                        // 「突然有点想认识你」，那是开场白，已经说过一遍了
+                        alreadyTalking = iSaidAlready,
+                        peerJustGreeted = peerOpenedWithGreeting,
+                    )
                 )
             } else {
                 client.chat(system, user)
