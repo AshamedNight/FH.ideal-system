@@ -101,6 +101,17 @@ class AppConfig(context: Context) {
         set(value) = sp.edit().putBoolean(KEY_IME_EXPANDED, value).apply()
 
     /**
+     * 输入法面板停在哪一页：0 = 回复动作，1 = 模式/风格。
+     *
+     * 记住它是因为"我正想调风格"这种事会连着发生几次；
+     * 每次都滑回去很烦。**只在换页时写一次**（不是拖拽每一帧都写），
+     * 免得手指还没松手就刷了几十次 SharedPreferences。
+     */
+    var imePage: Int
+        get() = sp.getInt(KEY_IME_PAGE, 0)
+        set(value) = sp.edit().putInt(KEY_IME_PAGE, value.coerceIn(0, 1)).apply()
+
+    /**
      * 一次「连点」最多处理几个会话。
      *
      * 上限 20：连点是效率工具，但它同时是这套东西里最接近"批量操作"的行为。
@@ -124,6 +135,16 @@ class AppConfig(context: Context) {
     var timeOfDay: String
         get() = sp.getString(KEY_TIME_OF_DAY, "") ?: ""
         set(value) = sp.edit().putString(KEY_TIME_OF_DAY, value).apply()
+
+    /**
+     * 说话风格，取值见 [com.autoreply.app.core.llm.TalkStyle.ALL]。
+     *
+     * 和 [timeOfDay] 一样是"这一阵子怎么说话"的开关，区别是它管**语气**而不是时机。
+     * 只在真模型路径生效 —— 演练模式的假模型不读提示词。
+     */
+    var talkStyle: String
+        get() = sp.getString(KEY_TALK_STYLE, "natural") ?: "natural"
+        set(value) = sp.edit().putString(KEY_TALK_STYLE, value).apply()
 
     /**
      * 精力锁：锁定后不再消耗、也不随时间恢复，永远等于 [energyLockedValue]。
@@ -328,6 +349,8 @@ class AppConfig(context: Context) {
         private const val KEY_DRILL = "drill_mode"
         private const val KEY_DRILL_NUDGE = "drill_nudge"
         private const val KEY_IME_EXPANDED = "ime_expanded"
+        private const val KEY_IME_PAGE = "ime_page"
+        private const val KEY_TALK_STYLE = "talk_style"
         private const val KEY_GREETINGS = "greeting_lines"
         private const val KEY_GREETING_ON = "greeting_enabled"
         private const val KEY_GREETING_CURSOR = "greeting_cursor"

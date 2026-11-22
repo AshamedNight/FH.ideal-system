@@ -18,6 +18,7 @@ import android.widget.Toast
 import com.autoreply.app.R
 import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.llm.GreetingHooks
+import com.autoreply.app.core.llm.TalkStyle
 
 /**
  * 设置页。
@@ -157,6 +158,37 @@ class SettingsActivity : Activity() {
             (timeGroup.getChildAt(0) as? RadioButton)?.isChecked = true
         }
         root.addView(timeGroup)
+
+        root.addView(section("说话风格"))
+        root.addView(
+            note(
+                "只改语气，不改长度和底线。选项来自一张表（TalkStyle），加风格不用改这里。\n" +
+                    "「自然」等于不加任何指令 —— 和你之前的表现完全一致。\n" +
+                    "演练模式下不生效：那个模式的假模型按样例拼句，不读提示词。"
+            )
+        )
+        val styleGroup = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
+        TalkStyle.ALL.forEach { item ->
+            val rb = RadioButton(this).apply {
+                text = item.label
+                textSize = 11f
+                setTextColor(getColor(R.color.ink))
+                setPadding(0, dp(6), dp(6), dp(6))
+                id = View.generateViewId()
+                tag = item.id
+                isChecked = config.talkStyle == item.id
+            }
+            styleGroup.addView(rb)
+        }
+        styleGroup.setOnCheckedChangeListener { group, checkedId ->
+            val rb = group.findViewById<RadioButton>(checkedId)
+            (rb?.tag as? String)?.let { config.talkStyle = it }
+        }
+        // 值认不出来（手改过配置）时，把默认风格选上，让界面和实际生效的一致
+        if (styleGroup.checkedRadioButtonId == -1 && styleGroup.childCount > 0) {
+            (styleGroup.getChildAt(0) as? RadioButton)?.isChecked = true
+        }
+        root.addView(styleGroup)
 
         root.addView(section("精力"))
         root.addView(

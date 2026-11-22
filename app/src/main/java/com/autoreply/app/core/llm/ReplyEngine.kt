@@ -311,6 +311,18 @@ class ReplyEngine(
         //（哪怕只是"10点"→"11点"），整段都要按未命中重算，费用翻倍。
         // 挪到 user 消息里：user 本来就每条都不同，缓存损失为零，
         // 而 system 完全稳定 —— 一天下来能省掉几十次全量重算。
+        // 说话风格。「自然」的 hint 是空串 —— 不加指令就是原来的行为，
+        // 所以老用户升级上来提示词一个字都没变（前缀缓存也不用重建）。
+        //
+        // 位置在 persona 的 styleRules **之前**：后面那段里通常写着
+        // 「每句不超过 X 字」这类硬约束，让它排在风格之后发声，风格就压不过长度。
+        val styleHint = TalkStyle.hintOf(config.talkStyle)
+        if (styleHint.isNotEmpty()) {
+            appendLine()
+            appendLine("# 这一次的语气（只影响怎么说，不影响说什么）")
+            appendLine(styleHint)
+        }
+
         appendLine()
         appendLine(persona.styleRules(maxChars))
 

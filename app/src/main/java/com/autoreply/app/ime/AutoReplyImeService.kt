@@ -3,11 +3,13 @@ package com.autoreply.app.ime
 import android.inputmethodservice.InputMethodService
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.widget.FrameLayout
 import android.widget.TextView
 import android.view.Gravity
 import android.widget.LinearLayout
 import com.autoreply.app.R
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.core.llm.TalkStyle
 
 /**
  * 一个只做写入的输入法。
@@ -76,19 +78,27 @@ class AutoReplyImeService : InputMethodService() {
     /**
      * 输入法面板。
      *
-     * 折叠态只有一行（跟原来一样高），展开态约 300dp：
-     * **左边是「生成什么」，右边是「对输入框做什么」**——
-     * 这个分区是参考图里最值得学的一点，拇指不用在两种语义之间来回找。
+     * 折叠态只有一行（跟原来一样高）。展开态是**两页**，可以点上面的页签，
+     * 也可以左右滑（见 [SlidePager]）：
+     *   - 第 1 页「回复」：左边是「生成什么」，右边是「对输入框做什么」——
+     *     这个分区是参考图里最值得学的一点，拇指不用在两种语义之间来回找
+     *   - 第 2 页「风格」：演练模式 / 开场白库 / 说话风格 / 时段
      *
      * 刻意**没有**的东西（不是漏了）：
-     *   - 发送按钮：项目铁律是"发送永远由人点"，而且放在面板上会把
-     *     "写入→发送"的时间差压到两次相邻点击，人来不及看对方刚说了什么
+     *   - 发送按钮：**用各 App 自带的发送**。项目铁律是"发送永远由人点"，
+     *     而且放在面板上会把"写入→发送"的时间差压到两次相邻点击，
+     *     人来不及看对方刚说了什么
      *   - 连点 / 切换会话：跨会话批量动作是"脚本"最典型的形状，
      *     不能因为"顺手"就把它搬到输入法上
+     *   - 风险档位：改档位要重启读屏服务才彻底生效，放在这里点一下没反应，
+     *     比没有这个按钮更糟
      */
     private fun buildPanel(): View {
         val cfg = AppConfig(this)
         val expanded = cfg.imePanelExpanded
+        // 每次重建都重新收集第 2 页的可选项，否则会给已经不在界面上的旧 View 着色
+        chips.clear()
+        chipOn.clear()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -151,7 +161,39 @@ class AutoReplyImeService : InputMethodService() {
             }
         )
 
-        // ── 主体：左网格（生成什么） + 右列（对输入框做什么） ──
+        // ── 页签：回复 / 风格。点得动，也滑得动 ──
+        //
+        // 只放文字页签、不做胶囊按钮：面板本来就只有 300dp，
+        // 再加一排有底色的按钮会跟下面的网格抢注意力。
+        val tabReply = tabLabel("回复") { showPage(0) }
+        val tabStyle = tabLabel("风格") { showPage(1) }
+        tabs = listOf(tabReply, tabStyle)
+        root.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(
+                    tabReply,
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                )
+                addView(
+                    tabStyle,
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                )
+            }
+        )
+        root.addView(
+            View(this).apply {
+                setBackgroundResource(R.drawable.divider_solid)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(1)
+                ).apply {
+                    leftMargin = dp(12)
+                    rightMargin = dp(12)
+                }
+            }
+        )
+
+        // ── 第一页：左网格（生成什么） + 右列（对输入框做什么） ──
         val left = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(rowOf(
@@ -206,27 +248,96 @@ class AutoReplyImeService : InputMethodService() {
         )
         rightLp.marginStart = dp(8)
 
-        root.addView(
-            LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(dp(12), dp(12), dp(12), dp(6))
-                addView(
-                    left,
-                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+        val pageReply = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(12), dp(8), dp(12), dp(6))
+            addView(
+                left,
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(right, rightLp)
+        }
+
+        // ── 第二页：模式 / 风格 / 时段 ──
+        //
+        // 刻意凑成**三行**，和第一页同高：两页高度不一样的话，
+        // 滑动时面板会整体跳一下，看起来像坏了。
+        // 也因此这里不写小标题（"模式""风格"），靠选项本身和页签名认出来。
+        val pageStyle = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(6))
+            addView(
+                rowOf(
+                    chip("演练模式", { cfg.drillMode }) { cfg.drillMode = !cfg.drillMode },
+                    chip("开场白库", { cfg.greetingEnabled }) {
+                        cfg.greetingEnabled = !cfg.greetingEnabled
+                    },
                 )
-                addView(right, rightLp)
+            )
+            addView(
+                // 风格是 5 个，数量由 TalkStyle.ALL 决定 —— 不写死，加一种风格不用改这里
+                rowOf(TalkStyle.ALL.map { s ->
+                    chip(s.label, { cfg.talkStyle == s.id }) { cfg.talkStyle = s.id }
+                }).apply { setPadding(0, dp(8), 0, 0) }
+            )
+            addView(
+                rowOf(
+                    chip("自动时段", { cfg.timeOfDay.isEmpty() }) { cfg.timeOfDay = "" },
+                    chip("上午", { cfg.timeOfDay == "morning" }) { cfg.timeOfDay = "morning" },
+                    chip("下午", { cfg.timeOfDay == "afternoon" }) {
+                        cfg.timeOfDay = "afternoon"
+                    },
+                    chip("晚上", { cfg.timeOfDay == "evening" }) { cfg.timeOfDay = "evening" },
+                    chip("深夜", { cfg.timeOfDay == "night" }) { cfg.timeOfDay = "night" },
+                ).apply { setPadding(0, dp(8), 0, 0) }
+            )
+        }
+
+        // ── 两页装进可滑动容器 ──
+        val p = SlidePager(this).apply {
+            addView(
+                pageReply,
+                FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            addView(
+                pageStyle,
+                FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            onPage = { idx ->
+                currentPage = idx
+                cfg.imePage = idx
+                updateTabs()
+                updateHint()
             }
+        }
+        pager = p
+        root.addView(
+            p,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
         )
 
-        // ── 底部：一句提醒（不用占一行按钮位） ──
-        root.addView(
-            TextView(this).apply {
-                text = "发送仍然由你点"
-                textSize = 11f
-                setTextColor(getColor(R.color.ink_faint))
-                setPadding(dp(12), 0, dp(12), dp(10))
-            }
-        )
+        // ── 底部：一句提醒。文案跟着页走，不额外占一行按钮位 ──
+        val hint = TextView(this).apply {
+            textSize = 11f
+            setTextColor(getColor(R.color.ink_faint))
+            setPadding(dp(12), 0, dp(12), dp(10))
+        }
+        hintView = hint
+        root.addView(hint)
+
+        currentPage = cfg.imePage.coerceIn(0, 1)
+        p.select(currentPage, animate = false)
+        updateTabs()
+        updateHint()
 
         return root
     }
@@ -274,9 +385,115 @@ class AutoReplyImeService : InputMethodService() {
         }
     }
 
+    /**
+     * 同上，但入口是 List。
+     *
+     * 变长的那一行（风格）数量由数据决定，用 vararg 得先 `toTypedArray()` 再 spread，
+     * 多一层容易写错；`List<View>` 还能让 `List<TextView>` 直接传进来（协变）。
+     */
+    private fun rowOf(cells: List<View>): LinearLayout = rowOf(*cells.toTypedArray())
+
+    /** 顶部页签：只有文字，选中态靠字重和颜色。 */
+    private fun tabLabel(text: String, onClick: () -> Unit): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 11f
+        gravity = Gravity.CENTER
+        letterSpacing = 0.1f
+        setTextColor(getColor(R.color.ink_faint))
+        setPadding(0, dp(7), 0, dp(7))
+        setOnClickListener { onClick() }
+    }
+
+    /**
+     * 第 2 页的一个可选项。
+     *
+     * @param isOn 读**当前的真值**，不是点下那一刻的快照 ——
+     *   所以点完只要整体重刷一遍就够，不用逐个手动维护状态。
+     */
+    private fun chip(label: String, isOn: () -> Boolean, onClick: () -> Unit): TextView {
+        val v = TextView(this).apply {
+            text = label
+            textSize = 10f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(9), 0, dp(9))
+            setOnClickListener {
+                onClick()
+                restyleChips()
+            }
+        }
+        chips.add(v)
+        chipOn.add(isOn)
+        applyChipStyle(v, isOn())
+        return v
+    }
+
+    /** 选中 = 白底细线（像一张卡），未选 = 米底无边（像一块纸）。 */
+    private fun applyChipStyle(v: TextView, on: Boolean) {
+        v.setBackgroundResource(if (on) R.drawable.bg_ime_card else R.drawable.bg_ime_key)
+        v.setTextColor(getColor(if (on) R.color.ink else R.color.ink_soft))
+        v.typeface = if (on) {
+            android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        } else {
+            android.graphics.Typeface.DEFAULT
+        }
+    }
+
+    /**
+     * 把所有可选项重新着色。
+     *
+     * 用两个平行的 List（View + 取值函数）而不是往 `View.tag` 里塞 lambda：
+     * tag 是 `Any?`，取出来要强转，写错类型只会在运行时爆；平行 List 是编译期对齐的。
+     */
+    private fun restyleChips() {
+        for (i in chips.indices) {
+            applyChipStyle(chips[i], chipOn.getOrNull(i)?.invoke() ?: false)
+        }
+        // 演练模式一开，风格就不生效了 —— 提示语要立刻改口
+        updateHint()
+    }
+
+    private fun updateTabs() {
+        tabs.forEachIndexed { i, t ->
+            val on = i == currentPage
+            t.setTextColor(getColor(if (on) R.color.ink else R.color.ink_faint))
+            t.typeface = if (on) {
+                android.graphics.Typeface.create(
+                    "sans-serif-medium", android.graphics.Typeface.NORMAL
+                )
+            } else {
+                android.graphics.Typeface.DEFAULT
+            }
+        }
+    }
+
+    private fun updateHint() {
+        val h = hintView ?: return
+        val cfg = AppConfig(this)
+        h.text = when {
+            // 面板上没有发送键，这句话是告诉用户"下一步去哪儿"
+            currentPage == 0 -> "发送用 App 自带的按钮"
+            cfg.drillMode -> "演练模式：风格不生效（假模型按样例拼句）"
+            else -> "风格只改语气，不改长度和底线"
+        }
+    }
+
+    private fun showPage(page: Int) {
+        pager?.select(page, animate = true)
+    }
+
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private var draftLine: TextView? = null
+
+    // ── 分页：0 = 回复动作，1 = 模式 / 风格 ──
+    private var pager: SlidePager? = null
+    private var tabs: List<TextView> = emptyList()
+    /** 第 2 页所有可选项。点一下要整体重新着色，所以得留引用。 */
+    private val chips = ArrayList<TextView>()
+    /** 与 [chips] 一一对应的"我现在选不选中"，读的是配置当前值。 */
+    private val chipOn = ArrayList<() -> Boolean>()
+    private var hintView: TextView? = null
+    private var currentPage = 0
 
     /** 展开 / 收起。换掉整个 input view —— IME 没有"局部刷新"这种说法。 */
     private fun togglePanel() {
@@ -636,5 +853,130 @@ class AutoReplyImeService : InputMethodService() {
         private const val PENDING_TTL_MS = 90_000L
 
         fun hasPending(): Boolean = pendingText != null
+    }
+}
+
+/**
+ * 两页的横向滑动容器（零依赖的 ViewPager 替代品）。
+ *
+ * 为什么不用 `HorizontalScrollView`：它的页宽得自己按屏幕宽算，
+ * 分屏 / 横屏下就对不齐，会露出下一页的一条边；而且它不会"吸附"到整页。
+ * 这里每页就是 `MATCH_PARENT`，宽度由父容器实测，天然对齐。
+ *
+ * 为什么不做跟手位移：面板只有两页，跟手滑动给不了额外信息，
+ * 反而要在每个 ACTION_MOVE 里改一次布局。松手换页足够。
+ */
+private class SlidePager(context: android.content.Context) : FrameLayout(context) {
+
+    /** 换页后回调（页签着色、底部提示语都挂在这上面）。 */
+    var onPage: ((Int) -> Unit)? = null
+
+    /** 当前页号。外部只读 —— 换页必须走 [select]，否则动画和页签会脱节。 */
+    var index: Int = 0
+        private set
+
+    private val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+    private var downX = 0f
+    private var downY = 0f
+    private var stealing = false
+
+    fun select(page: Int, animate: Boolean = true) {
+        val target = page.coerceIn(0, maxOf(childCount - 1, 0))
+        if (target == index) {
+            applyNow()
+            return
+        }
+        val from = index
+        index = target
+        onPage?.invoke(target)
+        // 还没测过宽度（第一次布局前）就没法算位移，直接切
+        if (!animate || width == 0) {
+            applyNow()
+            return
+        }
+        val incoming = getChildAt(target)
+        val outgoing = getChildAt(from)
+        if (incoming == null || outgoing == null) {
+            applyNow()
+            return
+        }
+        val w = width * 0.55f
+        val forward = target > from
+
+        incoming.animate().cancel()
+        outgoing.animate().cancel()
+
+        incoming.translationX = if (forward) w else -w
+        incoming.alpha = 0f
+        incoming.visibility = VISIBLE
+        incoming.animate().translationX(0f).alpha(1f).setDuration(160L).start()
+
+        outgoing.animate()
+            .translationX(if (forward) -w else w)
+            .alpha(0f)
+            .setDuration(160L)
+            .withEndAction {
+                outgoing.visibility = GONE
+                outgoing.translationX = 0f
+                outgoing.alpha = 1f
+            }
+            .start()
+    }
+
+    /** 无动画地把当前页摆好（也是"两页只留一页可见"的唯一保证）。 */
+    private fun applyNow() {
+        for (i in 0 until childCount) {
+            val v = getChildAt(i)
+            v.animate().cancel()
+            v.visibility = if (i == index) VISIBLE else GONE
+            v.translationX = 0f
+            v.alpha = 1f
+        }
+    }
+
+    override fun onInterceptTouchEvent(ev: android.view.MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> {
+                downX = ev.x
+                downY = ev.y
+                stealing = false
+            }
+            android.view.MotionEvent.ACTION_MOVE -> {
+                val dx = ev.x - downX
+                val dy = ev.y - downY
+                // 只在「明显横向」时才接管。竖划、斜着点、长按，
+                // 一律还给子 View —— 否则网格里的按钮会变得点不动。
+                if (!stealing &&
+                    kotlin.math.abs(dx) > slop * 1.5f &&
+                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.5f
+                ) {
+                    stealing = true
+                    return true
+                }
+            }
+            else -> Unit
+        }
+        return false
+    }
+
+    override fun onTouchEvent(ev: android.view.MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            android.view.MotionEvent.ACTION_UP -> {
+                // 按整段位移判定，不看松手瞬间的速度：
+                // 输入法面板上的划动通常又短又快，速度阈值在真机上时灵时不灵。
+                val dx = ev.x - downX
+                if (stealing) {
+                    if (dx < -slop * 2 && index < childCount - 1) {
+                        select(index + 1)
+                    } else if (dx > slop * 2 && index > 0) {
+                        select(index - 1)
+                    }
+                }
+                stealing = false
+            }
+            android.view.MotionEvent.ACTION_CANCEL -> stealing = false
+            else -> Unit
+        }
+        return true
     }
 }
