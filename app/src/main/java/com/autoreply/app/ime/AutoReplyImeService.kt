@@ -35,6 +35,19 @@ class AutoReplyImeService : InputMethodService() {
 
     private var statusView: TextView? = null
 
+    /**
+     * 上一次**我们自己**写进输入框的那段话。
+     *
+     * 存在的理由：`commitText` 是**在光标处插入**，不是覆盖。
+     * 连点三次「生成并填入」而每次内容又一样，输入框里就变成
+     * 「怎么说怎么说怎么说」—— 真机截图确认过。
+     *
+     * 只有记住"上次写的是哪段"，才能在下次写入前精准地把它擦掉；
+     * 直接 `deleteSurroundingText(120,120)` 会连用户自己打的字一起删，
+     * 那是不可接受的（设计上明确不覆盖用户的输入）。
+     */
+    private var lastCommitted: String? = null
+
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate() {
@@ -153,7 +166,9 @@ class AutoReplyImeService : InputMethodService() {
         }
 
         val ic = currentInputConnection ?: return
+        clearOwnDraft(ic)
         ic.commitText(pending, 1)
+        lastCommitted = pending
         pendingText = null
         statusView?.text = "已写入：${pending.take(16)}"
         verifyWritten(pending)
@@ -183,6 +198,9 @@ class AutoReplyImeService : InputMethodService() {
                 // null = 这个输入框不支持回读，没法验证。不报错，只说明情况
                 before == null -> statusView?.text = "已写入（无法回读验证）"
                 before.isEmpty() -> {
+                    // 框里已经没了：我们记的那份也失效了，
+                    // 不清掉的话下次会拿它去比对、白删
+                    lastCommitted = null
                     val ok = copyDraft(text)
                     // 必须带上草稿开头：用户唯一能判断"这是不是刚写的那条"的依据。
                     // 原来只说"草稿已放剪贴板"，粘出来是旧话术时完全没法分辨
@@ -244,11 +262,31 @@ class AutoReplyImeService : InputMethodService() {
         }
         // 只删光标两侧各 120 字符：草稿本来就短，
         // 这个范围足够清掉上一段，又不会误删更早的对话内容
-        if (replaceFirst) ic.deleteSurroundingText(120, 120)
+        if (replaceFirst) ic.deleteSurroundingText(120, 120) else clearOwnDraft(ic)
         ic.commitText(text, 1)
+        lastCommitted = text
         pendingText = null
         verifyWritten(text)
         return true
+    }
+
+    /**
+     * 擦掉**上一次我们自己写的那段**，如果它还在框里。
+     *
+     * 判定刻意克制：光标前的内容必须以 [lastCommitted] 结尾才删。
+     * 用户点了发送（App 把输入框清空）、或者他自己接着打了字，都不满足这个条件 ——
+     * 那时候一个字都不会动。设计上的底线是"绝不覆盖用户自己打的字"，
+     * 这条规则同时满足了它和"连点不要叠加"。
+     */
+    private fun clearOwnDraft(ic: android.view.inputmethod.InputConnection) {
+        val last = lastCommitted?.takeIf { it.isNotEmpty() } ?: return
+        val before = try {
+            ic.getTextBeforeCursor(last.length + 8, 0)?.toString()
+        } catch (_: Exception) {
+            null
+        } ?: return
+        if (!before.endsWith(last)) return
+        ic.deleteSurroundingText(last.length, 0)
     }
 
     companion object {

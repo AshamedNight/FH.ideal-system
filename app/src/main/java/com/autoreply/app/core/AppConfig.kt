@@ -74,6 +74,20 @@ class AppConfig(context: Context) {
         set(value) = sp.edit().putBoolean(KEY_DRILL, value).apply()
 
     /**
+     * 演练模式的取词扰动：每生成一次 +1。
+     *
+     * 为什么需要：演练模式的取词种子原来是「对方说了哪句话 + 对方说过几句」。
+     * 同一条消息连点三次，这两个都不变 —— 于是三次给出**完全一样**的话，
+     * 输入框里还会因为插入式写入叠成「怎么说怎么说怎么说」。
+     *
+     * 有了这个计数器，连点会依次取到池子里的不同条目。
+     * 真实模型不需要它（每次本来就不一样），所以只在演练分支用。
+     */
+    var drillNudge: Int
+        get() = sp.getInt(KEY_DRILL_NUDGE, 0)
+        set(value) = sp.edit().putInt(KEY_DRILL_NUDGE, value).apply()
+
+    /**
      * 一次「连点」最多处理几个会话。
      *
      * 上限 20：连点是效率工具，但它同时是这套东西里最接近"批量操作"的行为。
@@ -299,6 +313,7 @@ class AppConfig(context: Context) {
         private const val KEY_GAP_SEC = "gap_sec"
         private const val KEY_BATCH_SIZE = "batch_size"
         private const val KEY_DRILL = "drill_mode"
+        private const val KEY_DRILL_NUDGE = "drill_nudge"
         private const val KEY_GREETINGS = "greeting_lines"
         private const val KEY_GREETING_ON = "greeting_enabled"
         private const val KEY_GREETING_CURSOR = "greeting_cursor"

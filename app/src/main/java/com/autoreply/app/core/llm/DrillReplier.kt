@@ -102,8 +102,8 @@ object DrillReplier {
      * 于是"回复单一"这件事靠加池子治不好：池子再长，问同一句话还是同一条。
      * 掺进对方的话做种子之后，不同的话落在不同位置，观感立刻不一样。
      */
-    private fun pick(pool: List<String>, seed: String, round: Int): String =
-        pool[Math.floorMod(seed.hashCode() + round * 7, pool.size)]
+    private fun pick(pool: List<String>, seed: String, round: Int, nudge: Int = 0): String =
+        pool[Math.floorMod(seed.hashCode() + round * 7 + nudge * 13, pool.size)]
 
     /**
      * 命中这些就算对方在提见面。
@@ -126,10 +126,12 @@ object DrillReplier {
     private val TAILS = listOf("你呢", "你平时忙不忙", "你做什么的")
 
     /**
-     * @param round 当前会话里对方说过几句。用来在同一条样例有多个答法时轮换，
-     *   否则同一个问题每次都给同一句话，看起来还是"卡住了"。
+     * @param round 当前会话里对方说过几句。
+     * @param nudge 每次生成 +1 的扰动（[com.autoreply.app.core.AppConfig.drillNudge]）。
+     *   **没有它，"同一条消息连点两次得到同一句"是必然的** —— round 由对话轮次决定，
+     *   同一句话重复生成时它根本不变。真实模型每次都不一样，所以只有演练模式需要。
      */
-    fun reply(persona: Persona, lastOther: String, round: Int): String {
+    fun reply(persona: Persona, lastOther: String, round: Int, nudge: Int = 0): String {
         val target = lastOther.trim()
         if (target.isEmpty()) return "嗯"
 
@@ -156,9 +158,10 @@ object DrillReplier {
         }
 
         val answer = if (best != null && score >= MATCH_THRESHOLD) {
-            // 多轮里同一个问题可能配了好几种答法，轮换着用
+            // 多轮里同一个问题可能配了好几种答法，轮换着用。
+            // 掺 nudge：同一条消息连点两次也该换一种答法。
             val sameQ = persona.fewShot.filter { it.q == best.q }
-            sameQ[round % sameQ.size].a
+            sameQ[Math.floorMod(round + nudge, sameQ.size)].a
         } else {
             null
         }
@@ -167,19 +170,20 @@ object DrillReplier {
             // 1. 对方在约 —— 先挡一下；隔轮再抛个新话题，这才是"转移话题"。
             //    只挡不抛，对话就死在"我不太敢"这里，等于没接。
             if (looksLikeInvite(target)) {
-                val head = pick(DEFLECT, target, round)
+                val head = pick(DEFLECT, target, round, nudge)
                 return if (round % 2 == 0) {
-                    head + "\n" + pick(TOPICS, target, round)
+                    head + "\n" + pick(TOPICS, target, round, nudge)
                 } else {
                     head
                 }
             }
             return when {
-                target.length <= 2 -> pick(listOf("怎么了", "啥", "嗯？", "你说", "咋了"), target, round)
+                target.length <= 2 ->
+                    pick(listOf("怎么了", "啥", "嗯？", "你说", "咋了"), target, round, nudge)
                 // 对方说了一长段（倾诉、讲经历），回一句「哦哦 具体点」很敷衍 ——
                 // 那种时候该表示在听，而不是继续追问。
-                target.length > 12 -> pick(ACK, target, round)
-                else -> pick(FOLLOW_UP, target, round)
+                target.length > 12 -> pick(ACK, target, round, nudge)
+                else -> pick(FOLLOW_UP, target, round, nudge)
             }
         }
 

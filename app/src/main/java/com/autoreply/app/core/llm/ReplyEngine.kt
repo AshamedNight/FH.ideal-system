@@ -154,8 +154,13 @@ class ReplyEngine(
             //
             // 后面的禁止词检查照常走：那也是流程的一部分，跳过就测不全。
             val resp = if (config.drillMode) {
+                // 每生成一次把扰动 +1：同一条消息连点两次，取到的不是同一条。
+                // 只靠 round（对方说过几句）不够 —— 同一条消息重复生成时它不变，
+                // 于是三次都给同一句，输入框里还叠成「怎么说怎么说怎么说」。
+                val nudge = config.drillNudge
+                config.drillNudge = nudge + 1
                 LlmClient.Result.Ok(
-                    DrillReplier.reply(persona, last.text, turns.count { it.fromOther })
+                    DrillReplier.reply(persona, last.text, turns.count { it.fromOther }, nudge)
                 )
             } else {
                 client.chat(system, user)

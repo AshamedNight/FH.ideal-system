@@ -56,8 +56,8 @@ def java_hash(s):
     return h - 2 ** 32 if h >= 2 ** 31 else h
 
 
-def pick(pool, seed, round_):
-    return pool[(java_hash(seed) + round_ * 7) % len(pool)]
+def pick(pool, seed, round_, nudge=0):
+    return pool[(java_hash(seed) + round_ * 7 + nudge * 13) % len(pool)]
 
 
 fail = 0
@@ -98,11 +98,19 @@ for text, want in [
 ]:
     expect(text, looks_like_invite(text), want)
 
-print("\n【3】多样性：同一句「约吗」连续 6 轮")
-got = [pick(POOLS["DEFLECT"], "约吗", r) for r in range(6)]
+print("\n【3】连点重来：同一条消息 + 同一个 round，nudge 依次 +1")
+msg = "你约？一小时两张"
+got = [pick(POOLS["FOLLOW_UP"], msg, 3, n) for n in range(6)]
 for i, s in enumerate(got):
-    print(f"  第{i + 1}轮 → {s}")
-expect("不该全部相同", len(set(got)) > 1, True)
+    print(f"  第{i + 1}次 → {s}")
+expect("六次不该全部相同", len(set(got)) > 1, True)
+expect("至少三种不同", len(set(got)) >= 3, True)
+
+print("\n【3b】邀约场景同样是三句不同的")
+got2 = [pick(POOLS["DEFLECT"], "约吗", 2, n) for n in range(4)]
+for i, s in enumerate(got2):
+    print(f"  第{i + 1}次 → {s}")
+expect("四次不该全部相同", len(set(got2)) > 1, True)
 
 print("\n【4】不同的话落在不同位置")
 for q in ["约吗", "出来玩吗", "今晚有空吗"]:
