@@ -91,7 +91,20 @@ class ReplyRunner(
         // 指纹带昵称：交友平台大量新会话第一句都是「你好」，
         // 只按文本去重会把第二个会话直接锁死
         val peer = NodeQuery.peerName(root, profile)
-        if (dedup.isDuplicate(peer, lastOther.text, now)) {
+
+        // **去重只拦自动触发，手动点击一律放行。**
+        //
+        // 去重存在的理由是"填草稿会改变界面，而界面变化又会触发一次自动回复"——
+        // 不拦就是自己喂自己，一条消息能刷出四五份草稿。
+        // 但人明确点了一下（输入法面板的「生成下一条 / 换一句」、App 里的按钮），
+        // 那一下的语义就是"我现在就要它再出一句"，跟"界面恰好变了"是两件事。
+        //
+        // 踩过的坑：这里原来不分手动自动，于是**卡住时唯一能自救的按钮也是死的**——
+        // 面板上直接显示「这条已经处理过（30 分钟内不重复）」，
+        // 而这个会话你其实什么都没发出去。手动重来会多花一次 token，
+        // 那是用户自己选的，比"点了没反应"便宜得多。
+        val repeated = dedup.isDuplicate(peer, lastOther.text, now)
+        if (repeated && !manual) {
             val who = peer.ifEmpty { "这个会话" }
             finish(emptyList(), "", "「$who」这条已经处理过（30 分钟内不重复）", false, false, onDone)
             return
@@ -141,6 +154,8 @@ class ReplyRunner(
                             messages.firstOrNull()?.text?.take(12).orEmpty()
                         },
                         onDone = onDone,
+                        // 这一条本来在去重窗口里，是用户手动要求再来一次
+                        replay = repeated,
                     )
                 }
             } catch (e: Throwable) {
@@ -168,8 +183,13 @@ class ReplyRunner(
         /** 会话标识，和 detectNewSent 里算的 key 保持一致（昵称读不到时用会话首条消息） */
         sessionKey: String,
         onDone: ((Result) -> Unit)?,
+        /** 这条本来在去重窗口里，是用户手动要求重来。状态行前面标一下，别让人以为是新消息。 */
+        replay: Boolean = false,
     ) {
         val sink = AccessibilityReplySink(service, profile)
+        // 输入法面板的状态行只有 28 个字，所以标记要短 ——
+        // 放前面是为了让人一眼看出"这次是重来"，而不是"又来了一条新消息"
+        val tag = if (replay) "手动重来 · " else ""
 
         when (outcome) {
             is ReplyFlow.Outcome.Fill -> {
@@ -245,14 +265,14 @@ class ReplyRunner(
                     copied -> write.note
                     else -> write.note + segHint
                 }
-                finish(trace, outcome.text, note, write.written, copied, onDone)
+                finish(trace, outcome.text, tag + note, write.written, copied, onDone)
             }
 
             is ReplyFlow.Outcome.Hold -> {
                 // 风险太高：不替你填，但把草稿放到剪贴板，你要用自己粘贴
                 val copied = sink.copyToClipboard(outcome.text)
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
-                finish(trace, outcome.text, outcome.reason, false, copied, onDone)
+                finish(trace, outcome.text, tag + outcome.reason, false, copied, onDone)
             }
 
             is ReplyFlow.Outcome.Wait -> {
@@ -260,15 +280,15 @@ class ReplyRunner(
                 // 又得一次"精力低，稍等"，日志里连刷四五条看起来像卡死。
                 service.postponeAuto(outcome.afterMs)
                 val minutes = (outcome.afterMs / 60_000L).coerceAtLeast(1L)
-                finish(trace, "", "等 ${minutes} 分钟再回：${outcome.reason}", false, false, onDone)
+                finish(trace, "", tag + "等 ${minutes} 分钟再回：${outcome.reason}", false, false, onDone)
             }
 
             is ReplyFlow.Outcome.Silent -> {
-                finish(trace, "", "这条不参与：${outcome.reason}", false, false, onDone)
+                finish(trace, "", tag + "这条不参与：${outcome.reason}", false, false, onDone)
             }
 
             is ReplyFlow.Outcome.Error -> {
-                finish(trace, "", "生成失败：${outcome.reason}", false, false, onDone)
+                finish(trace, "", tag + "生成失败：${outcome.reason}", false, false, onDone)
             }
         }
     }
