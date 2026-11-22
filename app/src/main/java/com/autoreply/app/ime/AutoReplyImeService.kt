@@ -132,6 +132,10 @@ class AutoReplyImeService : InputMethodService() {
         if (!expanded) return root
 
         // ── 草稿预览：让用户知道框里现在是什么，不用切回聊天页确认 ──
+        //
+        // 右边那个「待发 N 段」是这一轮加的**真话**：断句后没发完的句子存在
+        // DraftQueue 里，发完当前这条才填下一段。但界面上原来完全看不出队列是空的
+        // 还是卡住了 —— 用户看到"发完没有下一条"，第一反应就是"又坏了"。
         val draft = TextView(this).apply {
             text = draftPreview()
             textSize = 11f
@@ -140,6 +144,13 @@ class AutoReplyImeService : InputMethodService() {
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
         draftLine = draft
+        val queueBadge = TextView(this).apply {
+            textSize = 11f
+            setTextColor(getColor(R.color.ink_faint))
+            setPadding(dp(8), 0, 0, 0)
+        }
+        queueLine = queueBadge
+        refreshDraftLine()
         root.addView(
             LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -158,6 +169,7 @@ class AutoReplyImeService : InputMethodService() {
                     draft,
                     LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
                 )
+                addView(queueBadge)
             }
         )
 
@@ -484,6 +496,8 @@ class AutoReplyImeService : InputMethodService() {
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private var draftLine: TextView? = null
+    /** 草稿行右侧的「待发 N 段」。队列空了就留白。 */
+    private var queueLine: TextView? = null
 
     // ── 分页：0 = 回复动作，1 = 模式 / 风格 ──
     private var pager: SlidePager? = null
@@ -513,6 +527,31 @@ class AutoReplyImeService : InputMethodService() {
 
     private fun refreshDraftLine() {
         draftLine?.text = draftPreview()
+        // 队列里有几句还没发，直接写出来。空着就留白 ——
+        // 常驻一个「待发 0 段」比不显示更烦人。
+        queueLine?.text = com.autoreply.app.core.guard.DraftQueue.size()
+            .let { if (it > 0) "待发 $it 段" else "" }
+    }
+
+    /**
+     * 输入框内容变了就刷新草稿预览。
+     *
+     * 为什么需要：以前只在「我们自己做了个动作」之后刷新。你点了发送、
+     * App 把输入框清空、断句的下一段被填进来 —— 这些都不是我们的动作，
+     * 面板上的草稿行就一直停在旧内容上。看起来就像"发完了没有下一条"。
+     */
+    override fun onUpdateSelection(
+        oldSelStart: Int,
+        oldSelEnd: Int,
+        newSelStart: Int,
+        newSelEnd: Int,
+        candidatesStart: Int,
+        candidatesEnd: Int,
+    ) {
+        super.onUpdateSelection(
+            oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd
+        )
+        refreshDraftLine()
     }
 
     private fun setStatus(s: String) {

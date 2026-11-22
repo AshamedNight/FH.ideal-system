@@ -620,7 +620,21 @@ class CaptureService : AccessibilityService() {
         // 判断依据是「同一个会话里，我发的最后一条变了」，不依赖草稿被原样发出
         //（用户可能改几个字，也可能自己手打，那些同样是真实发送）。
         val nowWall = System.currentTimeMillis()
-        if (SentTracker(this).detectNewSent(messages, peer, nowWall)) {
+        val tracker = SentTracker(this)
+        val sentByCount = tracker.detectNewSent(messages, peer, nowWall)
+        // 第二条判据：**填进去的那句话自己出现在右侧**。
+        //
+        // 条数判据有个已知盲区 —— 消息列表只读可见区域，发完之后旧气泡滚出屏幕、
+        // 新气泡滚进来，条数可能**不变**，于是"明明发出去了"被判成"没发"：
+        // 配额不涨、连点不推进、断句的第二段永远不填。三个症状同一个原因。
+        //
+        // 只在 90 秒内认：更早的 pending 本身就该作废，
+        // 否则会和历史里一句同款的旧气泡混淆，把"还没发"误判成"发了"。
+        val pendingRecent = tracker.pending?.let { nowWall - it.at < 90_000L } == true
+        val sentByText = !sentByCount && pendingRecent &&
+            tracker.confirmIfSent(messages, peer, nowWall)
+
+        if (sentByCount || sentByText) {
             PacerGuard(this, cfg).recordSent(nowWall)
             // 断句：这句话是拆开发的，先接着填下一句 —— 不切会话
             if (fillNextSegment(root, profile)) return
