@@ -103,6 +103,18 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
         respectCooldown: Boolean = true,
         /** 对方昵称，只往上传给开场白的 `{昵称}` 槽位。读不到就留空。 */
         peer: String = "",
+        /**
+         * 这次是用户**手动**点的。
+         *
+         * 手动时"时机"类的判断全部让路：精力、长冷却、以及第②层的
+         * 「想回但先等」。后者原来没让路，于是出现最难受的一种死锁 ——
+         * 对方回了个「在」，总分 0.28 被判"等 4 分钟"，
+         * 用户看着输入框空的，点「生成并填入」也纹丝不动，以为程序坏了。
+         *
+         * **内容类的判断不让路**：SILENT（这条不该回）和话术风险照旧生效 ——
+         * 那是"说错代价大"，不是"时机不对"。
+         */
+        manual: Boolean = false,
     ): Outcome {
         traceBuffer.clear()
 
@@ -137,13 +149,21 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
                 return Outcome.Silent(judgment.reasons.joinToString("；"))
             }
             NecessityJudge.Action.WAIT -> {
-                step("② 该不该回：想回但先等（${judgment.reasons.joinToString("；")}）")
-                return Outcome.Wait(
-                    // 6 分钟而不是 12：交友平台上"等 34 分钟"的代价是对方已经走了。
-                    // 再乘精力倍数（累了最多 3 倍）和抖动，实际落点约 4~23 分钟。
-                    delayMs(baseMinutes = 6, now = now),
-                    "想回但先等等：" + judgment.reasons.joinToString("；"),
-                )
+                if (manual) {
+                    // 你是手动点的 = 你决定现在就回，程序不再替你判断时机
+                    step(
+                        "② 该不该回：本来想等（${judgment.reasons.joinToString("；")}），" +
+                            "手动点击 → 直接回"
+                    )
+                } else {
+                    step("② 该不该回：想回但先等（${judgment.reasons.joinToString("；")}）")
+                    return Outcome.Wait(
+                        // 6 分钟而不是 12：交友平台上"等 34 分钟"的代价是对方已经走了。
+                        // 再乘精力倍数（累了最多 3 倍）和抖动，实际落点约 4~23 分钟。
+                        delayMs(baseMinutes = 6, now = now),
+                        "想回但先等等：" + judgment.reasons.joinToString("；"),
+                    )
+                }
             }
             NecessityJudge.Action.REPLY -> step(
                 "② 该不该回：该回（${"%.2f".format(judgment.score)}）" +

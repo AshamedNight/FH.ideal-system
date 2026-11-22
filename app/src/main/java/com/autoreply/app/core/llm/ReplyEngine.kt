@@ -93,35 +93,31 @@ class ReplyEngine(
         val peerOpenedWithGreeting = turns.lastOrNull { it.fromOther }
             ?.let { isJustGreeting(it.text) } == true
 
-        if (config.greetingEnabled && !iSaidAlready && peerOpenedWithGreeting &&
-            greetings.isNotEmpty()
-        ) {
-            // **一条一次，真轮换。**
+        val echo = turns.lastOrNull { it.fromOther }?.text.orEmpty()
+        if (config.greetingEnabled && !iSaidAlready && peerOpenedWithGreeting) {
+            // 用户自己配的库优先。
             //
-            // 这里以前是 `chunked(3)` + 拼接：三句一组连着发，组号由
-            // 「对方那句话的 hashCode」取模决定。两个后果都不好：
-            //   - 轮换形同虚设：所有说「你好」的人 hashCode 相同，永远同一组，
-            //     20 条的库实际只用得到一两条
-            //   - 对方还没回就连发三条，是整套行为里最像脚本的一种
-            //
-            // 现在改成游标依次取（[com.autoreply.app.core.AppConfig.greetingCursor]），
-            // 取到能填满槽位的那条就发，一条库项 = 一条消息。
-            val hooks = greetings
-            val start = config.greetingCursor
-            val echo = turns.lastOrNull { it.fromOther }?.text.orEmpty()
-            for (offset in hooks.indices) {
-                val i = (start + offset) % hooks.size
-                // 槽位填不上就试下一条 —— 绝不能把「{昵称}，这名字谁给你起的」
-                // 原样发出去，一次就够毁掉这个号。
-                val filled = GreetingHooks.fill(hooks[i], peer, echo, timeWord()) ?: continue
-                config.greetingCursor = (i + 1) % hooks.size
-                // single = true：库里的每一行都是写好的一整句，
-                // 不再让 SentenceSplitter 按逗号拆开（拆开会把问句甩到第二条，
-                // 用户只发第一条时钩子就没了）
-                return Result.Draft(filled, 1, 0, 0, 0, single = true)
+            // 这一段的旧实现是 `chunked(3)` + 按「对方那句话的 hashCode」取模选组，
+            // 两个后果都不好：所有说「你好」的人 hashCode 相同、永远同一组（轮换形同虚设）；
+            // 而且对方还没回就连发三条，是整套行为里最像脚本的一种。
+            // 现在按游标依次取，一条库项 = 一条消息。
+            pickGreeting(greetings, peer, echo)?.let {
+                return Result.Draft(it, 1, 0, 0, 0, single = true)
             }
-            // 一条都填不满（例如整库都带 {昵称}、而昵称没读到）→ 交给模型写，
-            // 不硬发。这一路走下去会多花一次 token，但比发一条带花括号的话强。
+
+            // 库为空、但开着演练模式 → 用**内置钩子库**兜底。
+            //
+            // 不兜底会怎样：演练模式退去 few_shot 里查 `q=你好`，命中
+            // 「突然有点想认识你」「在吗？」这类**开场型样例**，于是每开一个新会话
+            // 都把同一句开场白再说一遍。用户清空开场白库的本意就是"别再发那句"，
+            // 结果被样例接了回来 —— 这正是"改了设置还在发旧话术"的成因之一。
+            if (greetings.isEmpty() && config.drillMode) {
+                pickGreeting(GreetingHooks.DEFAULT, peer, echo)?.let {
+                    return Result.Draft(it, 1, 0, 0, 0, single = true)
+                }
+            }
+            // 配了却一条都填不上（比如整库带 {昵称}、而昵称没读到）→ 交给模型写。
+            // 这一路会多花一次 token，但比发一条带花括号的话强。
         }
 
         // 长度跟着对方走：对方说了一大段，回一句 15 字会显得敷衍；
@@ -234,6 +230,26 @@ class ReplyEngine(
             len >= 5 -> (base * 0.8).toInt().coerceAtLeast(15)
             else -> (base * 0.6).toInt().coerceAtLeast(10)
         }
+    }
+
+    /**
+     * 从库里取一条**能填满槽位**的开场白，并把轮换游标前移。
+     *
+     * 槽位填不上就试下一条 —— 绝不能把「{昵称}，这名字谁给你起的」原样发出去，
+     * 一次就够毁掉这个号。昵称是纯数字系统号时 [GreetingHooks.fill] 也会返回 null。
+     *
+     * @return null = 整库一条都填不上（那就交给模型，不硬发）
+     */
+    private fun pickGreeting(lines: List<String>, peer: String, echo: String): String? {
+        if (lines.isEmpty()) return null
+        val start = config.greetingCursor
+        for (offset in lines.indices) {
+            val i = (start + offset) % lines.size
+            val filled = GreetingHooks.fill(lines[i], peer, echo, timeWord()) ?: continue
+            config.greetingCursor = (i + 1) % lines.size
+            return filled
+        }
+        return null
     }
 
     /**

@@ -124,6 +124,9 @@ class ReplyRunner(
                     // 只放开护栏是不够的 —— 连发到第 16 条还是会卡在"精力低"。
                     respectEnergy = !(manual || config.drillMode),
                     respectCooldown = !(manual || config.drillMode),
+                    // 连点 / 演练也算"人要求现在就做"：第②层的"先等几分钟"同样要让路。
+                    // 不让路的话连点一圈全是「想回但先等」，界面上看起来就是卡死。
+                    manual = manual || config.drillMode,
                     // 昵称只给开场白的 {昵称} 槽位用。读不到就空着 ——
                     // 带该槽位的那几条会被跳过，不会把花括号发出去
                     peer = peer,

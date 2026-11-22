@@ -236,6 +236,10 @@ class MainActivity : Activity() {
                 // 每小时上限与熔断仍然生效（那是真风险护栏）。
                 respectEnergy = false,
                 respectCooldown = false,
+                // 手动点击也越过了「想回但先等」那一层 ——
+                // 原来只放开精力和冷却，对方回个「在」被判 0.28 分时，
+                // 手动点也不动，界面上看着像程序坏了
+                manual = true,
                 peer = peer,
             )
             // trace 必须在这里取：下一次 decide 会清空它
