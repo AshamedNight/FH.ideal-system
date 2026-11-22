@@ -218,16 +218,19 @@ class ReplyRunner(
                     sink.copyToClipboard(parts.first())
                 }
                 // 只有真进了输入框才算"处理过"：排队和复制都还要用户再动一下手
+                //
+                // **但「这条草稿等着你发」这件事，三条通道是一样的。**
+                // 基线（markBaseline / markPending）原来只在 written 分支写，
+                // 走输入法排队或剪贴板时就不写 —— 后果是那条消息发出去之后
+                // detectNewSent 没有基线可比：首次会走"初始化"分支直接返回 false，
+                // 于是配额不涨、连点不推进、下一段不填。
+                // 面板上看起来就是「我发了，它没反应」。
+                val tracker = SentTracker(service)
+                tracker.markPending(peer, parts.first(), now)
+                tracker.markBaseline(sessionKey, selfCount)
+
                 if (write.written) {
                     dedup.mark(peer, messageText, now)
-                    // 记下"已填、待确认发出"。之后消息列表里只要出现这条，
-                    // 就说明用户点了发送 —— 那时才计一次平台配额。
-                    SentTracker(service).markPending(peer, parts.first(), now)
-                    // 把"我现在发了几条"钉成基线。不做这一步，新会话的**第一条**
-                    // 永远检测不到：基线未初始化时，发送后的第一次读取会被当成
-                    // "初始化"而不是"条数增加"。
-                    // key 必须和 detectNewSent 里算的一致，否则基线写进去也对不上
-                    SentTracker(service).markBaseline(sessionKey, selfCount)
                     // 填入会让界面变化，那个变化又会触发一次自动回复 ——
                     // 记一下时刻，让自动触发在这 5 秒内跳过
                     service.noteFill()

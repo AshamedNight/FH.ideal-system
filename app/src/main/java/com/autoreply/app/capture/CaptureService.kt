@@ -294,6 +294,18 @@ class CaptureService : AccessibilityService() {
      */
     private var platformWait = 0
 
+    /**
+     * 连续几次没找到「下一个未读」按钮。
+     *
+     * 用来把「按钮还没渲染出来」和「真的没有未读了」分开。
+     * 原来这两种是同一个结果：一次找不到就判"所有平台都没未读"、直接收工 ——
+     * 而刚发完消息那一下，列表正在重排，按钮经常还不在树上。
+     */
+    private var nextMiss = 0
+
+    /** 找不到「下一个未读」时最多重试几次（每次间隔 1.2 秒，合计约 3.6 秒）。 */
+    private val nextMissLimit = 3
+
     /** 按配置顺序找下一个平台。只有一个平台时返回 null。 */
     private fun nextPlatformPkg(): String? {
         val list = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
@@ -463,6 +475,19 @@ class CaptureService : AccessibilityService() {
             }
             platformWait = 0
 
+            // 刚发完那一下，「下一个未读」按钮常常还没重新出现：
+            // 列表在重排，或者这个按钮只在"确实还有别的未读"时才渲染出来。
+            // 原来这里立刻判"没有未读了"→ 切平台 → 收工，
+            // 于是连点在你点完发送的一两秒内就结束了 ——
+            // 表现正是「我发了，它不往下走」。
+            if (nextMiss < nextMissLimit) {
+                nextMiss++
+                logAuto("没看到「下一个未读」，稍等再看（第 $nextMiss 次）")
+                mainHandler.postDelayed({ batchStep() }, 1_200L)
+                return
+            }
+            nextMiss = 0
+
             // 这个平台没有未读了 —— 如果还配了别的平台，轮过去接着跑。
             // 用户的实际用法就是"同城打完打心遇"，让他手动切一次很别扭。
             val platforms = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
@@ -482,6 +507,7 @@ class CaptureService : AccessibilityService() {
             return
         }
         platformHops = 0
+        nextMiss = 0
 
         // 换会话了，上一段没发完的断句必须丢掉，
         // 否则会把 A 会话的第二句发给 B
@@ -512,6 +538,9 @@ class CaptureService : AccessibilityService() {
             val profile = root?.let { Profiles.forPackage(it.packageName?.toString() ?: "") }
             if (root != null && profile != null && fillNextSegment(root, profile)) return@Runnable
 
+            // 这条日志很重要：没有它，用户只看到"发完就不动了"，
+            // 完全不知道程序在等什么、等了多久。
+            logAuto("等了 ${BATCH_SEND_TIMEOUT_MS / 1000} 秒没收到发送信号，这条跳过，看下一个会话")
             batchLeft--
             batchStep()
         }
@@ -635,6 +664,10 @@ class CaptureService : AccessibilityService() {
             tracker.confirmIfSent(messages, peer, nowWall)
 
         if (sentByCount || sentByText) {
+            // 条数判据已经确认发出去了，pending 就没用了。
+            // 不清的话，它会在 10 分钟窗口里继续挂着，
+            // 之后填一句内容相同的新草稿时可能被误认成"已经发过"。
+            if (sentByCount) tracker.clear()
             PacerGuard(this, cfg).recordSent(nowWall)
             // 断句：这句话是拆开发的，先接着填下一句 —— 不切会话
             if (fillNextSegment(root, profile)) return
