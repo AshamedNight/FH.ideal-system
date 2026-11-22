@@ -4,9 +4,10 @@ import android.inputmethodservice.InputMethodService
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.TextView
-import android.graphics.Color
 import android.view.Gravity
 import android.widget.LinearLayout
+import com.autoreply.app.R
+import com.autoreply.app.core.AppConfig
 
 /**
  * 一个只做写入的输入法。
@@ -70,33 +71,357 @@ class AutoReplyImeService : InputMethodService() {
      * 也不做成全透明/零高度：用户需要知道"现在用的是哪个输入法"，
      * 否则只会觉得键盘坏了。
      */
-    override fun onCreateInputView(): View {
-        val tv = TextView(this).apply {
-            text = "AutoReply 输入 · 草稿会自动写入"
-            setTextColor(Color.parseColor("#E8E8E8"))
-            textSize = 12f
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        statusView = tv
+    override fun onCreateInputView(): View = buildPanel()
 
-        val switchBtn = android.widget.Button(this).apply {
-            text = "切换键盘"
-            textSize = 12f
-            setOnClickListener { pickAnotherKeyboard() }
+    /**
+     * 输入法面板。
+     *
+     * 折叠态只有一行（跟原来一样高），展开态约 300dp：
+     * **左边是「生成什么」，右边是「对输入框做什么」**——
+     * 这个分区是参考图里最值得学的一点，拇指不用在两种语义之间来回找。
+     *
+     * 刻意**没有**的东西（不是漏了）：
+     *   - 发送按钮：项目铁律是"发送永远由人点"，而且放在面板上会把
+     *     "写入→发送"的时间差压到两次相邻点击，人来不及看对方刚说了什么
+     *   - 连点 / 切换会话：跨会话批量动作是"脚本"最典型的形状，
+     *     不能因为"顺手"就把它搬到输入法上
+     */
+    private fun buildPanel(): View {
+        val cfg = AppConfig(this)
+        val expanded = cfg.imePanelExpanded
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(getColor(R.color.paper))
         }
 
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.parseColor("#1F1F1F"))
-            setPadding(32, 8, 16, 8)
-            gravity = Gravity.CENTER_VERTICAL
+        // ── 把手行：状态 + 展开/收起 + 切换键盘 ──
+        val status = TextView(this).apply {
+            text = if (expanded) "AutoReply" else "AutoReply 输入"
+            textSize = 11f
+            setTextColor(getColor(R.color.ink_soft))
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        statusView = status
+
+        root.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(9), dp(6), dp(9))
+                addView(
+                    status,
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                )
+                addView(linkText(if (expanded) "收起" else "展开") { togglePanel() })
+                addView(linkText("键盘") { pickAnotherKeyboard() })
+            }
+        )
+
+        if (!expanded) return root
+
+        // ── 草稿预览：让用户知道框里现在是什么，不用切回聊天页确认 ──
+        val draft = TextView(this).apply {
+            text = draftPreview()
+            textSize = 11f
+            setTextColor(getColor(R.color.ink))
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        draftLine = draft
+        root.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setBackgroundColor(getColor(R.color.surface))
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                addView(
+                    TextView(this@AutoReplyImeService).apply {
+                        text = "草稿 "
+                        textSize = 11f
+                        letterSpacing = 0.08f
+                        setTextColor(getColor(R.color.ink_faint))
+                    }
+                )
+                addView(
+                    draft,
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                )
+            }
+        )
+
+        // ── 主体：左网格（生成什么） + 右列（对输入框做什么） ──
+        val left = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(rowOf(
+                panelCard("生成下一条") { generate(clearFirst = false) },
+                panelCard("换一句") { generate(clearFirst = true) },
+            ))
             addView(
-                tv,
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                rowOf(
+                    panelCard("用开场白") { useGreetingHook() },
+                    panelCard("复制草稿") { copyCurrentDraft() },
+                ).apply { setPadding(0, dp(8), 0, 0) }
             )
-            addView(switchBtn)
+            // 第三行通栏：面板上看不到判定链，所以留一个回 App 的入口
+            addView(
+                panelCard("打开 App · 看判定链") { openApp() },
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(8) },
+            )
+        }
+
+        // 右列三格用自然高度：三格 × (10+10+行高) + 两道 8dp 间隙 ≈ 118dp，
+        // 正好和左边三行网格等高。用 weight 或 MATCH_PARENT 反而有风险 ——
+        // 父容器是 wrap_content，权重高度可能被算成 0（整列看不见）。
+        val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        right.addView(
+            keyText("粘贴") { pasteFromClipboard() },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        right.addView(
+            keyText("⌫") { backspace() },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(8) },
+        )
+        right.addView(
+            keyText("清空") { clearAll() },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(8) },
+        )
+        // 右侧固定 52dp：比网格窄、比文字宽，拇指边缘刚好够到
+        val rightLp = LinearLayout.LayoutParams(
+            dp(52),
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        rightLp.marginStart = dp(8)
+
+        root.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(12), dp(12), dp(12), dp(6))
+                addView(
+                    left,
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                )
+                addView(right, rightLp)
+            }
+        )
+
+        // ── 底部：一句提醒（不用占一行按钮位） ──
+        root.addView(
+            TextView(this).apply {
+                text = "发送仍然由你点"
+                textSize = 11f
+                setTextColor(getColor(R.color.ink_faint))
+                setPadding(dp(12), 0, dp(12), dp(10))
+            }
+        )
+
+        return root
+    }
+
+    // ---------------------------------------------------------------- 面板小件
+
+    /** 一行等宽的可点文字（展开 / 收起 / 键盘 / 打开 App）。 */
+    private fun linkText(text: String, onClick: () -> Unit): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 11f
+        setTextColor(getColor(R.color.ink))
+        setPadding(dp(8), dp(6), dp(8), dp(6))
+        setOnClickListener { onClick() }
+    }
+
+    /** 网格里的一格：白底细线。 */
+    private fun panelCard(text: String, onClick: () -> Unit): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 11f
+        gravity = Gravity.CENTER
+        setTextColor(getColor(R.color.ink))
+        setBackgroundResource(R.drawable.bg_ime_card)
+        setPadding(0, dp(10), 0, dp(10))
+        setOnClickListener { onClick() }
+    }
+
+    /** 右侧操作列的一格：米底无边。 */
+    private fun keyText(text: String, onClick: () -> Unit): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 11f
+        gravity = Gravity.CENTER
+        setTextColor(getColor(R.color.ink))
+        setBackgroundResource(R.drawable.bg_ime_key)
+        setPadding(0, dp(10), 0, dp(10))
+        setOnClickListener { onClick() }
+    }
+
+    /** 等宽横排，每一格均分。 */
+    private fun rowOf(vararg cells: View): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        for ((i, v) in cells.withIndex()) {
+            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            if (i > 0) lp.marginStart = dp(8)
+            addView(v, lp)
         }
     }
+
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    private var draftLine: TextView? = null
+
+    /** 展开 / 收起。换掉整个 input view —— IME 没有"局部刷新"这种说法。 */
+    private fun togglePanel() {
+        val cfg = AppConfig(this)
+        cfg.imePanelExpanded = !cfg.imePanelExpanded
+        setInputView(buildPanel())
+    }
+
+    private fun draftPreview(): String {
+        val t = try {
+            currentInputConnection?.getTextBeforeCursor(80, 0)?.toString().orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        return t.ifEmpty { "（空）" }
+    }
+
+    private fun refreshDraftLine() {
+        draftLine?.text = draftPreview()
+    }
+
+    private fun setStatus(s: String) {
+        statusView?.text = s
+    }
+
+    // ---------------------------------------------------------------- 面板动作
+
+    /**
+     * 生成草稿。
+     *
+     * @param clearFirst 「换一句」先把我们上次写的那段擦掉，否则会叠成
+     *   「怎么说怎么说」—— 和自动写入走同一个 [clearOwnDraft]，不另写一套。
+     */
+    private fun generate(clearFirst: Boolean) {
+        val svc = com.autoreply.app.capture.CaptureService.instance
+        if (svc == null) {
+            setStatus("读屏服务没开，读不到对话")
+            return
+        }
+        if (clearFirst) currentInputConnection?.let { clearOwnDraft(it) }
+        setStatus(if (clearFirst) "换一句…" else "生成中…")
+
+        val cfg = AppConfig(this)
+        com.autoreply.app.platform.ReplyRunner(svc, cfg).runOnce(manual = true) { r ->
+            // 回调可能在后台线程，碰 View 必须回主线程
+            mainHandler.post {
+                setStatus(r.note.take(28).ifEmpty { "完成" })
+                refreshDraftLine()
+            }
+        }
+    }
+
+    /** 「用开场白」：从钩子库里挑一条不带槽位的写进去。 */
+    private fun useGreetingHook() {
+        val cfg = AppConfig(this)
+        val lines = cfg.greetingLines.ifEmpty {
+            com.autoreply.app.core.llm.GreetingHooks.DEFAULT
+        }
+        // 面板里拿不到昵称/原话，带槽位的那几条填不上 → 只挑纯文本的
+        val pick = lines.filter { !it.contains("{") }.randomOrNull()
+        if (pick == null) {
+            setStatus("开场白库里没有可用的纯文本条目")
+            return
+        }
+        val ic = currentInputConnection
+        if (ic == null) {
+            setStatus("输入框没绑上，先点一下输入框")
+            return
+        }
+        clearOwnDraft(ic)
+        ic.commitText(pick, 1)
+        lastCommitted = pick
+        setStatus("已写入：${pick.take(12)}")
+        refreshDraftLine()
+    }
+
+    /** 「复制草稿」：把框里现有的内容放进剪贴板（带回读校验）。 */
+    private fun copyCurrentDraft() {
+        val t = try {
+            currentInputConnection?.getTextBeforeCursor(200, 0)?.toString().orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        if (t.isEmpty()) {
+            setStatus("框里是空的")
+            return
+        }
+        setStatus(if (copyDraft(t)) "已复制：${t.take(12)}" else "剪贴板没写进去")
+    }
+
+    private fun pasteFromClipboard() {
+        val ic = currentInputConnection ?: return
+        val cm = getSystemService(android.content.ClipboardManager::class.java) ?: return
+        val text = cm.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.text
+            ?.toString()
+            .orEmpty()
+        if (text.isEmpty()) {
+            setStatus("剪贴板是空的")
+            return
+        }
+        clearOwnDraft(ic)
+        ic.commitText(text, 1)
+        lastCommitted = text
+        setStatus("已粘贴：${text.take(12)}")
+        refreshDraftLine()
+    }
+
+    private fun backspace() {
+        val ic = currentInputConnection ?: return
+        val selected = try {
+            ic.getSelectedText(0)
+        } catch (_: Exception) {
+            null
+        }
+        if (!selected.isNullOrEmpty()) {
+            ic.commitText("", 1)
+        } else {
+            ic.deleteSurroundingText(1, 0)
+        }
+        refreshDraftLine()
+    }
+
+    /** 「清空」：全清。这是用户明确点的，不区分"是不是我们写的"。 */
+    private fun clearAll() {
+        val ic = currentInputConnection ?: return
+        ic.deleteSurroundingText(200, 200)
+        lastCommitted = null
+        setStatus("已清空")
+        refreshDraftLine()
+    }
+
+    private fun openApp() {
+        runCatching {
+            startActivity(
+                android.content.Intent().apply {
+                    setClassName(packageName, "com.autoreply.app.ui.MainActivity")
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }.onFailure { setStatus("打不开主界面") }
+    }
+
 
     /**
      * 让用户换一个键盘。

@@ -88,6 +88,19 @@ class AppConfig(context: Context) {
         set(value) = sp.edit().putInt(KEY_DRILL_NUDGE, value).apply()
 
     /**
+     * 输入法面板是否展开。
+     *
+     * 默认折叠（一行高度）：展开态约 300dp，占屏幕下半三分之一，
+     * 会把聊天内容顶上去。大多数时候用户只是在打字/看消息，
+     * 不该一调起输入法就吃掉半屏 —— 需要时点一下把手展开。
+     *
+     * 状态要持久化：想用的人希望它记住上次的选择，而不是每次重新展开。
+     */
+    var imePanelExpanded: Boolean
+        get() = sp.getBoolean(KEY_IME_EXPANDED, false)
+        set(value) = sp.edit().putBoolean(KEY_IME_EXPANDED, value).apply()
+
+    /**
      * 一次「连点」最多处理几个会话。
      *
      * 上限 20：连点是效率工具，但它同时是这套东西里最接近"批量操作"的行为。
@@ -314,6 +327,7 @@ class AppConfig(context: Context) {
         private const val KEY_BATCH_SIZE = "batch_size"
         private const val KEY_DRILL = "drill_mode"
         private const val KEY_DRILL_NUDGE = "drill_nudge"
+        private const val KEY_IME_EXPANDED = "ime_expanded"
         private const val KEY_GREETINGS = "greeting_lines"
         private const val KEY_GREETING_ON = "greeting_enabled"
         private const val KEY_GREETING_CURSOR = "greeting_cursor"

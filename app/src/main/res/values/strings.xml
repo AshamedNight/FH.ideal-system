@@ -5,8 +5,20 @@
 
     <string name="service_label">AutoReply 界面读取</string>
     <string name="service_notify_label">AutoReply 消息通知读取</string>
-    <string name="ime_label">AutoReply 输入</string>
-    <string name="ime_subtype_label">AutoReply 写入通道</string>
+    <!--
+      输入法的名字要对别的 App "隐身"。
+
+      任何 App 都能用 InputMethodManager.getEnabledInputMethodList()（无需权限）
+      枚举设备上启用的输入法，再用 InputMethodInfo.loadLabel() 读到这个名字。
+      也就是说：一个叫「AutoReply 输入」的输入法，等于在系统里挂了个招牌，
+      交点 App 想查"这人是不是装了自动回复工具"，看一眼默认输入法就够了 ——
+      比分析行为省事得多。
+
+      所以这里用中性名。注意**不是**为了骗平台，而是不让它变成一个
+      一眼可见的信号：名字本身不承担任何功能，起个普通名字不损失什么。
+    -->
+    <string name="ime_label">简输入</string>
+    <string name="ime_subtype_label">简输入</string>
     <string name="accessibility_desc">在你开启自动回复后，读取当前聊天界面的消息内容并填入回复草稿。程序不会替你点发送，草稿是否发出始终由你决定。</string>
 
     <string name="status_service_off">读屏服务：未开启</string>
