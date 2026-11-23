@@ -31,6 +31,8 @@ object TextWriter {
         val note: String,
         /** 输入法已挂起、等输入框获得焦点才写入。 */
         val pending: Boolean = false,
+        /** 因为"默认输入法不是简输入"而写不进去 —— 这是用户可修的一步，不是随机失败。 */
+        val needsIme: Boolean = false,
     )
 
     /**
@@ -60,6 +62,7 @@ object TextWriter {
             return Outcome(
                 false, false,
                 "$why；当前默认输入法不是「简输入」—— 回 App 点「切换输入法」选它，这条通道就能用",
+                needsIme = true,
             )
         }
 

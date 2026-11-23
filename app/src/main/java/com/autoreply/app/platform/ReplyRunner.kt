@@ -39,6 +39,8 @@ class ReplyRunner(
         val note: String,
         val filled: Boolean,
         val copied: Boolean,
+        /** 填不进去的原因是"默认输入法不是简输入" —— 连点遇到它会直接停下，不空等。 */
+        val needsIme: Boolean = false,
     )
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -297,7 +299,10 @@ class ReplyRunner(
                     copied -> write.note
                     else -> write.note + segHint
                 }
-                finish(trace, outcome.text, tag + note, write.written, copied, onDone)
+                finish(
+                    trace, outcome.text, tag + note, write.written, copied, onDone,
+                    needsIme = write.needsIme,
+                )
             }
 
             is ReplyFlow.Outcome.Hold -> {
@@ -332,7 +337,8 @@ class ReplyRunner(
         filled: Boolean,
         copied: Boolean,
         onDone: ((Result) -> Unit)?,
+        needsIme: Boolean = false,
     ) {
-        onDone?.invoke(Result(trace, draft, note, filled, copied))
+        onDone?.invoke(Result(trace, draft, note, filled, copied, needsIme))
     }
 }

@@ -232,7 +232,7 @@ class CaptureService : AccessibilityService() {
         notifyText: String?,
         manual: Boolean = false,
         notifyPeer: String? = null,
-        onDone: (() -> Unit)? = null,
+        onDone: ((ReplyRunner.Result) -> Unit)? = null,
     ) {
         // 必须在这里再拦一次，不能只靠调用方检查。
         // "连点"和"界面变化的自动触发"是两条独立入口，都能走到这里；
@@ -253,7 +253,7 @@ class CaptureService : AccessibilityService() {
         ReplyRunner(this, cfg).runOnce(notifyText, manual, notifyPeer) { result ->
             autoRunning = false
             logAuto(result.note)
-            onDone?.invoke()
+            onDone?.invoke(result)
         }
     }
 
@@ -492,12 +492,16 @@ class CaptureService : AccessibilityService() {
         // 否则一按连点就把眼前这条跳过去了
         val messages = NodeQuery.readMessages(root, profile)
         val peer = NodeQuery.peerName(root, profile)
+        // 每一步都留一行：出问题时能看出"卡在谁身上、还剩几个"，
+        // 而不是只看到一句"已写入"反复出现。
+        logAuto("连点：剩 $batchLeft 个 · 「${peer.ifEmpty { "（读不到昵称）" }}」")
+
         val lastOther = messages.lastOrNull { it.fromOther }
         val pendingHere = lastOther != null &&
             !dedup.isDuplicate(peer, lastOther.text, System.currentTimeMillis())
 
         if (pendingHere) {
-            runAuto(null, manual = true) { armBatchWatchdog() }
+            runAuto(null, manual = true) { r -> afterBatchFill(r) }
             return
         }
 
@@ -598,7 +602,7 @@ class CaptureService : AccessibilityService() {
             // 写一句"切过去了"，连点的每一步在首页都能看到 ——
             // 出错时才知道停在哪一步，而不是只有一句"已写入"反复出现。
             if (afterPeer.isNotEmpty()) logAuto("已切到「$afterPeer」")
-            runAuto(null, manual = true) { armBatchWatchdog() }
+            runAuto(null, manual = true) { r -> afterBatchFill(r) }
         }, 800L + kotlin.random.Random.nextLong(400))
     }
 
@@ -608,6 +612,22 @@ class CaptureService : AccessibilityService() {
      * 45 秒还没发，就当他不想发这一条（可能觉得内容不合适），跳到下一个。
      * 没有这个看门狗，连点会永远卡在某一步 —— 而用户根本不知道卡在哪。
      */
+    /**
+     * 连点填完之后干什么。
+     *
+     * 正常情况是"等你点发送"（挂 20 秒看门狗）。
+     * 但如果是**输入法没切**导致根本没填进去，那这 20 秒纯属空转 ——
+     * 用户看到的是"一口气把未读全点完、什么也没填"，比卡住还费解。
+     * 这种情况直接停下，把要做的那一步说清楚。
+     */
+    private fun afterBatchFill(result: ReplyRunner.Result) {
+        if (result.needsIme) {
+            stopBatch("填不进去：默认输入法不是「简输入」—— 回 App 点「切换输入法」选它")
+            return
+        }
+        armBatchWatchdog()
+    }
+
     private fun armBatchWatchdog() {
         batchWatchdog?.let { mainHandler.removeCallbacks(it) }
         val task = Runnable {
