@@ -86,6 +86,20 @@ class MainActivity : Activity() {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
 
+        // 同城 / 他趣 的输入框对无障碍不可见，只能靠「简输入」这条通道写入。
+        // 而大多数人的默认输入法是搜狗/百度 —— 填不进去时最费解的一句话就是
+        // 「无障碍填不进去」，其实就是没切输入法。
+        //
+        // 系统没有公开 API 能"自动切"（那要 WRITE_SECURE_SETTINGS），
+        // 但可以一步跳到选择器：用户点一下、选「简输入」就完事。
+        findViewById<Button>(R.id.btn_ime).setOnClickListener {
+            val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+            val ok = runCatching { imm?.showInputMethodPicker() }.isSuccess
+            if (!ok || imm == null) {
+                output.text = "打不开输入法选择器 —— 去 设置 → 系统 → 语言和输入法 手动切到「简输入」"
+            }
+        }
+
         findViewById<Button>(R.id.btn_dump).setOnClickListener {
             val service = CaptureService.instance
             if (service == null) {
@@ -517,8 +531,9 @@ class MainActivity : Activity() {
         // **必须写参数名**：函数现在多了第 4 个参数（onNote），
         // 尾随 lambda 会绑到最后一个参数上，而不是 tap —— 不写名字就会是
         // 「String 不能赋给 AccessibilityNodeInfo」这种莫名其妙的编译错误。
+        // 按钮有时挂在同一个 App 的另一个窗口里，只搜当前根会"看得见却找不到"
         val clicked = NodeQuery.clickNextUnread(
-            root, profile,
+            service.allTargetRoots().ifEmpty { listOf(root) }, profile,
             tap = { node -> TextWriter.tapNode(service, node) },
         )
         if (!clicked) {

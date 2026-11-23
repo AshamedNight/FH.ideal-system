@@ -450,6 +450,26 @@ object NodeQuery {
      *
      * @param tap 坐标点击的实现（由调用方注入，避免 platform 层直接依赖服务）
      */
+    /**
+     * 同上，但把该 App 的**所有窗口**都当候选。
+     *
+     * 为什么需要：`targetRoot()` 只返回它先找到的那一个窗口。真机上踩过 ——
+     * 按钮在屏幕上明明看得见，这里却一直"找不到"，因为它挂在同一个 App 的
+     * 另一个窗口里（浮层、悬浮按钮、通栏横幅）。输入框那条路早就在用
+     * `allTargetRoots()` 了，点按钮这条路当时漏了。
+     */
+    fun clickNextUnread(
+        roots: List<AccessibilityNodeInfo>,
+        profile: PlatformProfile,
+        tap: ((AccessibilityNodeInfo) -> Boolean)? = null,
+        onNote: ((String) -> Unit)? = null,
+    ): Boolean {
+        for (r in roots) {
+            if (clickNextUnread(r, profile, tap, onNote)) return true
+        }
+        return false
+    }
+
     fun clickNextUnread(
         root: AccessibilityNodeInfo,
         profile: PlatformProfile,

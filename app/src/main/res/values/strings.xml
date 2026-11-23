@@ -29,6 +29,7 @@
     <string name="btn_enable_accessibility">开启读屏</string>
     <string name="btn_enable_notify">开启通知读取</string>
     <string name="btn_open_target">打开目标应用</string>
+    <string name="btn_ime">切换输入法（同城 / 他趣必需）</string>
     <string name="btn_dump">抓取当前界面</string>
     <string name="btn_copy">复制结果</string>
     <string name="btn_probe">试填（复读原文）</string>

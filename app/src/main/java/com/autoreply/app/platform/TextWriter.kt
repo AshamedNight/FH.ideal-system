@@ -59,7 +59,7 @@ object TextWriter {
             }
             return Outcome(
                 false, false,
-                "$why；当前默认输入法不是 AutoReply，切过去就能用输入法写入",
+                "$why；当前默认输入法不是「简输入」—— 回 App 点「切换输入法」选它，这条通道就能用",
             )
         }
 

@@ -504,8 +504,11 @@ class CaptureService : AccessibilityService() {
         // 点之前重新取一次根节点：上面 readMessages 会把列表滚到底，
         // 之前那个 root 可能已经过期（子节点被回收），在过期的树上找按钮会"找不到"。
         val clickRoot = targetRoot() ?: root
+        // 用**所有**窗口去找那个按钮：它有时挂在同一个 App 的另一个窗口里
+        // （浮层 / 悬浮按钮），只搜 targetRoot() 会"明明看得见却找不到"。
+        val roots = allTargetRoots().ifEmpty { listOf(clickRoot) }
         val clicked = NodeQuery.clickNextUnread(
-            clickRoot, profile,
+            roots, profile,
             tap = { n -> com.autoreply.app.platform.TextWriter.tapNode(this, n) },
             onNote = { note -> logAuto(note) },
         )
