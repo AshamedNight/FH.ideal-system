@@ -504,9 +504,11 @@ class CaptureService : AccessibilityService() {
         // 点之前重新取一次根节点：上面 readMessages 会把列表滚到底，
         // 之前那个 root 可能已经过期（子节点被回收），在过期的树上找按钮会"找不到"。
         val clickRoot = targetRoot() ?: root
-        val clicked = NodeQuery.clickNextUnread(clickRoot, profile) { n ->
-            com.autoreply.app.platform.TextWriter.tapNode(this, n)
-        }
+        val clicked = NodeQuery.clickNextUnread(
+            clickRoot, profile,
+            tap = { n -> com.autoreply.app.platform.TextWriter.tapNode(this, n) },
+            onNote = { note -> logAuto(note) },
+        )
         if (!clicked) {
             // **「找不到下一个未读按钮」不等于「没有未读消息」** ——
             // 这类按钮通常只在"还有别的未读会话"时才出现，

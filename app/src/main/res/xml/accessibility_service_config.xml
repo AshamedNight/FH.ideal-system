@@ -6,16 +6,20 @@
                          能拿到所有窗口，弹窗（输入法、二次确认、平台提示）才不会漏掉；
                          开分屏/小窗时也能找到目标 App 的窗口。
 
-  canPerformGestures 刻意设为 false：
-     本项目只用 ACTION_CLICK / ACTION_SET_TEXT，不注入模拟手势（dispatchGesture）。
-     手势注入会产生一份伪造的触摸轨迹，而 performAction 不会 —— 需要滑动时优先
-     找可滚动的容器节点调 ACTION_SCROLL，而不是注入手势。
+  canPerformGestures     2026-11-23 从 false 改成 true。
+     原来是 false（只用 ACTION_CLICK / ACTION_SET_TEXT，不注入手势），踩到一个死结：
+     同城的「下一个未读」是自定义 View，performAction(ACTION_CLICK) 返回 **true 但界面不动**
+     （框架派发了，业务没接）；唯一可靠的替代是真实触摸，而 canPerformGestures=false 时
+     dispatchGesture 一律失败，tapNode() 一直在静默返回 false。
+     代价是点击会多一条模拟触摸轨迹 —— 但这个按钮是全项目唯一主动点击的东西，
+     而"点下一个未读"本来就是真人天天做的动作。
+     需要滑动时仍然优先 ACTION_SCROLL，不注入手势。
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
-    android:canPerformGestures="false"
+    android:canPerformGestures="true"
     android:description="@string/accessibility_desc"
     android:notificationTimeout="200" />

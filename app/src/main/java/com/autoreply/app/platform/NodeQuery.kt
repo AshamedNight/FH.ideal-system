@@ -332,6 +332,46 @@ object NodeQuery {
      * 三个原因对应的处置完全不同，猜是猜不出来的。这里把树的样子一句话说出来。
      */
     fun emptyDiagnosis(root: AccessibilityNodeInfo, profile: PlatformProfile): String {
+        if (profile.message.isEmpty()) return "这个平台没配消息选择器"
+
+        // 「选择器没命中」和「命中了但被规则排掉」在界面上长得一模一样，
+        // 处置却完全相反（加选择器 vs 放宽排除规则）。
+        // 真机踩过：某个会话里只有一条「来自缘分小助手」，选择器命中了 1 条、
+        // 又被 exclude 掉 —— 日志却写"一个都没命中"，直接把人带偏。
+        var matched = 0
+        var excluded = 0
+        var badBounds = 0
+        var sample = ""
+        for (sel in profile.message) {
+            val nodes = collect(root) { sel.matches(it) }
+            for (n in nodes) {
+                val t = textOf(n)
+                if (t.isEmpty()) continue
+                matched++
+                if (profile.exclude.any { t.contains(it) } || !isRealMessage(t)) {
+                    excluded++
+                    if (sample.isEmpty()) sample = t.take(14)
+                    continue
+                }
+                val r = Rect()
+                n.getBoundsInScreen(r)
+                if (r.width() <= 0 || r.height() <= 0) badBounds++
+            }
+            // 和 readMessages 一样：第一条命中的选择器就够了，不做叠加
+            if (matched > 0) break
+        }
+
+        return when {
+            matched == 0 -> "选择器一个都没命中；" + treeSamples(root)
+            excluded == matched -> "命中 $matched 条，但全被当系统提示排掉了（例如「$sample」）"
+            badBounds > 0 && excluded + badBounds == matched ->
+                "命中 $matched 条，但坐标全无效（可能不在可视区）"
+            else -> "命中 $matched 条（排掉 $excluded 条），但一条都没读出来"
+        }
+    }
+
+    /** 全树概览，只在"选择器没命中"时才有意义 —— 用来发现改版后的新 id。 */
+    private fun treeSamples(root: AccessibilityNodeInfo): String {
         var total = 0
         val samples = ArrayList<String>(3)
         collect(root) { n ->
@@ -345,9 +385,8 @@ object NodeQuery {
             }
             false
         }
-        val why = if (profile.message.isEmpty()) "这个平台没配消息选择器" else "选择器一个都没命中"
         val eg = samples.joinToString(" / ").ifEmpty { "一个带文字的节点都没有" }
-        return "$why；全树 $total 个节点，例如 $eg"
+        return "全树 $total 个节点，例如 $eg"
     }
 
     /** 回读输入框当前内容，用于填完之后校验。 */
@@ -415,6 +454,8 @@ object NodeQuery {
         root: AccessibilityNodeInfo,
         profile: PlatformProfile,
         tap: ((AccessibilityNodeInfo) -> Boolean)? = null,
+        /** 排查用：这条路走不通时说一句，免得只能看到"没反应"。 */
+        onNote: ((String) -> Unit)? = null,
     ): Boolean {
         if (profile.nextUnread.isEmpty()) return false
         val node = firstMatch(root, profile.nextUnread) ?: return false
@@ -429,6 +470,10 @@ object NodeQuery {
         // 真实触摸是真人天天在做的动作，也绕开了"自定义 View 不响应无障碍点击"这类坑。
         // 这个按钮是全项目唯一主动点击的东西，值得用最可靠的那条路。
         if (tap?.invoke(node) == true) return true
+        // 走到这里说明真实触摸没能派发出去。最常见的原因是
+        // accessibility_service_config 里的 canPerformGestures 没生效
+        //（改了配置之后必须把读屏服务关掉再打开一次）。
+        onNote?.invoke("触摸派发失败（手势权限没生效？）—— 改用无障碍点击，它多半点了没反应")
 
         // 触摸不可用（没开手势权限、坐标落在别处）时，退回无障碍点击。
         var cur: AccessibilityNodeInfo? = node
