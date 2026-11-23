@@ -306,14 +306,6 @@ class CaptureService : AccessibilityService() {
     private var frontFailCount = 0
 
     /**
-     * 连续切了几个平台都还没有未读。
-     *
-     * 用来终止"两个平台都没未读了，来回切"的死循环 ——
-     * 没有它，程序会在两个 App 之间无限跳。
-     */
-    private var platformHops = 0
-
-    /**
      * 连续几次发现"当前会话还有没接的话"。
      *
      * 用来避免一直等着不换台 —— 有些会话（比如只有一条系统招呼）
@@ -334,24 +326,6 @@ class CaptureService : AccessibilityService() {
     private val nextMissLimit = 3
 
     /**
-     * 这一轮连点已经待过的平台。
-     *
-     * 存在的理由：真机出现过「心遇找不到下一个未读 → 切同城 → 同城也找不到 → 切回心遇」，
-     * 在两个 App 之间来回弹。切换的本意是"这个平台确实没有未读了"，
-     * 而"按钮没认出来"和"没有未读"在代码里长得一模一样 ——
-     * 分不清的时候，**宁可停下来说清楚，也不要来回弹**（来回切前台本身就是异常行为）。
-     */
-    private val visitedPkgs = HashSet<String>()
-
-    /** 按配置顺序找下一个平台。只有一个平台时返回 null。 */
-    private fun nextPlatformPkg(): String? {
-        val list = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
-        if (list.size < 2) return null
-        val idx = list.indexOf(lastTargetPkg)
-        return if (idx < 0) list.first() else list[(idx + 1) % list.size]
-    }
-
-    /**
      * 最近一次成功读到的目标包名。
      *
      * 兜底用：用户很可能在设置里填了应用名（「同城夜聊」）而不是包名
@@ -365,7 +339,6 @@ class CaptureService : AccessibilityService() {
         if (batchActive) return
         batchActive = true
         batchLeft = count
-        visitedPkgs.clear()
         logAuto("连点开始：$count 个，正在切到目标应用…")
 
         // **必须先把目标应用拉到前台。**
@@ -377,6 +350,37 @@ class CaptureService : AccessibilityService() {
 
         // 给系统一点时间切过去，切完再开始第一步
         mainHandler.postDelayed({ batchStep() }, 1200L)
+    }
+
+    /**
+     * 手动切到下一个平台。
+     *
+     * 为什么从"自动"改成"手动"：连点原来会在"这个平台没有未读了"时自动切到另一个 App。
+     * 但"真的没有未读"和"按钮没认出来"在代码里长得一模一样，判错就是当着人来回弹 ——
+     * 而切前台恰恰是整套流程里最显眼的动作。这种事交给人决定，代价只是多点一下。
+     *
+     * @return 一句给人看的结果（面板状态行直接显示）
+     */
+    fun switchToNextPlatform(): String {
+        val list = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
+        if (list.isEmpty()) return "没配目标应用：先去设置里填包名"
+        if (list.size < 2) return "只配了一个平台，没有可切的"
+
+        // 当前平台：先看正在前台的那个，退而用最近读到的那个
+        val here = rootInActiveWindow?.packageName?.toString()?.takeIf { isTarget(it) }
+            ?: lastTargetPkg
+        val idx = list.indexOf(here)
+        // 认不出当前平台（比如现在停在桌面）就从第一个开始
+        val next = if (idx < 0) list.first() else list[(idx + 1) % list.size]
+
+        // 已有的 labelOf 走 PackageManager（"同城夜聊"），拿不到再退到 profiles.json 的 label
+        val name = labelOf(next).ifEmpty {
+            Profiles.forPackage(next)?.label?.takeIf { it.isNotEmpty() } ?: next
+        }
+        val err = bringTargetToFront(next)
+        if (err != null) return "切到「$name」失败：$err"
+        logAuto("手动切到「$name」")
+        return "已切到「$name」"
     }
 
     /**
@@ -545,32 +549,17 @@ class CaptureService : AccessibilityService() {
             }
             nextMiss = 0
 
-            // 这个平台没有未读了 —— 如果还配了别的平台，轮过去接着跑。
-            // 用户的实际用法就是"同城打完打心遇"，让他手动切一次很别扭。
-            val platforms = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
-            val here = root.packageName?.toString().orEmpty()
-            if (here.isNotEmpty()) visitedPkgs.add(here)
-            val next = nextPlatformPkg()
-            platformHops++
-            // 绕回来 = 两个平台都没认出按钮，再切下去就是来回弹了。
-            // 这种情况几乎都是选择器过时（App 改版），说明白比继续切有用。
-            if (next == null || platformHops > platforms.size || visitedPkgs.contains(next)) {
-                stopBatch(
-                    "连点停下：没找到「下一个未读」按钮。" +
-                        "如果界面上明明有那个小箭头，说明选择器过时了 —— 抓一次界面发我。"
-                )
-                return
-            }
-            logAuto("本平台没有未读了，切到下一个平台继续（第 $platformHops 次换台）")
-            // 换台等于换会话，没发完的断句必须丢掉
-            com.autoreply.app.core.guard.DraftQueue.clear()
-            bringTargetToFront(next)?.let { logAuto("切平台失败：$it") }
-            // 4 秒而不是 2.2：真机出现过"切过去 1 秒就判定所有平台都没未读"，
-            // 目标是冷启动的，界面根本还没渲染完
-            mainHandler.postDelayed({ batchStep() }, 4000L)
+            // **不再自动换平台。**
+            //
+            // 换 App 是整套流程里最显眼的动作（前台连切两次），而"这个平台真的没有未读了"
+            // 和"按钮没认出来"在代码里长得一模一样 —— 判错的代价是当着人来回弹。
+            // 现在改成：停在这里说清楚，要不要换由人点面板上的「切下一个平台」。
+            stopBatch(
+                "这个平台没有可切的未读了。" +
+                    "要换到另一个 App，点输入法面板第 1 页的「切下一个平台」"
+            )
             return
         }
-        platformHops = 0
         nextMiss = 0
 
         // 换会话了，上一段没发完的断句必须丢掉，

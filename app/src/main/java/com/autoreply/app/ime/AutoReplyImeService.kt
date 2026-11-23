@@ -237,13 +237,15 @@ class AutoReplyImeService : InputMethodService() {
                     panelCard("复制草稿") { copyCurrentDraft() },
                 ).apply { setPadding(0, dp(8), 0, 0) }
             )
-            // 第三行通栏：面板上看不到判定链，所以留一个回 App 的入口
+            // 第三行两格：一个回 App 看判定链，一个手动换平台。
+            //
+            // 换平台从"连点自动切"改成"人点这一下" —— 切前台是整套流程里最显眼的动作，
+            // 而"真的没有未读"和"按钮没认出来"代码里分不清，判错就会当着人来回弹。
             addView(
-                panelCard("打开 App · 看判定链") { openApp() },
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { topMargin = dp(8) },
+                rowOf(
+                    panelCard("打开 App") { openApp() },
+                    panelCard("切下一个平台") { switchPlatform() },
+                ).apply { setPadding(0, dp(8), 0, 0) }
             )
         }
 
@@ -727,6 +729,16 @@ class AutoReplyImeService : InputMethodService() {
         lastCommitted = null
         setStatus("已清空")
         refreshDraftLine()
+    }
+
+    /** 手动切到另一个平台（同城 ↔ 心遇）。一次点一下，不做自动轮转。 */
+    private fun switchPlatform() {
+        val svc = com.autoreply.app.capture.CaptureService.instance
+        if (svc == null) {
+            setStatus("读屏服务没开，切不了")
+            return
+        }
+        setStatus(svc.switchToNextPlatform())
     }
 
     private fun openApp() {
