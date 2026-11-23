@@ -419,10 +419,18 @@ object NodeQuery {
         if (profile.nextUnread.isEmpty()) return false
         val node = firstMatch(root, profile.nextUnread) ?: return false
 
-        // 命中的节点自己往往不可点 —— 这类按钮常见结构是
-        // 「可点击的 FrameLayout > 一个纯文本 TextView」，我们按文案匹配到的
-        // 是里面那个 TextView，对它 performAction(CLICK) 会返回 false。
-        // 所以沿着 parent 往上找几层，谁 clickable 就点谁。
+        // **先按坐标点（真实触摸），再退回 performAction。**
+        //
+        // 顺序原来是反的，真机踩到了：同城那个 `#tv_next` 是自定义 View，
+        // `performAction(ACTION_CLICK)` 返回 **true**（框架确实把点击派发出去了），
+        // 但界面纹丝不动 —— 会话没换。程序于是以为切过去了，
+        // 接着在同一个会话里再生成一遍，用户看到的就是"点了不往下走、还重复"。
+        //
+        // 真实触摸是真人天天在做的动作，也绕开了"自定义 View 不响应无障碍点击"这类坑。
+        // 这个按钮是全项目唯一主动点击的东西，值得用最可靠的那条路。
+        if (tap?.invoke(node) == true) return true
+
+        // 触摸不可用（没开手势权限、坐标落在别处）时，退回无障碍点击。
         var cur: AccessibilityNodeInfo? = node
         var depth = 0
         while (cur != null && depth < 5) {
@@ -432,7 +440,6 @@ object NodeQuery {
             cur = cur.parent
             depth++
         }
-        // 都不行就按坐标点（dispatchGesture）
-        return tap?.invoke(node) ?: false
+        return false
     }
 }

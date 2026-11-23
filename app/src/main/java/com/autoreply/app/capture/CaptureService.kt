@@ -501,7 +501,10 @@ class CaptureService : AccessibilityService() {
             return
         }
 
-        val clicked = NodeQuery.clickNextUnread(root, profile) { n ->
+        // 点之前重新取一次根节点：上面 readMessages 会把列表滚到底，
+        // 之前那个 root 可能已经过期（子节点被回收），在过期的树上找按钮会"找不到"。
+        val clickRoot = targetRoot() ?: root
+        val clicked = NodeQuery.clickNextUnread(clickRoot, profile) { n ->
             com.autoreply.app.platform.TextWriter.tapNode(this, n)
         }
         if (!clicked) {
@@ -569,6 +572,27 @@ class CaptureService : AccessibilityService() {
         // 800~1200ms 是实测能稳定读到新会话内容的区间。
         mainHandler.postDelayed({
             if (!batchActive) return@postDelayed
+            // **先确认真的换会话了。**
+            //
+            // 「点了」和「切过去了」是两件事：同城那个 `#tv_next` 是自定义 View，
+            // performAction 返回 true 但界面不动（真机踩过）。原来不验证的话，
+            // 程序以为切走了，接着在同一个会话里再生成一遍 ——
+            // 用户看到的就是"不往下走，还重复"。
+            val fresh = targetRoot()
+            val afterPeer = fresh?.let { NodeQuery.peerName(it, profile) }.orEmpty()
+            if (afterPeer.isNotEmpty() && afterPeer == peer) {
+                nextMiss++
+                if (nextMiss > nextMissLimit) {
+                    stopBatch("连点停下：点了「下一个未读」但还停在「$peer」，按钮没反应")
+                } else {
+                    logAuto("点了「下一个未读」但会话没换，重试（第 $nextMiss 次）")
+                    mainHandler.postDelayed({ batchStep() }, 700L)
+                }
+                return@postDelayed
+            }
+            // 写一句"切过去了"，连点的每一步在首页都能看到 ——
+            // 出错时才知道停在哪一步，而不是只有一句"已写入"反复出现。
+            if (afterPeer.isNotEmpty()) logAuto("已切到「$afterPeer」")
             runAuto(null, manual = true) { armBatchWatchdog() }
         }, 800L + kotlin.random.Random.nextLong(400))
     }
