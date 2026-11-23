@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import com.autoreply.app.R
 import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.llm.TalkStyle
+import com.autoreply.app.core.persona.PersonaPresets
 
 /**
  * 一个只做写入的输入法。
@@ -130,6 +131,24 @@ class AutoReplyImeService : InputMethodService() {
         )
 
         if (!expanded) return root
+
+        // 人设：只在展开时读一次。
+        // 切换时不重新读文件（activePersonaId 就地更新）——
+        // 否则每点一次面板都要读一遍 persona_presets.json，白费 IO。
+        val presets = PersonaPresets.list(this)
+        activePersonaId = PersonaPresets.activeId(this)
+        personaRow.clear()
+        if (presets.size <= 4) {
+            personaRow.addAll(presets)
+        } else {
+            // 超了 4 个：优先保住当前生效那个，再按顺序补到 4 个。
+            // 不这么做的话，切到第 6 个人设后，面板上连"我现在是谁"都看不出来。
+            presets.firstOrNull { it.id == activePersonaId }?.let { personaRow.add(it) }
+            presets.asSequence()
+                .filter { it.id != activePersonaId }
+                .take(4 - personaRow.size)
+                .forEach { personaRow.add(it) }
+        }
 
         // ── 草稿预览：让用户知道框里现在是什么，不用切回聊天页确认 ──
         //
@@ -303,6 +322,21 @@ class AutoReplyImeService : InputMethodService() {
                     chip("深夜", { cfg.timeOfDay == "night" }) { cfg.timeOfDay = "night" },
                 ).apply { setPadding(0, dp(8), 0, 0) }
             )
+            // 人设：多个号、或者同一个人设换种性格，切换不该要求"先退出对话、回 App"。
+            //
+            // 最多显示 4 个：一行 5 格已是极限，再多字就挤没了。
+            // 超出的话优先保住**当前生效的那个**，其余取前三个 ——
+            // 否则切到第 6 个人设之后，面板上连"我现在是谁"都看不出来。
+            if (personaRow.isNotEmpty()) {
+                addView(
+                    rowOf(personaRow.map { p ->
+                        chip(
+                            shortName(p.name),
+                            { activePersonaId == p.id },
+                        ) { switchPersona(p) }
+                    }).apply { setPadding(0, dp(8), 0, 0) }
+                )
+            }
         }
 
         // ── 两页装进可滑动容器 ──
@@ -484,13 +518,35 @@ class AutoReplyImeService : InputMethodService() {
         h.text = when {
             // 面板上没有发送键，这句话是告诉用户"下一步去哪儿"
             currentPage == 0 -> "发送用 App 自带的按钮"
-            cfg.drillMode -> "演练模式：风格不生效（假模型按样例拼句）"
-            else -> "风格只改语气，不改长度和底线"
+            // 演练模式读的是样例表，所以**人设生效、风格不生效** —— 这两件事别混着说
+            cfg.drillMode -> "演练模式：风格不生效（人设仍然生效）"
+            else -> "人设是整份替换，风格只改语气"
         }
     }
 
     private fun showPage(page: Int) {
         pager?.select(page, animate = true)
+    }
+
+    /** 面板上只放得下 4 个字，长的截断（完整名字在 App 里改）。 */
+    private fun shortName(name: String): String =
+        if (name.length <= 4) name else name.take(4)
+
+    /**
+     * 切人设。
+     *
+     * 这一下是**真的换人**：身份/语气和话术三件套一起换（见 [PersonaPresets]）。
+     * 所以切完给一句状态，别让人以为只是换了个标签 ——
+     * 之后生成的内容会明显不一样。
+     */
+    private fun switchPersona(p: PersonaPresets.Preset) {
+        if (p.id == activePersonaId) return
+        if (!PersonaPresets.activate(this, p.id)) {
+            setStatus("切换人设失败：写不进 filesDir")
+            return
+        }
+        activePersonaId = p.id
+        setStatus("人设 → ${p.name}")
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
@@ -508,6 +564,12 @@ class AutoReplyImeService : InputMethodService() {
     private val chipOn = ArrayList<() -> Boolean>()
     private var hintView: TextView? = null
     private var currentPage = 0
+
+    /** 第 2 页要显示的人设（最多 4 个）。只在展开时填。 */
+    private val personaRow = ArrayList<PersonaPresets.Preset>()
+
+    /** 当前生效的人设 id。就地更新，避免每点一次面板都读一遍档案柜。 */
+    private var activePersonaId = ""
 
     /** 展开 / 收起。换掉整个 input view —— IME 没有"局部刷新"这种说法。 */
     private fun togglePanel() {
@@ -971,6 +1033,38 @@ private class SlidePager(context: android.content.Context) : FrameLayout(context
             v.translationX = 0f
             v.alpha = 1f
         }
+    }
+
+    /**
+     * 高度取**两页里更高的那个**，不管当前显示哪一页。
+     *
+     * 两页的行数不一样（第 2 页多一行「人设」）。按默认实现，切页时容器高度会跟着变，
+     * 整个面板跟着跳一下 —— 手指下面的按钮也会移位，很容易点错。
+     * 这里把隐藏的那页也量一遍，取较大值当自己的高度。
+     */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = android.view.View.MeasureSpec.getSize(widthMeasureSpec)
+        val childW = (w - paddingLeft - paddingRight).coerceAtLeast(0)
+        var maxH = 0
+        for (i in 0 until childCount) {
+            val c = getChildAt(i) ?: continue
+            val was = c.visibility
+            if (was != VISIBLE) c.visibility = VISIBLE
+            c.measure(
+                android.view.View.MeasureSpec.makeMeasureSpec(
+                    childW, android.view.View.MeasureSpec.EXACTLY,
+                ),
+                android.view.View.MeasureSpec.makeMeasureSpec(
+                    0, android.view.View.MeasureSpec.UNSPECIFIED,
+                ),
+            )
+            if (c.measuredHeight > maxH) maxH = c.measuredHeight
+            if (was != VISIBLE) c.visibility = was
+        }
+        setMeasuredDimension(
+            resolveSize(w, widthMeasureSpec),
+            resolveSize(maxH + paddingTop + paddingBottom, heightMeasureSpec),
+        )
     }
 
     override fun onInterceptTouchEvent(ev: android.view.MotionEvent): Boolean {
