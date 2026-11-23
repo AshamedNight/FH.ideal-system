@@ -513,9 +513,14 @@ class MainActivity : Activity() {
         }
         // 先 ACTION_CLICK；无效就退回坐标手势 —— 这类按钮常是自定义 View，
         // ACTION_CLICK 会返回 true 但界面不动（"点了没反应"就是这个原因）
-        val clicked = NodeQuery.clickNextUnread(root, profile) { node ->
-            TextWriter.tapNode(service, node)
-        }
+        //
+        // **必须写参数名**：函数现在多了第 4 个参数（onNote），
+        // 尾随 lambda 会绑到最后一个参数上，而不是 tap —— 不写名字就会是
+        // 「String 不能赋给 AccessibilityNodeInfo」这种莫名其妙的编译错误。
+        val clicked = NodeQuery.clickNextUnread(
+            root, profile,
+            tap = { node -> TextWriter.tapNode(service, node) },
+        )
         if (!clicked) {
             output.text = "没点到「下一个未读」。可能被弹窗挡住，或当前不在聊天页。"
             return
