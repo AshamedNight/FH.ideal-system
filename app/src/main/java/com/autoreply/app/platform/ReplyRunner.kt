@@ -11,6 +11,7 @@ import com.autoreply.app.core.guard.ReplyFlow
 import com.autoreply.app.core.guard.SentenceSplitter
 import com.autoreply.app.core.guard.SentTracker
 import com.autoreply.app.core.llm.Turn
+import com.autoreply.app.notify.NotifyContext
 
 /**
  * 一次完整的「读 → 判定 → 填」。
@@ -46,6 +47,8 @@ class ReplyRunner(
      * @param notifyText 通知里带的消息内容。**只在节点树读不到消息时才用** ——
      *   他趣那种整棵树被 `importantForAccessibility=no` 摘掉的平台，
      *   树里一个节点都没有，但通知里有「谁说了什么」，够生成一句回复。
+     * @param notifyPeer 通知标题，通常是对方昵称。读不到聊天页的平台靠它区分会话 ——
+     *   不然十个人都说「你好」，去重会把后面九个全锁死。
      */
     /**
      * @param manual true 表示这是用户主动发起的（点了连点/生成按钮），
@@ -56,6 +59,7 @@ class ReplyRunner(
     fun runOnce(
         notifyText: String? = null,
         manual: Boolean = false,
+        notifyPeer: String? = null,
         onDone: ((Result) -> Unit)? = null,
     ) {
         val root = service.targetRoot()
@@ -70,10 +74,21 @@ class ReplyRunner(
             return
         }
 
+        // 昵称：界面读得到就用界面的（它更准，跟着会话走），读不到才用通知标题。
+        val peer = NodeQuery.peerName(root, profile)
+            .ifEmpty { notifyPeer.orEmpty().trim() }
+
         var messages = NodeQuery.readMessages(root, profile)
         if (messages.isEmpty() && !notifyText.isNullOrBlank()) {
-            // 退而用通知内容当上下文：只有一条，信息很薄，但比放弃强。
-            messages = listOf(ChatMessage(notifyText.trim(), fromOther = true, rect = Rect()))
+            // 退而用通知当上下文。
+            //
+            // 只用最后一条太薄了：对方可能连发三句，而通知栏只剩最后一句，
+            // 模型看到的就是半句话，回出来也只能是半句。
+            // NotifyContext 攒了同一会话最近几条（10 分钟内、最多 3 条），
+            // 有就一起给；没有才退回单条。
+            val lines = NotifyContext.recent(pkg, notifyPeer.orEmpty(), System.currentTimeMillis())
+                .ifEmpty { listOf(notifyText.trim()) }
+            messages = lines.map { ChatMessage(it, fromOther = true, rect = Rect()) }
         }
         if (messages.isEmpty()) {
             finish(emptyList(), "", "没读到消息，也没有通知内容可用", false, false, onDone)
@@ -89,8 +104,8 @@ class ReplyRunner(
         val now = System.currentTimeMillis()
         val dedup = ReplyDedup(service)
         // 指纹带昵称：交友平台大量新会话第一句都是「你好」，
-        // 只按文本去重会把第二个会话直接锁死
-        val peer = NodeQuery.peerName(root, profile)
+        // 只按文本去重会把第二个会话直接锁死。
+        // peer 在上面就取好了（界面 → 通知标题），这里不再重复读树。
 
         // **去重只拦自动触发，手动点击一律放行。**
         //

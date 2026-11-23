@@ -12,6 +12,7 @@ import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.guard.PacerGuard
 import com.autoreply.app.core.guard.SentTracker
 import com.autoreply.app.notify.MessageNotificationListener
+import com.autoreply.app.notify.NotifyContext
 import com.autoreply.app.platform.NodeQuery
 import com.autoreply.app.platform.PlatformProfile
 import com.autoreply.app.platform.Profiles
@@ -173,6 +174,16 @@ class CaptureService : AccessibilityService() {
         if (key == lastHitKey) return
         lastHitKey = key
 
+        // 读不到聊天记录的平台（他趣：整棵树被 noimp 摘掉）只能靠通知。
+        // 这里按会话攒最近几条，生成时一起当上下文 —— 只留最后一条的话，
+        // 模型看到的永远是半句话，回出来也只能是半句。
+        NotifyContext.record(
+            hit.packageName,
+            hit.title.orEmpty(),
+            hit.text.orEmpty(),
+            System.currentTimeMillis(),
+        )
+
         pendingHit = hit
         mainHandler.post { tryAutoReply() }
     }
@@ -192,19 +203,30 @@ class CaptureService : AccessibilityService() {
         val root = targetRoot() ?: return
         if (root.packageName?.toString() != hit.packageName) return
         val profile = Profiles.forPackage(hit.packageName) ?: return
-        if (!NodeQuery.isChatPage(root, profile)) return
+        if (!NodeQuery.isChatPage(root, profile)) {
+            // 不丢弃：pendingHit 还留着，等你点进那个会话时
+            // onAccessibilityEvent 会再试一次。这里只写一句，
+            // 免得用户以为"通知收到了但程序没反应"是坏了。
+            logAuto("收到「${hit.title ?: hit.packageName}」的消息，但当前不在聊天页，等你点进去")
+            return
+        }
 
         pendingHit = null
-        runAuto(hit.text)
+        // 昵称随通知一起带下去：他趣没有 peerName 选择器，
+        // 拿不到昵称就只能按"消息文本"去重 —— 十个人说「你好」会被当成同一条，
+        // 后面九个全被 30 分钟窗口挡掉。
+        runAuto(hit.text, notifyPeer = hit.title)
     }
 
     /**
      * @param manual true 表示用户主动发起（连点 / 点了按钮），此时精力和长冷却让路。
+     * @param notifyPeer 通知里的会话标题（通常是对方昵称）。只给"读不到聊天页"的平台用。
      */
     @Synchronized
     private fun runAuto(
         notifyText: String?,
         manual: Boolean = false,
+        notifyPeer: String? = null,
         onDone: (() -> Unit)? = null,
     ) {
         // 必须在这里再拦一次，不能只靠调用方检查。
@@ -223,7 +245,7 @@ class CaptureService : AccessibilityService() {
         val cfg = config ?: return
         autoRunning = true
         autoStartedAt = SystemClock.elapsedRealtime()
-        ReplyRunner(this, cfg).runOnce(notifyText, manual) { result ->
+        ReplyRunner(this, cfg).runOnce(notifyText, manual, notifyPeer) { result ->
             autoRunning = false
             logAuto(result.note)
             onDone?.invoke()
@@ -439,6 +461,13 @@ class CaptureService : AccessibilityService() {
 
         val profile = Profiles.forPackage(root.packageName?.toString() ?: "") ?: run {
             stopBatch("连点停止：这个平台没有配置")
+            return
+        }
+        // 会话列表读不到的平台（他趣：整棵树被 noimp 摘掉）根本没有"下一个未读"可点，
+        // 连点在这里只会白转三圈然后报"所有平台都没有未读了"。
+        // 直接说清楚，比让它自己撞墙好。
+        if (profile.message.isEmpty()) {
+            stopBatch("这个平台读不到会话列表（他趣这类），连点用不了 —— 用通知触发或手动处理")
             return
         }
         val dedup = com.autoreply.app.core.guard.ReplyDedup(this)

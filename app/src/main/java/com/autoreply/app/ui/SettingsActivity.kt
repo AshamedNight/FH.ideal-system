@@ -330,6 +330,11 @@ class SettingsActivity : Activity() {
         config.bannedWords = textOf("bannedWords")
         config.maxReplyChars = intOf("maxReplyChars", config.maxReplyChars)
 
+        // 身份 / 语气（personaJson）也是"人设"的一部分，而人设是按预设切换的。
+        // 存完必须同步进当前预设 —— 否则下次切走再切回来，
+        // 会把刚改的身份悄悄还原成旧预设里那份。
+        com.autoreply.app.core.persona.PersonaPresets.snapshotActive(this)
+
         Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show()
         finish()
     }

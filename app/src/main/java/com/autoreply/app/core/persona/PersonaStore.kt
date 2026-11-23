@@ -104,4 +104,30 @@ object PersonaStore {
     fun clear(context: Context) {
         runCatching { file(context).delete() }
     }
+
+    /**
+     * 原样读出覆盖内容。
+     *
+     * 给「人设预设」用：预设之间搬的是**整份**覆盖。
+     * 解析成对象再序列化回去会丢掉将来新增的字段，原样搬最稳。
+     */
+    fun readRaw(context: Context): JSONObject? = try {
+        val f = file(context)
+        if (!f.isFile) null else JSONObject(f.readText())
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * 原样写回。
+     *
+     * `{}` 是合法写法，表示"这份预设什么也没覆盖，全用内置默认"。
+     * 不能靠删文件来表达：删了就分不清"这份预设是空的"和"根本没有预设"。
+     */
+    fun writeRaw(context: Context, body: JSONObject): Boolean = try {
+        file(context).writeText(body.toString(2))
+        true
+    } catch (_: Exception) {
+        false
+    }
 }

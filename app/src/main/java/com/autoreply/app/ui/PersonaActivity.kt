@@ -1,6 +1,7 @@
 package com.autoreply.app.ui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -16,6 +17,7 @@ import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.persona.FewShot
 import com.autoreply.app.core.persona.KnowledgeItem
 import com.autoreply.app.core.persona.PersonaLoader
+import com.autoreply.app.core.persona.PersonaPresets
 import com.autoreply.app.core.persona.PersonaStore
 
 /**
@@ -37,6 +39,7 @@ class PersonaActivity : Activity() {
     private lateinit var shotList: LinearLayout
     private lateinit var ruleList: LinearLayout
     private lateinit var knowledgeList: LinearLayout
+    private lateinit var presetList: LinearLayout
     private lateinit var titleView: TextView
 
     private class ShotRow(val q: EditText, val a: EditText, val container: LinearLayout)
@@ -75,6 +78,23 @@ class PersonaActivity : Activity() {
                     "只影响「问答样例」和「行为准则」两项；身份、语气、禁止词仍在设置页。"
             )
         )
+
+        // ---- 人设预设 ----
+        //
+        // 放在最上面：切换预设是"换一个人"，比调某一条样例更靠前。
+        // 同一时间只有一份生效 —— 界面上那个实心圆点画的就是"当前生效的那份"，
+        // 真相存在档案柜里（PersonaPresets 的 active 字段），不是画在这里。
+        content.addView(section("人设预设"))
+        content.addView(
+            note(
+                "同一时间只有一份生效。切换会把那一份的「情况 / 样例 / 准则」整份换上来 ——\n" +
+                    "多个号、或者同一个人设换种性格，靠它切，不用每次手改。\n" +
+                    "切换前会先保存当前这一页的改动，所以改完直接点另一份就行。"
+            )
+        )
+        presetList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(presetList)
+        content.addView(ghostButton("＋ 新建（复制当前这份）") { newPreset() })
 
         // ---- 我的情况 ----
         content.addView(section("我的情况（模型能说的事实）"))
@@ -135,6 +155,7 @@ class PersonaActivity : Activity() {
         })
 
         loadCurrent()
+        refreshPresets()
     }
 
     // ---------------------------------------------------------------- 数据
@@ -159,6 +180,17 @@ class PersonaActivity : Activity() {
     }
 
     private fun save() {
+        persist(exitAfter = true)
+    }
+
+    /**
+     * 把这一页写盘。
+     *
+     * @param exitAfter true 表示是用户点「保存」；false 表示是"切换预设 / 新建"之前的顺手保存 ——
+     *   那种时候不该弹"已保存"然后关页面，否则切个预设要闪两下。
+     * @return 是否写成功。失败时调用方要**停下来**，不能接着切预设。
+     */
+    private fun persist(exitAfter: Boolean): Boolean {
         val fewShot = shots.mapNotNull {
             val q = it.q.text.toString().trim()
             val a = it.a.text.toString().trim()
@@ -171,7 +203,7 @@ class PersonaActivity : Activity() {
         // 两个都空 = 等于把回复能力清空了。允许，但要拦一下确认
         if (fewShot.isEmpty() && ruleTexts.isEmpty()) {
             Toast.makeText(this, "样例和准则都是空的，至少要留一条", Toast.LENGTH_LONG).show()
-            return
+            return false
         }
 
         val items = knowledge.mapNotNull {
@@ -181,22 +213,154 @@ class PersonaActivity : Activity() {
         }
 
         val ok = PersonaStore.save(this, fewShot, ruleTexts, items)
-        if (ok) {
+        if (!ok) {
+            Toast.makeText(this, "保存失败：写不进 filesDir", Toast.LENGTH_LONG).show()
+            return false
+        }
+        // 存进"当前预设"。不存的话档案柜里留的还是切换那一刻的快照，
+        // 下次切回来会把这几轮改动全部还原。
+        PersonaPresets.snapshotActive(this)
+
+        if (exitAfter) {
             Toast.makeText(
                 this,
                 "已保存（${items.size} 条情况 / ${fewShot.size} 条样例 / ${ruleTexts.size} 条准则）",
                 Toast.LENGTH_SHORT,
             ).show()
             finish()
-        } else {
-            Toast.makeText(this, "保存失败：写不进 filesDir", Toast.LENGTH_LONG).show()
         }
+        return true
     }
 
     private fun resetToDefault() {
         PersonaStore.clear(this)
+        // 当前预设也跟着清空：否则下次切走再切回来，又会把改动"恢复"出来
+        PersonaPresets.snapshotActive(this)
         Toast.makeText(this, "已恢复内置默认", Toast.LENGTH_SHORT).show()
         loadCurrent()
+    }
+
+    // ---------------------------------------------------------------- 人设预设
+
+    /**
+     * 重画预设列表。
+     *
+     * 用「● / ○」而不是 RadioButton：RadioButton 在点击时会自己翻转选中态，
+     * 而我们希望"点当前生效那份"什么也不发生 —— 那一下翻转反倒会让界面和真相不一致。
+     * 真相只有一个地方：PersonaPresets 里的 active 字段。
+     */
+    private fun refreshPresets() {
+        presetList.removeAllViews()
+        val list = PersonaPresets.list(this)
+        val active = PersonaPresets.activeId(this)
+        list.forEach { p ->
+            val on = p.id == active
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val label = TextView(this).apply {
+                text = (if (on) "● " else "○ ") + p.name
+                textSize = 13f
+                setTextColor(getColor(if (on) R.color.ink else R.color.ink_soft))
+                typeface = if (on) {
+                    android.graphics.Typeface.create(
+                        "sans-serif-medium", android.graphics.Typeface.NORMAL
+                    )
+                } else {
+                    android.graphics.Typeface.DEFAULT
+                }
+                setPadding(0, dp(10), 0, dp(10))
+                setOnClickListener { switchTo(p) }
+            }
+            row.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(inlineLink("重命名") { renamePreset(p) })
+            row.addView(inlineLink("删除") { deletePreset(p) })
+            presetList.addView(row)
+        }
+    }
+
+    private fun switchTo(p: PersonaPresets.Preset) {
+        if (p.id == PersonaPresets.activeId(this)) {
+            refreshPresets()
+            return
+        }
+        // 先落盘再切：不然"我刚改的东西"会在切换瞬间消失
+        if (!persist(exitAfter = false)) return
+        if (!PersonaPresets.activate(this, p.id)) {
+            Toast.makeText(this, "切换失败：写不进 filesDir", Toast.LENGTH_LONG).show()
+            return
+        }
+        // 重画整页最省事：样例/准则/情况三块都要换成另一份，逐个刷新容易漏
+        recreate()
+    }
+
+    private fun newPreset() {
+        val list = PersonaPresets.list(this)
+        val input = EditText(this).apply {
+            setText("人设 ${list.size + 1}")
+            textSize = 14f
+            setSelection(text.length)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("新建人设预设")
+            .setMessage("内容是当前这份的副本，建好后再改。")
+            .setView(input)
+            .setPositiveButton("创建") { _, _ ->
+                if (!persist(exitAfter = false)) return@setPositiveButton
+                val name = input.text.toString().trim().ifEmpty { "未命名" }
+                if (PersonaPresets.createFromCurrent(this, name) == null) {
+                    Toast.makeText(this, "新建失败：写不进 filesDir", Toast.LENGTH_LONG).show()
+                } else {
+                    recreate()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun renamePreset(p: PersonaPresets.Preset) {
+        val input = EditText(this).apply {
+            setText(p.name)
+            textSize = 14f
+            setSelection(text.length)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("重命名")
+            .setView(input)
+            .setPositiveButton("确定") { _, _ ->
+                val name = input.text.toString().trim().ifEmpty { "未命名" }
+                if (PersonaPresets.rename(this, p.id, name)) refreshPresets()
+                else Toast.makeText(this, "重命名失败", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun deletePreset(p: PersonaPresets.Preset) {
+        if (PersonaPresets.list(this).size <= 1) {
+            Toast.makeText(this, "至少保留一份人设", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val wasActive = p.id == PersonaPresets.activeId(this)
+        AlertDialog.Builder(this)
+            .setTitle("删除「${p.name}」")
+            .setMessage(
+                if (wasActive) "它是当前生效的那份，删掉后会自动切到另一份。"
+                else "删掉后不可恢复。"
+            )
+            .setPositiveButton("删除") { _, _ ->
+                if (!PersonaPresets.remove(this, p.id)) {
+                    Toast.makeText(this, "删除失败", Toast.LENGTH_SHORT).show()
+                } else if (wasActive) {
+                    // 生效内容变了，整页得重读
+                    recreate()
+                } else {
+                    refreshPresets()
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     // ---------------------------------------------------------------- 行
@@ -333,6 +497,15 @@ class PersonaActivity : Activity() {
         gravity = Gravity.CENTER
         setTextColor(getColor(R.color.ink_faint))
         setPadding(0, dp(8), 0, dp(8))
+        setOnClickListener { onClick() }
+    }
+
+    /** 行内文字链（重命名 / 删除）：比按钮轻，但还有明确的可点区域。 */
+    private fun inlineLink(label: String, onClick: () -> Unit) = TextView(this).apply {
+        text = label
+        textSize = 12f
+        setTextColor(getColor(R.color.ink_soft))
+        setPadding(dp(12), dp(10), 0, dp(10))
         setOnClickListener { onClick() }
     }
 
