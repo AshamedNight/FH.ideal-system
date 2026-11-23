@@ -58,6 +58,12 @@ data class ChatMessage(
  */
 data class PlatformProfile(
     val pkg: String,
+    /**
+     * 给人看的名字（「心遇」「同城夜聊」），只出现在日志和提示里。
+     *
+     * 日志里写包名没人看得懂，而"到底是哪个 App 出了问题"恰恰是排查的第一句。
+     */
+    val label: String = "",
     /** 消息列表容器。拿不到时退化为在整个窗口里找消息。 */
     val messageList: List<Selector>,
     /** 单条消息。在 messageList 的作用域内查找，避免抓到顶栏标题。 */
@@ -132,6 +138,7 @@ object Profiles {
                 val o = root.optJSONObject(pkg) ?: continue
                 cache[pkg] = PlatformProfile(
                     pkg = pkg,
+                    label = o.optString("label", ""),
                     messageList = o.selectors("messageList"),
                     message = o.selectors("message"),
                     input = o.selectors("input"),

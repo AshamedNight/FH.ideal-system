@@ -4,6 +4,7 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.autoreply.app.core.AppConfig
+import com.autoreply.app.platform.Profiles
 
 /**
  * 通知监听 —— L1 档的触发器。
@@ -28,7 +29,27 @@ class MessageNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
+        // 诊断用：可能是本服务先起来、读屏服务还没连上
+        Profiles.load(this)
         val targets = AppConfig(this).targetPackages
+        val label = Profiles.forPackage(sbn.packageName)?.label?.takeIf { it.isNotEmpty() }
+
+        // ---- 三种"看到了却没用上"的情况，各写一句，别混在一起猜 ----
+        //
+        // 只说我们支持的平台（label 非空）：微信、短信不该占首页那 4 行日志。
+        // 反过来，**如果这三种日志一条都没出现、消息却来了**，
+        // 那就是这个 App 压根没发通知 —— 这是另一回事，改代码没用。
+        if (label != null) {
+            if (targets.isEmpty()) {
+                diag?.invoke("收到「$label」的通知，但设置里的「目标应用包名」是空的 —— 先填包名")
+                return
+            }
+            if (!targets.contains(sbn.packageName)) {
+                diag?.invoke("收到「$label」的通知，但它不在「目标应用包名」里，已忽略")
+                return
+            }
+        }
+
         // 通知监听必须显式配置包名：没有目标清单时，任何一条聊天通知都会被当成信号，
         // 那是误触发的源头。
         if (targets.isEmpty()) return
@@ -65,6 +86,11 @@ class MessageNotificationListener : NotificationListenerService() {
             ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
 
         val hit = Hit(sbn.packageName, title, text, sbn.postTime)
+        // 有通知但没有正文：要么是平台只推"你收到一条消息"，要么是系统把内容隐藏了。
+        // 这两种都做不出回复，但用户需要知道"卡在哪"，而不是盯着空白草稿发呆。
+        if (text.isNullOrBlank()) {
+            diag?.invoke("「${title ?: label ?: sbn.packageName}」的通知里没有正文，没法当上下文")
+        }
         listeners.forEach { it.invoke(hit) }
     }
 
@@ -90,6 +116,15 @@ class MessageNotificationListener : NotificationListenerService() {
     companion object {
         /** 内核注册在这里。用 CopyOnWrite 避免遍历时被修改。 */
         private val listeners = java.util.concurrent.CopyOnWriteArrayList<(Hit) -> Unit>()
+
+        /**
+         * 诊断出口：通知"看到了但没用上"时写一行给人看。
+         *
+         * 不接这个回调也照样工作，只是少了那条线索 ——
+         * 而"他趣没反应"最难的地方就是分不清"没收到通知"和"收到了但被忽略"。
+         */
+        @Volatile
+        var diag: ((String) -> Unit)? = null
 
         fun addListener(l: (Hit) -> Unit) {
             listeners.add(l)

@@ -160,10 +160,14 @@ class CaptureService : AccessibilityService() {
 
         // 通知 → 自动处理的接线。listener 只负责"听到"，判断和动作都在这里。
         MessageNotificationListener.addListener(hitListener)
+        // "看到了却没用上"的通知，也写进首页日志。
+        // 没有这条，用户只能看到"没反应"，分不清是没收到、还是收到了被忽略。
+        MessageNotificationListener.diag = { note -> logAuto(note) }
     }
 
     override fun onDestroy() {
         MessageNotificationListener.removeListener(hitListener)
+        MessageNotificationListener.diag = null
         super.onDestroy()
     }
 
