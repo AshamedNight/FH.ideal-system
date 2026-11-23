@@ -134,7 +134,8 @@ class CaptureService : AccessibilityService() {
     fun recentNotes(): List<String> = autoLog.toList()
 
     @Synchronized
-    private fun logAuto(note: String) {
+    /** 写进首页日志（只留最近 4 条）。ReplyRunner 也用它在读空时留下诊断。 */
+    fun logAuto(note: String) {
         val hhmm = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         autoLog.addFirst("[$hhmm] $note")
         while (autoLog.size > 4) autoLog.removeLast()
@@ -328,6 +329,16 @@ class CaptureService : AccessibilityService() {
     /** 找不到「下一个未读」时最多重试几次（每次间隔 1.2 秒，合计约 3.6 秒）。 */
     private val nextMissLimit = 3
 
+    /**
+     * 这一轮连点已经待过的平台。
+     *
+     * 存在的理由：真机出现过「心遇找不到下一个未读 → 切同城 → 同城也找不到 → 切回心遇」，
+     * 在两个 App 之间来回弹。切换的本意是"这个平台确实没有未读了"，
+     * 而"按钮没认出来"和"没有未读"在代码里长得一模一样 ——
+     * 分不清的时候，**宁可停下来说清楚，也不要来回弹**（来回切前台本身就是异常行为）。
+     */
+    private val visitedPkgs = HashSet<String>()
+
     /** 按配置顺序找下一个平台。只有一个平台时返回 null。 */
     private fun nextPlatformPkg(): String? {
         val list = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
@@ -350,6 +361,7 @@ class CaptureService : AccessibilityService() {
         if (batchActive) return
         batchActive = true
         batchLeft = count
+        visitedPkgs.clear()
         logAuto("连点开始：$count 个，正在切到目标应用…")
 
         // **必须先把目标应用拉到前台。**
@@ -520,10 +532,17 @@ class CaptureService : AccessibilityService() {
             // 这个平台没有未读了 —— 如果还配了别的平台，轮过去接着跑。
             // 用户的实际用法就是"同城打完打心遇"，让他手动切一次很别扭。
             val platforms = config?.targetPackages.orEmpty().filter { it.isNotBlank() }
+            val here = root.packageName?.toString().orEmpty()
+            if (here.isNotEmpty()) visitedPkgs.add(here)
             val next = nextPlatformPkg()
             platformHops++
-            if (next == null || platformHops > platforms.size) {
-                stopBatch("连点结束：所有平台都没有未读了")
+            // 绕回来 = 两个平台都没认出按钮，再切下去就是来回弹了。
+            // 这种情况几乎都是选择器过时（App 改版），说明白比继续切有用。
+            if (next == null || platformHops > platforms.size || visitedPkgs.contains(next)) {
+                stopBatch(
+                    "连点停下：没找到「下一个未读」按钮。" +
+                        "如果界面上明明有那个小箭头，说明选择器过时了 —— 抓一次界面发我。"
+                )
                 return
             }
             logAuto("本平台没有未读了，切到下一个平台继续（第 $platformHops 次换台）")

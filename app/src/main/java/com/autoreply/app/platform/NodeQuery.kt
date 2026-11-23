@@ -324,6 +324,32 @@ object NodeQuery {
         return if (ok) FillResult.Ok else FillResult.Unavailable("ACTION_SET_TEXT 被拒绝")
     }
 
+    /**
+     * 「为什么读不到消息」—— 只在读空时调一次。
+     *
+     * 界面明明有消息、程序却说没有，这是最难自己查的一种失败：
+     * 可能选择器过时（App 改版）、可能页面不是聊天页、也可能整棵树被摘掉了。
+     * 三个原因对应的处置完全不同，猜是猜不出来的。这里把树的样子一句话说出来。
+     */
+    fun emptyDiagnosis(root: AccessibilityNodeInfo, profile: PlatformProfile): String {
+        var total = 0
+        val samples = ArrayList<String>(3)
+        collect(root) { n ->
+            total++
+            if (samples.size < 3) {
+                val t = n.text?.toString()?.trim().orEmpty()
+                if (t.isNotEmpty()) {
+                    val id = n.viewIdResourceName?.substringAfterLast('/').orEmpty()
+                    samples.add(if (id.isEmpty()) "「${t.take(10)}」" else "#$id「${t.take(10)}」")
+                }
+            }
+            false
+        }
+        val why = if (profile.message.isEmpty()) "这个平台没配消息选择器" else "选择器一个都没命中"
+        val eg = samples.joinToString(" / ").ifEmpty { "一个带文字的节点都没有" }
+        return "$why；全树 $total 个节点，例如 $eg"
+    }
+
     /** 回读输入框当前内容，用于填完之后校验。 */
     fun inputText(root: AccessibilityNodeInfo, profile: PlatformProfile): String? =
         firstEditable(root, profile.input)?.text?.toString()

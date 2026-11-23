@@ -28,6 +28,10 @@ data class Selector(
         "text" -> node.text?.toString()?.trim() == value
         "textContains" -> node.text?.toString()?.contains(value) == true
         "contentDesc" -> node.contentDescription?.toString() == value
+        // 图标按钮的唯一线索常常只有 contentDescription（无障碍描述），
+        // 比如那个悬浮的「下一个未读 >>」——图上是个纯图标，text 是空的。
+        // 用 contains 而不是全等：各家写法不统一（"下一个未读"/"下一个未读会话"）。
+        "contentDescContains" -> node.contentDescription?.toString()?.contains(value) == true
         else -> false
     }
 }

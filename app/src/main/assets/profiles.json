@@ -121,8 +121,20 @@
     "label": "心遇",
     "nextUnread": [
       {
+        "by": "viewId",
+        "value": "tvUnreadRemind"
+      },
+      {
         "by": "textContains",
         "value": "下一个未读"
+      },
+      {
+        "by": "contentDescContains",
+        "value": "下一个"
+      },
+      {
+        "by": "text",
+        "value": ">>"
       }
     ],
     "listItem": [
@@ -217,6 +229,18 @@
       {
         "by": "viewId",
         "value": "tv_next"
+      },
+      {
+        "by": "textContains",
+        "value": "下一个未读"
+      },
+      {
+        "by": "contentDescContains",
+        "value": "下一个"
+      },
+      {
+        "by": "text",
+        "value": ">>"
       }
     ],
     "peerName": [

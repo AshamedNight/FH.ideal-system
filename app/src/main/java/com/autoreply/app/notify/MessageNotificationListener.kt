@@ -38,19 +38,53 @@ class MessageNotificationListener : NotificationListenerService() {
         if (sbn.notification.flags and Notification.FLAG_ONGOING_EVENT != 0) return
 
         val extras = sbn.notification.extras
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
-        val text = (
-            extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-                ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
-            )
 
         // 群通知（多条合并）通常没有明确的会话对象，直接跳过，
         // 避免"点开一个不确定的会话"这种既没用又显眼的行为。
         val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
         if (lines != null && lines.size > 1) return
 
+        // 收起的通知栏只给一行**预览**，长消息会被截断 ——
+        // 他趣就长这样：「做研发的都很聪明，你平时是不是特…」，后面那截没了。
+        // 全文通常在这两个地方：展开态的 BIG_TEXT，或 MessagingStyle 的 messages 数组。
+        val style = messagingStyle(sbn.notification)
+        val candidates = listOfNotNull(
+            style?.first,
+            extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString(),
+            extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+        )
+        // 取**最长**的那个：宁可多，不要少 —— 短的那个正是被截断的预览。
+        val text = candidates
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .maxByOrNull { it.length }
+
+        // 昵称优先用 MessagingStyle 的 sender（那才是真的发送者），
+        // 其次才是通知标题 —— 有些 App 的标题写的是应用名。
+        val title = style?.second
+            ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+
         val hit = Hit(sbn.packageName, title, text, sbn.postTime)
         listeners.forEach { it.invoke(hit) }
+    }
+
+    /**
+     * MessagingStyle 里的最后一条消息（完整文本 + 发送者）。
+     *
+     * 聊天类通知大量用这个样式：完整内容放在 `android.messages` 数组里，
+     * 收起的标题/正文只是它的截断预览。读这个数组是拿到全文的唯一机会 ——
+     * 没有它，长消息永远只剩前十几个字，回出来自然答非所问。
+     */
+    @Suppress("DEPRECATION")
+    private fun messagingStyle(n: Notification): Pair<String, String?>? {
+        val arr = runCatching {
+            n.extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+        }.getOrNull() ?: return null
+        val last = arr.lastOrNull() as? android.os.Bundle ?: return null
+        val text = last.getCharSequence("text")?.toString()?.trim().orEmpty()
+        if (text.isEmpty()) return null
+        val sender = last.getCharSequence("sender")?.toString()?.trim().orEmpty()
+        return text to sender.ifEmpty { null }
     }
 
     companion object {

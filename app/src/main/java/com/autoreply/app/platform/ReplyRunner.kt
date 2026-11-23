@@ -91,7 +91,21 @@ class ReplyRunner(
             messages = lines.map { ChatMessage(it, fromOther = true, rect = Rect()) }
         }
         if (messages.isEmpty()) {
-            finish(emptyList(), "", "没读到消息，也没有通知内容可用", false, false, onDone)
+            if (profile.message.isEmpty()) {
+                // 他趣这类：App 把整棵树摘掉了，读消息在设计上就不可能。
+                // 说清楚"这不是坏了"，比留一句"没读到"有用得多 ——
+                // 否则用户看着屏幕上明明有「你好」，只会以为程序瞎了。
+                finish(
+                    emptyList(), "",
+                    "这个平台读不到聊天记录 —— 只能等对方发消息时由通知触发",
+                    false, false, onDone,
+                )
+                return
+            }
+            // 界面明明有消息、程序说没有：这是最难自己查的失败。
+            // 把"树长什么样"写进首页日志一次（日志只留 4 条，所以只在失败时写）。
+            service.logAuto("读不到消息 · " + NodeQuery.emptyDiagnosis(root, profile))
+            finish(emptyList(), "", "没读到消息 —— 首页日志里有诊断", false, false, onDone)
             return
         }
 
