@@ -23,7 +23,11 @@ class AppConfig(context: Context) {
      * 这时 App 跟开发版完全一样：设置页手填接口和 Key。
      *
      * 为什么放 assets 而不是 BuildConfig：不用动 build.gradle.kts，CI 零风险；
-     * 而且 precheck 第 5 步本来就会校验 assets/*.json 是否合法。
+     * 而且 precheck 第 5 步本来就会校验 assets 里每个 JSON 是否合法。
+     *
+     * （这里原本写的是「assets 斜杠星号点 json」。那一对字符是块注释的开头，
+     *   而 Kotlin 的块注释支持嵌套 —— 于是又开了一层，后面整个文件都被吞掉，
+     *   编译器报 `Missing '}'` + 满屏 Unresolved reference。注释里别写那个组合。）
      */
     private val dist: JSONObject? by lazy {
         try {

@@ -57,13 +57,25 @@ MainActivity 首页「生成并填入」是独立于 ReplyRunner 的生成路径
   用真机 bounds 复刻方向判定（「你好」→ 对方、我方气泡 → 我方、最后一条是我方 → 不生成）。
 - 本机无 JDK，编译仍走 GitHub Actions；push 由用户在交互终端执行。
 
-### 第 9 步的由来
+### 第 7/9 步的由来（两次 CI 白跑的教训）
 
-首轮 CI 挂在 `AppConfig.kt:19:65 Missing '}'` + 满屏 `Unresolved reference`。
-真因是加分发模式时新写了一个 `llmProxy`、忘了删旧的 —— **同一作用域声明两次**，
-整个文件解析失败，所有调用点跟着报错。前 8 步全都查不出来（括号平衡、import 齐全、
-字符串闭合）。`tools/check_dupes.py` 只查类/对象体成员，用坏提交验证过能精确报出
-`354 重复声明 var llmProxy（第 320 行已声明）`，全量跑零误报。
+**根因：注释里写了「斜杠星号」。** 分发配置的 KDoc 里写了 `assets/*.json`，
+那一对字符在 Kotlin 里会**再开一层块注释**（注释支持嵌套），于是从第 26 行到文件尾
+全被吞掉。编译器报的是：
+
+```
+AppConfig.kt:19:65 Missing '}'
+AppConfig.kt:484:1 Unclosed comment
++ 所有调用点满屏 Unresolved reference
+```
+
+真因离报错位置几百行。已加进 precheck 第 7 步（`scan_comments`）：按 Kotlin 规则
+（`/*` 嵌套、字符串内不算）扫全项目，报「注释里嵌套」「多余 `*/`」「结尾未闭合」三类，
+用坏提交验证过能精确指向那一行。
+
+**次要问题也真实存在**：`var llmProxy` 声明了两次（新写忘删旧的）。
+加了第 9 步 `check_dupes.py`（只查类/对象体成员，函数内局部变量与 `when` 分支不管），
+用坏提交验证精确报出 `354 重复声明 var llmProxy（第 320 行已声明）`，全量跑零误报。
 
 ## 文档
 - `relay/README.md` 重写：8021 / pinned / ADMIN_TOKEN / 分发步骤 / 吊销。
