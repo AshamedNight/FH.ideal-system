@@ -23,6 +23,7 @@ import com.autoreply.app.core.guard.SentenceSplitter
 import com.autoreply.app.core.guard.SentTracker
 import com.autoreply.app.core.llm.ReplyEngine
 import com.autoreply.app.core.llm.Turn
+import com.autoreply.app.core.log.ChatLogStore
 import com.autoreply.app.core.persona.PersonaLoader
 import com.autoreply.app.platform.AccessibilityReplySink
 import com.autoreply.app.platform.ChatMessage
@@ -220,6 +221,18 @@ class MainActivity : Activity() {
         val now = System.currentTimeMillis()
         val peer = NodeQuery.peerName(root, profile)
 
+        // 聊天记录（默认关）：记「读到的对话」。和 ReplyRunner 是同一条路径的另一半 ——
+        // 首页按钮不经过 ReplyRunner，这里漏了就会「自动触发有记录、手动点击没有」。
+        val platformLabel = profile.label.ifEmpty { pkg }
+        if (config.chatLogEnabled) {
+            ChatLogStore.record(
+                this,
+                platformLabel,
+                peer,
+                messages.map { ChatLogStore.Entry(it.text, it.fromOther) },
+            )
+        }
+
         // 先看是不是又发出去了一条（同会话里我发的最后一条变了）。
         // 不依赖"草稿被原样发出"：改几个字、自己手打，都是真实发送。
         if (SentTracker(this).detectNewSent(messages, peer, now)) {
@@ -314,6 +327,12 @@ class MainActivity : Activity() {
                                     )
                                 }
                             }
+                            if (config.chatLogEnabled) {
+                                ChatLogStore.draft(
+                                    this@MainActivity, platformLabel, peer, outcome.text,
+                                    if (copied) "已复制到剪贴板" else "未交付",
+                                )
+                            }
                             return@runOnUiThread
                         }
                         val sink = AccessibilityReplySink(service, profile)
@@ -383,6 +402,16 @@ class MainActivity : Activity() {
                                 )
                             }
                         }
+                        if (config.chatLogEnabled) {
+                            ChatLogStore.draft(
+                                this@MainActivity, platformLabel, peer, outcome.text,
+                                when {
+                                    write.written -> "已填入输入框"
+                                    copied -> "已复制到剪贴板"
+                                    else -> "未交付"
+                                },
+                            )
+                        }
                     }
 
                     is ReplyFlow.Outcome.Hold -> {
@@ -399,6 +428,12 @@ class MainActivity : Activity() {
                             append("\n草稿（不自动填）：").append(outcome.text)
                             append("\n\n为什么没填：").append(outcome.reason)
                             if (copied) append("\n\n已复制到剪贴板，你要用就自己粘贴。")
+                        }
+                        if (config.chatLogEnabled) {
+                            ChatLogStore.draft(
+                                this@MainActivity, platformLabel, peer, outcome.text,
+                                "仅草稿，不建议发送",
+                            )
                         }
                     }
 

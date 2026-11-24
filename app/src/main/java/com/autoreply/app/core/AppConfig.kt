@@ -352,6 +352,16 @@ class AppConfig(context: Context) {
         set(value) = sp.edit().putBoolean(KEY_CLIPBOARD_ONLY, value).apply()
 
     /**
+     * 是否把聊天记录落到本机（`filesDir/chatlog/日期.txt`）。
+     *
+     * **默认关**：聊天内容是明文，落盘就等于在手机上留了一份可被翻到的记录。
+     * 需要复盘话术效果时再打开，用完可以关掉并清空。
+     */
+    var chatLogEnabled: Boolean
+        get() = sp.getBoolean(KEY_CHAT_LOG, false)
+        set(value) = sp.edit().putBoolean(KEY_CHAT_LOG, value).apply()
+
+    /**
      * 上一次由我们写进剪贴板的草稿。
      *
      * 剪贴板模式下还要从剪贴板读「对方说了什么」当上下文。不记下自己刚写的
@@ -474,6 +484,7 @@ class AppConfig(context: Context) {
         private const val KEY_LLM_PROXY = "llm_proxy"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_CLIPBOARD_ONLY = "clipboard_only"
+        private const val KEY_CHAT_LOG = "chat_log_enabled"
         private const val KEY_LAST_CLIP_DRAFT = "last_clip_draft"
         private const val KEY_LLM_CALLS = "llm_calls"
         private const val KEY_LLM_TOKENS_IN = "llm_tok_in"

@@ -11,6 +11,7 @@ import com.autoreply.app.core.guard.ReplyFlow
 import com.autoreply.app.core.guard.SentenceSplitter
 import com.autoreply.app.core.guard.SentTracker
 import com.autoreply.app.core.llm.Turn
+import com.autoreply.app.core.log.ChatLogStore
 import com.autoreply.app.notify.NotifyContext
 
 /**
@@ -141,6 +142,17 @@ class ReplyRunner(
             return
         }
 
+        // 聊天记录（默认关）：记「读到的对话」，位置在去重之前 ——
+        // 这条消息就算 30 分钟内处理过、不再生成，它确实是对方说过的话。
+        if (config.chatLogEnabled) {
+            ChatLogStore.record(
+                service,
+                platformLabel(profile),
+                peer,
+                messages.map { ChatLogStore.Entry(it.text, it.fromOther) },
+            )
+        }
+
         val now = System.currentTimeMillis()
         val dedup = ReplyDedup(service)
         // 指纹带昵称：交友平台大量新会话第一句都是「你好」，
@@ -268,6 +280,12 @@ class ReplyRunner(
                 "剪贴板写不进去（被别的 App 占用？）"
             }
             finish(trace, outcome.text, tag + note, false, copied, onDone)
+            if (config.chatLogEnabled) {
+                ChatLogStore.draft(
+                    service, platformLabel(profile), peer, outcome.text,
+                    if (copied) "已复制到剪贴板" else "未交付",
+                )
+            }
             return
         }
 
@@ -352,6 +370,16 @@ class ReplyRunner(
                     trace, outcome.text, tag + note, write.written, copied, onDone,
                     needsIme = write.needsIme,
                 )
+                if (config.chatLogEnabled) {
+                    ChatLogStore.draft(
+                        service, platformLabel(profile), peer, outcome.text,
+                        when {
+                            write.written -> "已填入输入框"
+                            copied -> "已复制到剪贴板"
+                            else -> "未交付"
+                        },
+                    )
+                }
             }
 
             is ReplyFlow.Outcome.Hold -> {
@@ -360,6 +388,11 @@ class ReplyRunner(
                 if (copied) config.lastClipboardDraft = outcome.text
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
                 finish(trace, outcome.text, tag + outcome.reason, false, copied, onDone)
+                if (config.chatLogEnabled) {
+                    ChatLogStore.draft(
+                        service, platformLabel(profile), peer, outcome.text, "仅草稿，不建议发送",
+                    )
+                }
             }
 
             is ReplyFlow.Outcome.Wait -> {
@@ -382,6 +415,10 @@ class ReplyRunner(
 
     // 读取剪贴板对方原话的过滤规则已抽到 [ClipboardPeerText] ——
     // 首页「生成并填入」按钮也要用它，两处共用一份，避免规则漂移。
+
+    /** 日志/记录里显示的名字：优先中文名，没有就用包名。 */
+    private fun platformLabel(profile: PlatformProfile): String =
+        profile.label.ifEmpty { profile.pkg }
 
     private fun finish(
         trace: List<String>,

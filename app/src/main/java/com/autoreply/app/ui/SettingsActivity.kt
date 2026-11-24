@@ -19,6 +19,13 @@ import com.autoreply.app.R
 import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.llm.GreetingHooks
 import com.autoreply.app.core.llm.TalkStyle
+import com.autoreply.app.core.log.ChatLogStore
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** 导出聊天记录的系统「保存到文件」请求码。 */
+private const val REQ_EXPORT_CHATLOG = 4001
 
 /**
  * 设置页。
@@ -35,6 +42,9 @@ class SettingsActivity : Activity() {
     private lateinit var config: AppConfig
     private val inputs = LinkedHashMap<String, EditText>()
     private lateinit var levelGroup: RadioGroup
+
+    /** 导出时先把全文拿在手里，等系统对话框回来再写给用户选的 URI。 */
+    private var pendingExport = ""
 
     /**
      * 段落编号。这一页有十几段，编号比加粗更能让人知道"读到哪儿了"，
@@ -144,6 +154,33 @@ class SettingsActivity : Activity() {
                 "三者都读不到时不会瞎编，会明确告诉你缺什么。\n" +
                 "开着它时不会切输入法、不会连点换会话；发送永远是你自己点。"
         ))
+
+        root.addView(section("聊天记录"))
+        root.addView(
+            check("把读到的对话记在本机（默认关）", config.chatLogEnabled) {
+                config.chatLogEnabled = it
+            }
+        )
+        root.addView(note(
+            "只记「程序真正读到过」的内容：你打开过、并触发了读取的会话。" +
+                "没打开过的会话没有；语音/图片/表情没有文字节点，记不到；" +
+                "时间戳是「程序首次读到」的时间，不是消息真实发送时间。\n\n" +
+                "存成明文放在 App 私有目录（filesDir/chatlog/日期.txt），保留 30 天自动清理。" +
+                "导出由你点下面的按钮、自己选保存位置，不需要存储权限。"
+        ))
+        val logFiles = ChatLogStore.files(this)
+        val logSize = ChatLogStore.sizeBytes(this)
+        if (logFiles.isEmpty()) {
+            root.addView(note("本机还没有记录。"))
+        } else {
+            root.addView(note("本机已有 ${logFiles.size} 个文件，共 ${logSize / 1024} KB（${logFiles.first().name.removeSuffix(".txt")} 起）。"))
+            root.addView(action("导出为 txt（选择保存位置）") { exportChatLog() })
+            root.addView(action("清空本机记录") {
+                ChatLogStore.clear(this)
+                Toast.makeText(this, "已清空聊天记录", Toast.LENGTH_SHORT).show()
+                recreate()
+            })
+        }
 
         root.addView(section("时段"))
         root.addView(
@@ -373,6 +410,51 @@ class SettingsActivity : Activity() {
 
     private fun intOf(key: String, fallback: Int): Int =
         inputs[key]?.text?.toString()?.trim()?.toIntOrNull() ?: fallback
+
+    // ------------------------------------------------------- 聊天记录导出
+
+    /**
+     * 导出走系统的「保存到文件」（SAF）：用户自己选目录和文件名，
+     * 我们只拿到一个一次性可写的 URI —— 不需要任何存储权限，也不需要
+     * 把文件先拷到公共目录再让用户去找。
+     */
+    private fun exportChatLog() {
+        val text = ChatLogStore.exportText(this)
+        if (text.isBlank()) {
+            Toast.makeText(this, "还没有可导出的记录", Toast.LENGTH_SHORT).show()
+            return
+        }
+        pendingExport = text
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TITLE, "AutoReply-chatlog-$stamp.txt")
+        }
+        runCatching { startActivityForResult(intent, REQ_EXPORT_CHATLOG) }
+            .onFailure {
+                pendingExport = ""
+                Toast.makeText(this, "打不开保存对话框", Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_EXPORT_CHATLOG) return
+        val text = pendingExport
+        pendingExport = ""
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null || text.isEmpty()) return
+        val written = runCatching {
+            contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                != null
+        }.getOrDefault(false)
+        Toast.makeText(
+            this,
+            if (written) "已导出 ${text.length} 个字符" else "导出失败：那个位置写不进去",
+            Toast.LENGTH_LONG,
+        ).show()
+    }
 
     // ------------------------------------------------------------ UI 小工具
 
