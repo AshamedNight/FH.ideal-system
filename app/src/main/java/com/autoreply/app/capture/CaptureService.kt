@@ -376,7 +376,7 @@ class CaptureService : AccessibilityService() {
         val cfg = config ?: return
         val profile = Profiles.forPackage(pkg) ?: return
         if (profile.message.isEmpty() || profile.nextUnread.isEmpty()) return
-        val roots = allTargetRoots()
+        val roots = allTargetRoots().filter { it.packageName?.toString() == profile.pkg }
         if (roots.isEmpty()) return
         if (roots.none { NodeQuery.hasNextUnread(it, profile) }) return
 
@@ -404,13 +404,17 @@ class CaptureService : AccessibilityService() {
         batchLeft = count
         batchWaitStart = 0L
         batchResumeUntil = 0L
-        logAuto("连点开始：$count 个，正在切到目标应用…")
+        logAuto("连点开始：$count 个")
 
         // **必须先把目标应用拉到前台。**
         // 无障碍能拿到目标 App 的节点（它在 windows 列表里，哪怕是分屏的另一半），
         // 但 dispatchGesture 的手势会落在**有焦点的那个窗口**上。
         // AutoReply 自己在前台时，每一记点击都被自己接走了 ——
         // 表现就是"在本应用里点按钮完全没反应，切到目标 App 里才有用"。
+        //
+        // 但"拉前台"只在真需要时做：当前前台已经是目标 App（比如你就看着同城），
+        // 就不要再 startActivity —— 那会把列表里第一个配置的平台拉起来，
+        // 看起来就是"连点自己换了平台"（见 bringTargetToFront 的说明）。
         bringTargetToFront()?.let { logAuto("切到目标应用失败：$it") }
 
         // 给系统一点时间切过去，切完再开始第一步
@@ -461,8 +465,47 @@ class CaptureService : AccessibilityService() {
      * 那就让用户自己切 —— 反正他本来就要回到目标应用里点发送。
      */
     private fun bringTargetToFront(prefer: String? = null): String? {
+        // **隐式调用（连点启动 / 看不到目标界面时）绝不在平台之间横跳。**
+        //
+        // 之前这里无条件 startActivity(candidates.first())，而 candidates 是
+        // 「设置里配置的顺序」。结果：用户在平台 B 上点「连点」→ 列表第一个是平台 A
+        // → 直接被拉走。表现就是"连点会自己切到另一个平台，根本看不到它在本平台干活"。
+        // 当前前台本来就是某个目标 App 时，什么都不用做 —— 它已经在最前面了。
+        //
+        // 显式调用（prefer != null，来自「切下一个平台」）不受这个约束：
+        // 那是用户明确要求换 App。
+        if (prefer == null) {
+            val cur = rootInActiveWindow?.packageName?.toString()
+            if (cur != null && isTarget(cur)) {
+                lastTargetPkg = cur
+                return null
+            }
+            // 连点进行中：只允许回到"这一轮在干的平台"，绝不换成配置里的另一个。
+            // 连点跨平台是最难排查的一种混乱 —— 日志里两个平台的会话交替出现，
+            // 用户也看不出到底哪一句发到了哪。
+            if (batchActive) {
+                val here = lastTargetPkg ?: return "连点中但不知道在哪个平台，先切到目标 App 再点一次"
+                val intent = packageManager.getLaunchIntentForPackage(here)
+                    ?: return "「$here」启动不了（没装或包名写错）"
+                intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                )
+                return try {
+                    startActivity(intent)
+                    null
+                } catch (e: Exception) {
+                    "启动 $here 失败：${e.javaClass.simpleName}"
+                }
+            }
+        }
         val candidates = buildList {
-            if (prefer != null) add(prefer)
+            if (prefer != null) {
+                add(prefer)
+            } else {
+                // 隐式：先回"最近真正读到过的那个平台"，再退到配置列表。
+                // 配置列表的顺序是"启动时的选择顺序"，不代表用户此刻在哪。
+                lastTargetPkg?.let { add(it) }
+            }
             addAll(config?.targetPackages.orEmpty())
             lastTargetPkg?.let { add(it) }
         }.distinct().filter { it.isNotBlank() }
@@ -597,7 +640,12 @@ class CaptureService : AccessibilityService() {
         val clickRoot = targetRoot() ?: root
         // 用**所有**窗口去找那个按钮：它有时挂在同一个 App 的另一个窗口里
         // （浮层 / 悬浮按钮），只搜 targetRoot() 会"明明看得见却找不到"。
-        val roots = allTargetRoots().ifEmpty { listOf(clickRoot) }
+        // 只看**当前这个平台**的窗口。同时配了同城和心遇时，
+        // allTargetRoots() 会把另一个 App 的窗口也列出来（它在 windows 里，
+        // 只是不在前台）—— 在那棵树上找到的按钮，坐标落在前台 App 上，
+        // 点下去是乱点，还可能把会话切到别的平台去。按包名过滤掉。
+        val roots = allTargetRoots().filter { it.packageName?.toString() == profile.pkg }
+            .ifEmpty { listOf(clickRoot) }
         val clicked = NodeQuery.clickNextUnread(
             roots, profile,
             tap = { n -> com.autoreply.app.platform.TextWriter.tapNode(this, n) },
