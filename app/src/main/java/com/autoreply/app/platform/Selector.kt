@@ -121,6 +121,19 @@ data class PlatformProfile(
      * 它比全局开关更准 —— 只对确实写不进去的平台降级，同城/心遇照旧自动填入。
      */
     val clipboardPreferred: Boolean = false,
+
+    /**
+     * 聊天内容区的上下边界（可选）。
+     *
+     * 心遇改版后消息 `TextView` 完全没有 id，只能按类型找；而按类型找会把
+     * 顶栏昵称、底部快捷语、资料卡片一起捞进来。用「顶栏容器」和「输入区容器」
+     * 这两个**有 id 的锚点**夹出中间那段，范围就干净了：
+     * 只认整体落在 [areaTop.bottom, areaBottom.top] 之间的节点。
+     *
+     * 两个都留空 = 不做区域过滤（老平台完全不受影响）。
+     */
+    val areaTop: List<Selector> = emptyList(),
+    val areaBottom: List<Selector> = emptyList(),
 ) {
     val isConfigured: Boolean get() = input.isNotEmpty() || message.isNotEmpty() || clipboardPreferred
 }
@@ -167,6 +180,8 @@ object Profiles {
                     nextUnread = o.selectors("nextUnread"),
                     peerName = o.selectors("peerName"),
                     clipboardPreferred = o.optBoolean("clipboardPreferred", false),
+                    areaTop = o.selectors("areaTop"),
+                    areaBottom = o.selectors("areaBottom"),
                 )
             }
         } catch (e: Exception) {

@@ -259,6 +259,57 @@ class AppConfig(context: Context) {
         set(value) = sp.edit().putInt(KEY_GREETING_CURSOR, value).apply()
 
     /**
+     * 开场白「多发」：用下面三条自定义内容代替开场白库，按顺序一条一条填。
+     *
+     * **不会连发**：第一条填进输入框，你发出去了才会填第二条 ——
+     * 对方还没回就连甩三条，是整套行为里最像脚本的一种。
+     * 默认关；关着的时候完全走原来的库 + 轮换逻辑。
+     */
+    var greetingMulti: Boolean
+        get() = sp.getBoolean(KEY_GREETING_MULTI, false)
+        set(value) = sp.edit().putBoolean(KEY_GREETING_MULTI, value).apply()
+
+    /**
+     * 多发开场白的三条内容，**按下标固定**（第一条/第二条/第三条）。
+     *
+     * 空串表示"这一条不发"—— 保留位置而不是压缩，否则"只填第三条"
+     * 会变成"发第一条"，和用户在界面上看到的位置对不上。
+     * 槽位规则与开场白库相同（{昵称}{原话}{时段}，填不上则跳过该条）。
+     */
+    var greetingMultiLines: List<String>
+        get() = listOf(
+            sp.getString(KEY_GREETING_M1, "") ?: "",
+            sp.getString(KEY_GREETING_M2, "") ?: "",
+            sp.getString(KEY_GREETING_M3, "") ?: "",
+        )
+        set(value) {
+            val v = value.map { it.trim() }
+            sp.edit()
+                .putString(KEY_GREETING_M1, v.getOrElse(0) { "" })
+                .putString(KEY_GREETING_M2, v.getOrElse(1) { "" })
+                .putString(KEY_GREETING_M3, v.getOrElse(2) { "" })
+                .apply()
+        }
+
+    /**
+     * 偶尔分条发：这次生成有多大比例会拆成 2~3 条短消息（0~100）。
+     *
+     * 真人聊天不是每句一回合 —— 想到一句发一句、补一句解释都很常见。
+     * 但"每次都连发"立刻像脚本，所以这里是个概率而不是开关：
+     * 默认 30，配合 [burstMax] 限制最多几条。设 0 = 关闭。
+     *
+     * 分条仍然一条一条填：第一条进输入框，发出去才填下一条（见 DraftQueue）。
+     */
+    var burstChance: Int
+        get() = sp.getInt(KEY_BURST_CHANCE, 30).coerceIn(0, 100)
+        set(value) = sp.edit().putInt(KEY_BURST_CHANCE, value.coerceIn(0, 100)).apply()
+
+    /** 分条时最多几条（2~3）。再多就不像聊天，像刷屏。 */
+    var burstMax: Int
+        get() = sp.getInt(KEY_BURST_MAX, 3).coerceIn(2, 3)
+        set(value) = sp.edit().putInt(KEY_BURST_MAX, value.coerceIn(2, 3)).apply()
+
+    /**
      * 目标平台包名，可多个（一行一个）。
      *
      * 这个产品不是只服务一个平台，所以包名从一开始就是集合而不是单值。
@@ -474,6 +525,12 @@ class AppConfig(context: Context) {
         private const val KEY_GREETINGS = "greeting_lines"
         private const val KEY_GREETING_ON = "greeting_enabled"
         private const val KEY_GREETING_CURSOR = "greeting_cursor"
+        private const val KEY_GREETING_MULTI = "greeting_multi"
+        private const val KEY_GREETING_M1 = "greeting_multi_1"
+        private const val KEY_GREETING_M2 = "greeting_multi_2"
+        private const val KEY_GREETING_M3 = "greeting_multi_3"
+        private const val KEY_BURST_CHANCE = "burst_chance"
+        private const val KEY_BURST_MAX = "burst_max"
         private const val KEY_ENERGY_LOCKED = "energy_locked"
         private const val KEY_TIME_OF_DAY = "time_of_day"
         private const val KEY_ENERGY_VALUE = "energy_locked_value"

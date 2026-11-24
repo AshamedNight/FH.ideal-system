@@ -294,6 +294,24 @@ class SettingsActivity : Activity() {
                 singleLine = false,
             )
         )
+
+        // ---- 多发开场白：勾了就用下面三条顶掉库，按顺序一条一条填 ----
+        val multiOn = config.greetingMulti
+        val multiLines = config.greetingMultiLines
+        root.addView(
+            check("开场白发多条（用下面三条代替上方的库）", multiOn) {
+                config.greetingMulti = it
+            }
+        )
+        root.addView(note(
+            "按顺序发：第一条填进输入框，**你发出去了才会填第二条** —— 不会自己连发。" +
+                "对方还没回就连甩三条，是整套行为里最像脚本的一种。\n" +
+                "三条都支持 {昵称} {原话} {时段}；某条填不上（比如只写了 {昵称} 而昵称没读到）就跳过它。" +
+                "留空的行不发，且**保留位置** —— 只填第三条就只发那一条，不会顶到第一条去。"
+        ))
+        root.addView(field("greetingM1", "第一条", multiLines.getOrElse(0) { "" }, InputType.TYPE_CLASS_TEXT))
+        root.addView(field("greetingM2", "第二条（可留空）", multiLines.getOrElse(1) { "" }, InputType.TYPE_CLASS_TEXT))
+        root.addView(field("greetingM3", "第三条（可留空）", multiLines.getOrElse(2) { "" }, InputType.TYPE_CLASS_TEXT))
         // 20 条手打进手机太难受。内置库直接灌进来，改哪句再手动改。
         root.addView(action("载入内置 20 条钩子模板") {
             inputs["greetingLines"]?.setText(GreetingHooks.DEFAULT.joinToString("\n"))
@@ -330,6 +348,15 @@ class SettingsActivity : Activity() {
         root.addView(multi("bannedWords", config.bannedWords, 5))
         root.addView(note("一行一个词或短语。命中的草稿会被丢弃并重新生成，两次仍命中的话只显示给你看，不填入。"))
         root.addView(field("maxReplyChars", "回复最长字数", config.maxReplyChars.toString(), InputType.TYPE_CLASS_NUMBER))
+        root.addView(field("burstChance", "偶尔分条：概率 %（0 = 关闭）", config.burstChance.toString(), InputType.TYPE_CLASS_NUMBER))
+        root.addView(field("burstMax", "最多分几条（2~3）", config.burstMax.toString(), InputType.TYPE_CLASS_NUMBER))
+        root.addView(note(
+            "真人不是每句一回合 —— 想到一句发一句、再补一句解释都很常见。" +
+                "这里的概率决定「这次生成要不要拆成 2~3 条短消息」，默认 30%。\n" +
+                "拆出来的仍然**一条一条填**：第一条进输入框，你发出去了才填下一条。" +
+                "模型也会判断：一句话能说完就只回一条，不为了凑条数硬拆。" +
+                "设成 0 关掉。"
+        ))
 
         root.addView(section("输入法（可选，但某些平台必须）"))
         root.addView(action("去切换默认输入法") {
@@ -381,6 +408,12 @@ class SettingsActivity : Activity() {
         }
         config.greetingLines = inputs["greetingLines"]?.text?.toString().orEmpty()
             .split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+        // 三条按下标存，空串保留位置（"只填第三条"= 只发第三条，不能顶到前面去）
+        config.greetingMultiLines = listOf(
+            textOf("greetingM1"),
+            textOf("greetingM2"),
+            textOf("greetingM3"),
+        )
         // 分发模式下这三个 field 根本没建，textOf 会返回空串。
         // 写进去虽不影响 getter（它优先返回内置值），但会污染 sp ——
         // 万一哪天关掉分发模式，开发版就变成一套空配置。所以只在非分发版写。
@@ -396,6 +429,8 @@ class SettingsActivity : Activity() {
         config.personaJson = textOf("personaJson")
         config.bannedWords = textOf("bannedWords")
         config.maxReplyChars = intOf("maxReplyChars", config.maxReplyChars)
+        config.burstChance = intOf("burstChance", config.burstChance)
+        config.burstMax = intOf("burstMax", config.burstMax)
 
         // 身份 / 语气（personaJson）也是"人设"的一部分，而人设是按预设切换的。
         // 存完必须同步进当前预设 —— 否则下次切走再切回来，

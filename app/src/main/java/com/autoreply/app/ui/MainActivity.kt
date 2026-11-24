@@ -200,10 +200,12 @@ class MainActivity : Activity() {
             }
         }
         if (messages.isEmpty()) {
-            output.text = if (clipboardMode) {
-                "没拿到对方的话：先在聊天页长按对方消息复制，再回来点生成。"
-            } else {
-                "没读到消息，选择器可能失效。"
+            // 先分清"还没渲染"和"选择器失效"：前者让人去改配置就是纯浪费
+            val loading = NodeQuery.loadingHint(root)
+            output.text = when {
+                clipboardMode -> "没拿到对方的话：先在聊天页长按对方消息复制，再回来点生成。"
+                loading != null -> "$loading。等 1~2 秒再点一次。"
+                else -> "没读到消息，选择器可能失效。"
             }
             return
         }
@@ -316,6 +318,9 @@ class MainActivity : Activity() {
                                 append("\n草稿（已进剪贴板）：").append(outcome.text)
                                 if (copied) {
                                     append("\n\n回聊天页 → 点输入框 → 长按 → 粘贴 → 自己点发送。")
+                                    if (outcome.parts.size > 1) {
+                                        append("\n（共 ${outcome.parts.size} 条，按行分开发）")
+                                    }
                                 } else {
                                     append("\n\n剪贴板没写进去（被别的 App 占用？），请手动复制上面这段。")
                                 }
@@ -339,11 +344,11 @@ class MainActivity : Activity() {
                         // 断句：拆成 2~3 条发，只填第一段，其余排队等你发完再填。
                         // 和 ReplyRunner 里是同一套逻辑 —— 手动/自动两条路必须一致，
                         // 否则"手动能拆、自动不拆"这种差异查起来最费劲。
-                        // 固定开场白例外：库里一行就是一整句，拆开会丢问句。
-                        val parts = if (outcome.single) {
-                            listOf(outcome.text)
-                        } else {
-                            SentenceSplitter.split(outcome.text)
+                        // 三种来源：多发开场白的 parts → 整句 single → 按标点拆。
+                        val parts = when {
+                            outcome.parts.isNotEmpty() -> outcome.parts
+                            outcome.single -> listOf(outcome.text)
+                            else -> SentenceSplitter.split(outcome.text)
                         }
                         DraftQueue.reset(parts.drop(1))
 

@@ -657,27 +657,61 @@ class AutoReplyImeService : InputMethodService() {
         }
     }
 
-    /** 「用开场白」：从钩子库里挑一条不带槽位的写进去。 */
+    /**
+     * 「用开场白」：写一条开场白进输入框。
+     *
+     * 开了「多发开场白」时写第一条，并把后两条放进队列 ——
+     * 你发出第一条，CaptureService 检测到之后自动填第二条，依此类推。
+     * 仍然是"一条一条来"，不会一次全灌进输入框。
+     */
     private fun useGreetingHook() {
         val cfg = AppConfig(this)
+        // 面板里拿不到昵称/原话，带槽位的那几条填不上 → 只挑纯文本的
+        val multi = if (cfg.greetingMulti) {
+            cfg.greetingMultiLines.map { it.trim() }
+                .filter { it.isNotEmpty() && !it.contains("{") }
+        } else {
+            emptyList()
+        }
+        if (multi.isNotEmpty()) {
+            commitGreeting(multi.first())
+            val rest = multi.drop(1)
+            if (rest.isEmpty()) return
+            com.autoreply.app.core.guard.DraftQueue.reset(rest)
+            com.autoreply.app.capture.CaptureService.instance?.scheduleNextSegment()
+            setStatus("已写入第 1 条，发出后自动填下一条（共 ${multi.size} 条）")
+            refreshDraftLine()
+            return
+        }
+
         val lines = cfg.greetingLines.ifEmpty {
             com.autoreply.app.core.llm.GreetingHooks.DEFAULT
         }
-        // 面板里拿不到昵称/原话，带槽位的那几条填不上 → 只挑纯文本的
         val pick = lines.filter { !it.contains("{") }.randomOrNull()
         if (pick == null) {
-            setStatus("开场白库里没有可用的纯文本条目")
+            setStatus(
+                if (cfg.greetingMulti) {
+                    "多发的三条都带槽位或为空 —— 面板里填不上，改用单条库"
+                } else {
+                    "开场白库里没有可用的纯文本条目"
+                }
+            )
             return
         }
+        commitGreeting(pick)
+    }
+
+    /** 清掉我们自己的草稿再写入，避免和上一次的句子叠在一起。 */
+    private fun commitGreeting(text: String) {
         val ic = currentInputConnection
         if (ic == null) {
             setStatus("输入框没绑上，先点一下输入框")
             return
         }
         clearOwnDraft(ic)
-        ic.commitText(pick, 1)
-        lastCommitted = pick
-        setStatus("已写入：${pick.take(12)}")
+        ic.commitText(text, 1)
+        lastCommitted = text
+        setStatus("已写入：${text.take(12)}")
         refreshDraftLine()
     }
 

@@ -145,6 +145,23 @@ object NodeQuery {
         val scope = messageScope(root, profile)
         val rootRect = Rect()
         root.getBoundsInScreen(rootRect)
+
+        // 聊天内容区的上下边界（可选，见 PlatformProfile.areaTop）。
+        // 心遇改版后消息节点没有 id，只能按 TextView 类型找；
+        // 用「顶栏容器」「输入区容器」这两个有 id 的锚点夹出中间那块，
+        // 顶栏昵称和底部快捷语就被挡在外面了。
+        var areaTop = 0
+        var areaBottom = Int.MAX_VALUE
+        profile.areaTop.firstNotNullOfOrNull { firstMatch(root, listOf(it)) }?.let {
+            val b = Rect()
+            it.getBoundsInScreen(b)
+            if (b.height() > 0) areaTop = b.bottom
+        }
+        profile.areaBottom.firstNotNullOfOrNull { firstMatch(root, listOf(it)) }?.let {
+            val b = Rect()
+            it.getBoundsInScreen(b)
+            if (b.height() > 0) areaBottom = b.top
+        }
         // 左边缘三分点，用来判断这条是对方发的还是我发的。
         //
         // 原来用的是"中心点在中线左边"，遇到**长消息**就失效：
@@ -171,6 +188,12 @@ object NodeQuery {
                 val r = Rect()
                 n.getBoundsInScreen(r)
                 if (r.width() <= 0 || r.height() <= 0) continue
+                // 落在「聊天区」之外的一律不算消息（顶栏昵称、底部快捷语）
+                if (areaTop > 0 || areaBottom != Int.MAX_VALUE) {
+                    if (r.top < areaTop || r.bottom > areaBottom) continue
+                }
+                // 快捷语横滑条 / 挂件 WebView 里的文字，长得跟消息一样但不是
+                if (insideNoiseContainer(n)) continue
                 val dedupKey = "${r.left},${r.top},${r.right},${r.bottom}|$t"
                 if (!seen.add(dedupKey)) continue
                 // 「位置+文本」只能挡住 id 完全相同的两个节点。
@@ -227,8 +250,35 @@ object NodeQuery {
         return ""
     }
 
-    private val TIME_ONLY = Regex("^\\d{1,2}:\\d{2}$")
-    private val DATE_ONLY = Regex("^(昨天|今天|前天|星期[一二三四五六日]|\\d{1,2}月\\d{1,2}日)$")
+    private val TIME_ONLY =
+        Regex("^(今天|昨天|前天|凌晨|早上|上午|中午|下午|晚上|深夜)?\\s*\\d{1,2}:\\d{2}$")
+    private val DATE_ONLY =
+        Regex("^(昨天|今天|前天|星期[一二三四五六日])$|^\\d{1,2}月\\d{1,2}日(\\s*\\d{1,2}:\\d{2})?$")
+
+    /**
+     * 节点是不是在「不承载聊天记录」的容器里。
+     *
+     * 心遇真机上踩到的两类干扰：
+     *   - 底部快捷语（「哥哥，找到对象了吗？」）在 HorizontalScrollView 里，
+     *     按类型抓 TextView 时会把它当成对方说的话 —— 回复会答非所问；
+     *   - 挂件/活动是 WebView（「26感恩挂件」），文字同样会被读出来。
+     * 聊天记录在主列表里，这两类容器几乎不承载消息，往上找 8 层命中就跳过。
+     */
+    private fun insideNoiseContainer(node: AccessibilityNodeInfo): Boolean {
+        var cur: AccessibilityNodeInfo? = node
+        var depth = 0
+        while (cur != null && depth < 8) {
+            val cls = cur.className?.toString().orEmpty()
+            if (cls == "android.webkit.WebView" ||
+                cls == "android.widget.HorizontalScrollView"
+            ) {
+                return true
+            }
+            cur = cur.parent
+            depth++
+        }
+        return false
+    }
 
     private fun isRealMessage(text: String): Boolean {
         if (text.isEmpty()) return false
@@ -375,12 +425,66 @@ object NodeQuery {
         }
 
         return when {
-            matched == 0 -> "选择器一个都没命中；" + treeSamples(root)
+            matched == 0 -> buildString {
+                // 先看"是不是还没渲染出来"。心遇真机踩过：日志写「选择器一个都没命中」，
+                // 而节点里明明有 #loading_text「正在加载中…」—— 那是页面还在拉数据，
+                // 不是选择器坏了。把这两件事分开说，否则人会去改一份没问题的配置。
+                loadingHint(root)?.let { append(it).append("；") }
+                append("选择器一个都没命中；")
+                append(treeSamples(root))
+                // 改版的唯一线索：树上还剩哪些"看起来像消息"的 id
+                candidateIds(root).takeIf { it.isNotEmpty() }?.let {
+                    append("；可疑 id：").append(it)
+                }
+            }
             excluded == matched -> "命中 $matched 条，但全被当系统提示排掉了（例如「$sample」）"
             badBounds > 0 && excluded + badBounds == matched ->
                 "命中 $matched 条，但坐标全无效（可能不在可视区）"
             else -> "命中 $matched 条（排掉 $excluded 条），但一条都没读出来"
         }
+    }
+
+    /**
+     * 页面上有没有"加载中"的痕迹。
+     *
+     * 返回一句给人看的话，没有则返回 null。
+     * 判据刻意宽松（文本含「加载中」或 id 含 loading）：这类提示几乎只出现在
+     * 列表还没渲染完的时候，误判的代价只是"多等一秒"，漏判的代价是
+     * "让人去改一份本来正确的选择器"。
+     */
+    fun loadingHint(root: AccessibilityNodeInfo): String? {
+        var hit = ""
+        collect(root, maxDepth = 12) { n ->
+            if (hit.isEmpty()) {
+                val t = n.text?.toString()?.trim().orEmpty()
+                val id = n.viewIdResourceName?.substringAfterLast('/').orEmpty()
+                if (t.contains("加载中") || t.contains("正在加载") ||
+                    id.contains("loading", ignoreCase = true)
+                ) {
+                    hit = if (t.isEmpty()) "#$id" else "「${t.take(12)}」"
+                }
+            }
+            false
+        }
+        return if (hit.isEmpty()) null else "页面还在加载（$hit），等它渲染完"
+    }
+
+    /** 树上带 message/content/text_body 的 id，最多 4 个 —— 改版后新锚点的线索。 */
+    private fun candidateIds(root: AccessibilityNodeInfo): String {
+        val ids = LinkedHashSet<String>()
+        collect(root) { n ->
+            if (ids.size < 4) {
+                val id = n.viewIdResourceName?.substringAfterLast('/').orEmpty()
+                if (id.isNotEmpty() &&
+                    (id.contains("message", true) || id.contains("content", true) ||
+                        id.contains("text_body", true))
+                ) {
+                    ids.add("#$id")
+                }
+            }
+            false
+        }
+        return ids.joinToString(" ")
     }
 
     /** 全树概览，只在"选择器没命中"时才有意义 —— 用来发现改版后的新 id。 */

@@ -95,4 +95,44 @@ print(f"  跳过：{sorted(set(range(len(HOOKS))) - set(used4))}")
 for idx in sorted(set(range(len(HOOKS))) - set(used4)):
     print(f"    [{idx}] {HOOKS[idx]}")
 
+print("\n【5】多发开场白：留空保留位置、填不上跳过、只剩一条不拆")
+
+
+def multi_decide(lines, name, echo, time_word):
+    """复刻 ReplyEngine 里 greetingMulti 那段：返回 (text, parts)。"""
+    filled = []
+    for raw in lines:
+        s = raw.strip()
+        if not s:
+            continue
+        v = fill(s, name, echo, time_word)
+        if v:
+            filled.append(v)
+    if not filled:
+        return None, []
+    return "\n".join(filled), (filled if len(filled) > 1 else [])
+
+
+t, parts = multi_decide(["第一条", "", "第三条"], "小雅", "你好", "晚上")
+assert t == "第一条\n第三条", t
+assert parts == ["第一条", "第三条"], parts
+print(f"  · 三条里填两条 → text={t!r} parts={parts}")
+
+t2, parts2 = multi_decide(["只填这一条", "", ""], "小雅", "你好", "晚上")
+assert t2 == "只填这一条" and parts2 == [], (t2, parts2)
+print("  · 只填第一条 → single，parts 为空（走单条老路）")
+
+t3, _ = multi_decide(["", "", "只填第三条"], "小雅", "你好", "晚上")
+assert t3 == "只填第三条", "第三条不该被顶到第一条"
+print("  · 只填第三条 → 保留位置，只发第三条")
+
+t4, _ = multi_decide(["{昵称}，在吗", "", ""], "", "你好", "晚上")
+assert t4 is None, "昵称读不到时应整条跳过并回退到库"
+print("  · 昵称缺失 → 整条跳过，返回 None（调用方回退到库/模型）")
+
+t5, parts5 = multi_decide(["{昵称}在吗", "你在{时段}忙什么"], "小雅", "你好", "深夜")
+assert t5 == "小雅在吗\n你在深夜忙什么", t5
+assert all("{" not in s for s in parts5), "有花括号漏出来了"
+print(f"  · 带槽位两条 → {t5!r}（花括号都已替换）")
+
 print("\n全部断言通过")

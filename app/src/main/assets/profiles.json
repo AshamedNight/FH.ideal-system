@@ -55,11 +55,15 @@
     ]
   },
   "com.netease.moyi": {
-    "_note": "网易 moyi。2026-11-16 真机 dump。这是目前结构最规范的一个：id 全是语义化全名（不是混淆短名），且消息体用的是网易云信 SDK 的标准组件 nim_message_item_text_body —— 意味着同类接入云信 SDK 的 App 可以共用这套锚点。",
+    "_note": "网易 moyi（心遇）。**2026-11-24 改版后重写**，依据 `心遇修复dump.txt`：聊天页换成了自绘列表（`#biz_rn_single_chat_bg_group`），消息 TextView **一个 id 都没有**，只能按 className 找。为了不把顶栏昵称、底部快捷语、资料卡片当成消息，用了三层过滤：①areaTop/areaBottom 用有 id 的 `#header_container` 和 `#bottom_container` 夹出聊天区；②代码里跳过 WebView / HorizontalScrollView 里的文字（挂件、快捷语）；③exclude 兜资料卡片文案。旧版（11-16）的 nim_message_item_text_body / editTextView / titleView 仍保留在前面当候选，遇到老版本客户端还能用。输入框没有 id，靠 className=EditText 的兜底。",
     "messageList": [
       {
         "by": "viewId",
         "value": "biz_msg_chat_message_list_view"
+      },
+      {
+        "by": "viewId",
+        "value": "biz_rn_single_chat_bg_group"
       },
       {
         "by": "className",
@@ -74,12 +78,20 @@
       {
         "by": "viewId",
         "value": "message_item_text_body"
+      },
+      {
+        "by": "className",
+        "value": "android.widget.TextView"
       }
     ],
     "input": [
       {
         "by": "viewId",
         "value": "editTextView"
+      },
+      {
+        "by": "viewId",
+        "value": "editTextContainer"
       },
       {
         "by": "className",
@@ -90,11 +102,37 @@
     "pageHint": [
       {
         "by": "viewId",
+        "value": "tv_name"
+      },
+      {
+        "by": "viewId",
         "value": "editTextView"
       },
       {
         "by": "viewId",
         "value": "biz_msg_chat_message_list_view"
+      }
+    ],
+    "peerName": [
+      {
+        "by": "viewId",
+        "value": "tv_name"
+      },
+      {
+        "by": "viewId",
+        "value": "titleView"
+      }
+    ],
+    "areaTop": [
+      {
+        "by": "viewId",
+        "value": "header_container"
+      }
+    ],
+    "areaBottom": [
+      {
+        "by": "viewId",
+        "value": "bottom_container"
       }
     ],
     "exclude": [
@@ -108,6 +146,12 @@
       "职业：",
       "身高：",
       "请输入信息",
+      "请输入消息",
+      "年龄：",
+      "家乡：",
+      "更多",
+      "正在加载中",
+      "加载中",
       "送给你",
       "回赠礼物",
       "爱情泡泡",
@@ -141,12 +185,6 @@
       {
         "by": "viewId",
         "value": "ll_root_view"
-      }
-    ],
-    "peerName": [
-      {
-        "by": "viewId",
-        "value": "titleView"
       }
     ]
   },

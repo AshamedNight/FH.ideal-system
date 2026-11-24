@@ -326,6 +326,21 @@ class CaptureService : AccessibilityService() {
     private val nextMissLimit = 3
 
     /**
+     * 连点「待命」的起点：一轮处理完、暂时没有新未读时记下时刻。
+     *
+     * 0 表示不在待命。存在的理由是真机上的一段时间差：
+     * 一轮连点结束 → 几分钟后对方才回 → 那时连点早就停了，新会话永远等不到自动切换。
+     * 现在改成边等边看，超过 [BATCH_WAIT_LIMIT_MS] 才真正结束。
+     */
+    private var batchWaitStart = 0L
+
+    /** 待命最长等 5 分钟：再久就该由人决定要不要继续。 */
+    private val BATCH_WAIT_LIMIT_MS = 5 * 60_000L
+
+    /** 待命期间每 10 秒看一次「下一个未读」有没有出现。 */
+    private val BATCH_WAIT_POLL_MS = 10_000L
+
+    /**
      * 最近一次成功读到的目标包名。
      *
      * 兜底用：用户很可能在设置里填了应用名（「同城夜聊」）而不是包名
@@ -339,6 +354,7 @@ class CaptureService : AccessibilityService() {
         if (batchActive) return
         batchActive = true
         batchLeft = count
+        batchWaitStart = 0L
         logAuto("连点开始：$count 个，正在切到目标应用…")
 
         // **必须先把目标应用拉到前台。**
@@ -421,6 +437,7 @@ class CaptureService : AccessibilityService() {
     fun stopBatch(note: String = "连点已停止") {
         batchActive = false
         batchLeft = 0
+        batchWaitStart = 0L
         batchWatchdog?.let { mainHandler.removeCallbacks(it) }
         batchWatchdog = null
         // 没发完的断句一起丢掉：停下来了就不该再往任何会话里填东西
@@ -563,13 +580,35 @@ class CaptureService : AccessibilityService() {
             // 换 App 是整套流程里最显眼的动作（前台连切两次），而"这个平台真的没有未读了"
             // 和"按钮没认出来"在代码里长得一模一样 —— 判错的代价是当着人来回弹。
             // 现在改成：停在这里说清楚，要不要换由人点面板上的「切下一个平台」。
-            stopBatch(
-                "这个平台没有可切的未读了。" +
-                    "要换到另一个 App，点输入法面板第 1 页的「切下一个平台」"
-            )
+            //
+            // **但在同一个平台里「等新未读」是要的。** 真机上踩到：一轮处理完、
+            // 暂时没有未读，过了几分钟对方才回 —— 那时连点已经停了，
+            // 于是新会话永远等不到自动切换。这里改成"待命"：
+            // 每 10 秒看一眼，最多等 5 分钟；这期间只要「下一个未读」出现就接着走。
+            // 当前会话来了新消息也没关系 —— batchStep 开头会先处理它。
+            // 第一次进待命：记下起点，说明在等什么
+            if (batchWaitStart == 0L) {
+                batchWaitStart = SystemClock.elapsedRealtime()
+                logAuto(
+                    "连点待命：暂时没有未读，最多等 ${BATCH_WAIT_LIMIT_MS / 60_000} 分钟 —— " +
+                        "有新未读会自动切过去（点「停止」可结束）"
+                )
+                mainHandler.postDelayed({ batchStep() }, BATCH_WAIT_POLL_MS)
+                return
+            }
+            if (SystemClock.elapsedRealtime() - batchWaitStart >= BATCH_WAIT_LIMIT_MS) {
+                batchWaitStart = 0L
+                stopBatch(
+                    "连点结束：等了 ${BATCH_WAIT_LIMIT_MS / 60_000} 分钟没有新未读。" +
+                        "要换到另一个 App，点输入法面板的「切下一个平台」"
+                )
+                return
+            }
+            mainHandler.postDelayed({ batchStep() }, BATCH_WAIT_POLL_MS)
             return
         }
         nextMiss = 0
+        batchWaitStart = 0L
 
         // 换会话了，上一段没发完的断句必须丢掉，
         // 否则会把 A 会话的第二句发给 B

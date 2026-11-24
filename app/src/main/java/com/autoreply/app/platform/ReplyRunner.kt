@@ -131,6 +131,15 @@ class ReplyRunner(
             }
             // 界面明明有消息、程序说没有：这是最难自己查的失败。
             // 把"树长什么样"写进首页日志一次（日志只留 4 条，所以只在失败时写）。
+            val loading = NodeQuery.loadingHint(root)
+            if (loading != null) {
+                // 还在加载 → 这次不算"读不到消息"，1.5 秒后让界面事件再触发一轮。
+                // 心遇真机上这条日志原来写的是「选择器一个都没命中」，人被带着去改配置了。
+                service.postponeAuto(1_500)
+                service.logAuto("$loading，稍后自动重试")
+                finish(emptyList(), "", "$loading，稍等再试", false, false, onDone)
+                return
+            }
             service.logAuto("读不到消息 · " + NodeQuery.emptyDiagnosis(root, profile))
             finish(emptyList(), "", "没读到消息 —— 首页日志里有诊断", false, false, onDone)
             return
@@ -275,7 +284,14 @@ class ReplyRunner(
             service.noteFill()
             config.recordUsage(outcome.inputTokens, outcome.outputTokens)
             val note = if (copied) {
-                "已复制 · 回聊天页长按粘贴，自己点发送"
+                // 多发开场白在剪贴板模式下是整段复制的（没有输入框可自动填），
+                // 得说清楚"这几行是分开发的"，否则用户会一次全粘成一条。
+                val howMany = if (outcome.parts.size > 1) {
+                    "（共 ${outcome.parts.size} 条，按行分开发）"
+                } else {
+                    ""
+                }
+                "已复制$howMany · 回聊天页长按粘贴，自己点发送"
             } else {
                 "剪贴板写不进去（被别的 App 占用？）"
             }
@@ -294,12 +310,14 @@ class ReplyRunner(
                 // 断句：一句话拆成 2~3 条发，模仿真人"想到一句发一句"。
                 // 只填第一段，剩下的排队 —— 每段都要你单独点一次发送。
                 //
-                // 固定开场白例外（single=true）：库里每一行都是写好的一整句，
-                // 按逗号拆开会把问句甩到第二条，用户只点一次就丢钩子。
-                val parts = if (outcome.single) {
-                    listOf(outcome.text)
-                } else {
-                    SentenceSplitter.split(outcome.text)
+                // 三种来源，优先级从高到低：
+                //   ① outcome.parts —— 多发开场白：用户自己写的几条整句，绝不能拆
+                //   ② single=true   —— 库里的一行也是一整句（拆开会丢问句）
+                //   ③ 其余          —— 交给 SentenceSplitter 按标点拆
+                val parts = when {
+                    outcome.parts.isNotEmpty() -> outcome.parts
+                    outcome.single -> listOf(outcome.text)
+                    else -> SentenceSplitter.split(outcome.text)
                 }
                 DraftQueue.reset(parts.drop(1))
 

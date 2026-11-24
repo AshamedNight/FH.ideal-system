@@ -49,6 +49,11 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
             val estimatedInputTokens: Int = 0,
             /** 已经是完整一条，不要再断句。见 [ReplyEngine.Result.Draft.single]。 */
             val single: Boolean = false,
+            /**
+             * 已经切好的多条（多发开场白）。非空时按它一条一条填，
+             * 不再过 SentenceSplitter —— 用户写的三句是整句，不该按逗号再拆。
+             */
+            val parts: List<String> = emptyList(),
         ) : Outcome()
 
         /** 生成了，但风险太高不自动填。只把内容摆出来让人自己决定。 */
@@ -224,6 +229,7 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
                 outputTokens = draftRes.outputTokens,
                 estimatedInputTokens = draftRes.estimatedInputTokens,
                 single = draftRes.single,
+                parts = draftRes.parts,
             )
         } else {
             step("⑤ 风险：${risk.level}（${risk.hits.joinToString("、")}）→ 不填")

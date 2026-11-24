@@ -2,6 +2,7 @@ package com.autoreply.app.core.llm
 
 import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.persona.Persona
+import kotlin.random.Random
 
 /**
  * 一轮对话。**故意不直接用 platform 的 ChatMessage** ——
@@ -53,6 +54,13 @@ class ReplyEngine(
              * 用户只点一次发送就只发出前半句 —— 问句丢了，这句开场白等于白发。
              */
             val single: Boolean = false,
+            /**
+             * 已经切好的多条消息（目前只有「多发开场白」会用到）。
+             *
+             * 非空时 `text` 是这几条拼起来的全文（给人看），真正填字按这个列表
+             * 一条一条来：先填第一条，剩下的进队列，发出去再填下一条。
+             */
+            val parts: List<String> = emptyList(),
         ) : Result()
         /** 不该回：要么没有对方的消息，要么触了输入侧边界。 */
         data class Blocked(val reason: String) : Result()
@@ -95,6 +103,30 @@ class ReplyEngine(
 
         val echo = turns.lastOrNull { it.fromOther }?.text.orEmpty()
         if (config.greetingEnabled && !iSaidAlready && peerOpenedWithGreeting) {
+            // ---- 多发开场白：用户自己写的第一/二/三条，按顺序一条一条填 ----
+            //
+            // 优先级高于开场白库：勾了「多发」就是明确要用这三条。
+            // 依然遵守"一条一条来"—— 这里只决定要发哪几句，
+            // 什么时候填第二条由 DraftQueue + 发送检测决定，绝不连发。
+            if (config.greetingMulti) {
+                val filled = config.greetingMultiLines
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    // 槽位填不上（整条只有 {昵称}、而昵称没读到）就跳过这条，
+                    // 和开场白库同一套规则 —— 绝不把花括号发出去
+                    .mapNotNull { GreetingHooks.fill(it, peer, echo, timeWord()) }
+                if (filled.isNotEmpty()) {
+                    return Result.Draft(
+                        text = filled.joinToString("\n"),
+                        attempts = 1,
+                        single = true,
+                        // 只有一条时 parts 留空，走"单条"那条老路更简单
+                        parts = if (filled.size > 1) filled else emptyList(),
+                    )
+                }
+                // 三条全空或全填不上 → 往下走库 / 模型，别让用户对着空白卡住
+            }
+
             // 用户自己配的库优先。
             //
             // 这一段的旧实现是 `chunked(3)` + 按「对方那句话的 hashCode」取模选组，
@@ -123,7 +155,12 @@ class ReplyEngine(
         // 长度跟着对方走：对方说了一大段，回一句 15 字会显得敷衍；
         // 对方就几个字，回 70 字又像在写小作文。
         // 这是真人最自然的节奏，也是"接不上话"和"啰嗦"两个毛病的同一个解。
-        val system = buildSystem(persona, adaptiveMaxChars(turns, config.maxReplyChars))
+        //
+        // 分条（偶尔）：掷一次骰子，命中就让模型把它拆成 2~3 条短消息。
+        // **掷骰子只发生在这一处**，所以同一次生成里重试的几次都保持同一策略，
+        // 不会"第一次单条、重写时又变三条"。
+        val burst = config.burstChance > 0 && Random.nextInt(100) < config.burstChance
+        val system = buildSystem(persona, adaptiveMaxChars(turns, config.maxReplyChars), burst)
         val baseUser = buildUser(turns)
         val client = LlmClient(effectiveBaseUrl, config.llmApiKey, config.llmModel, config.llmProxy)
 
@@ -180,7 +217,28 @@ class ReplyEngine(
             }
 
             val hit = (persona.tabooWords + userBanned).firstOrNull { text.contains(it) }
-            if (hit == null) return Result.Draft(text, attempt, inTokens, outTokens, estIn)
+            if (hit == null) {
+                // 分条：模型按提示用换行分开的几句，各自是一条要发出去的消息。
+                // 只有真的拆出 2 条以上才走 parts —— 只回了一条就和普通回复完全一样。
+                if (burst) {
+                    val parts = text.split('\n')
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .take(config.burstMax)
+                    if (parts.size >= 2) {
+                        return Result.Draft(
+                            text = parts.joinToString("\n"),
+                            attempts = attempt,
+                            inputTokens = inTokens,
+                            outputTokens = outTokens,
+                            estimatedInputTokens = estIn,
+                            single = true,
+                            parts = parts,
+                        )
+                    }
+                }
+                return Result.Draft(text, attempt, inTokens, outTokens, estIn)
+            }
             lastHit = hit
         }
 
@@ -302,7 +360,7 @@ class ReplyEngine(
         return "${period}${hour}点${weekend}。$ban".trim()
     }
 
-    private fun buildSystem(persona: Persona, maxChars: Int): String = buildString {
+    private fun buildSystem(persona: Persona, maxChars: Int, burst: Boolean = false): String = buildString {
         appendLine(persona.identity.trim())
 
         // 注：「现在几点」放在 buildUser 里，不放这里。
@@ -325,6 +383,19 @@ class ReplyEngine(
 
         appendLine()
         appendLine(persona.styleRules(maxChars))
+
+        // 偶尔分条。只在这一轮加，不加的时候提示词一个字都没变（前缀缓存不受影响）。
+        //
+        // 关键是"可以不拆"：不给出路的话，模型会把每句都强行拆成三条，
+        // 于是每条消息都变成连发，比单条更像脚本。
+        if (burst) {
+            appendLine()
+            appendLine("# 这一次可以分几条发")
+            appendLine("如果这句话本来就有两三个小点，就拆成 2~3 条，每条单独一行：")
+            appendLine("- 每条都是能独立成立的短句，不超过 20 字，别用「1.」「-」这类列表符号")
+            appendLine("- 顺序按你想说的先后，第一行最要紧")
+            appendLine("- 一句话就能说完的，就只回一行 —— 不要为了凑条数硬拆")
+        }
 
         if (persona.knowledge.isNotEmpty()) {
             appendLine()
