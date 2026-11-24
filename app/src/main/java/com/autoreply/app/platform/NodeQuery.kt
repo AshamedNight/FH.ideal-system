@@ -461,12 +461,37 @@ object NodeQuery {
                 if (t.contains("加载中") || t.contains("正在加载") ||
                     id.contains("loading", ignoreCase = true)
                 ) {
-                    hit = if (t.isEmpty()) "#$id" else "「${t.take(12)}」"
+                    // **排除「加载更多」那种常驻转圈**。心遇的 #loading_text 挂在
+                    // #fetch_more_container 里，是列表顶部的下拉加载提示 —— 消息早就
+                    // 渲染完了它也一直在树上。不排除的话，用户会看到"明明有消息却提示
+                    // 还在加载"（真机就是你截图那个现象）。
+                    if (!insideLoadMore(n)) {
+                        hit = if (t.isEmpty()) "#$id" else "「${t.take(12)}」"
+                    }
                 }
             }
             false
         }
         return if (hit.isEmpty()) null else "页面还在加载（$hit），等它渲染完"
+    }
+
+    /** 祖先里有"加载更多 / 下拉刷新"容器 → 那个转圈说的是"还有历史"，不是"没加载完"。 */
+    private fun insideLoadMore(node: AccessibilityNodeInfo): Boolean {
+        var cur: AccessibilityNodeInfo? = node.parent
+        var depth = 0
+        while (cur != null && depth < 8) {
+            val id = cur.viewIdResourceName?.substringAfterLast('/').orEmpty()
+            if (id.contains("fetch_more", ignoreCase = true) ||
+                id.contains("load_more", ignoreCase = true) ||
+                id.contains("refresh", ignoreCase = true) ||
+                id.contains("footer", ignoreCase = true)
+            ) {
+                return true
+            }
+            cur = cur.parent
+            depth++
+        }
+        return false
     }
 
     /** 树上带 message/content/text_body 的 id，最多 4 个 —— 改版后新锚点的线索。 */

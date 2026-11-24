@@ -55,15 +55,11 @@
     ]
   },
   "com.netease.moyi": {
-    "_note": "网易 moyi（心遇）。**2026-11-24 改版后重写**，依据 `心遇修复dump.txt`：聊天页换成了自绘列表（`#biz_rn_single_chat_bg_group`），消息 TextView **一个 id 都没有**，只能按 className 找。为了不把顶栏昵称、底部快捷语、资料卡片当成消息，用了三层过滤：①areaTop/areaBottom 用有 id 的 `#header_container` 和 `#bottom_container` 夹出聊天区；②代码里跳过 WebView / HorizontalScrollView 里的文字（挂件、快捷语）；③exclude 兜资料卡片文案。旧版（11-16）的 nim_message_item_text_body / editTextView / titleView 仍保留在前面当候选，遇到老版本客户端还能用。输入框没有 id，靠 className=EditText 的兜底。",
+    "_note": "网易 moyi（心遇）。**2026-11-24 改版后重写**，依据 `心遇修复dump.txt`：聊天页换成自绘列表，消息 TextView **一个 id 都没有**，只能按 className 找。三层过滤：①areaTop/areaBottom 用有 id 的 `#header_container` 和 `#bottom_container` 夹出聊天区；②代码里跳过 WebView / HorizontalScrollView 里的文字（挂件、快捷语）；③exclude 兜资料卡片文案。**踩过的坑：`#biz_rn_single_chat_bg_group` 绝不能当 messageList** —— 它只包背景、顶栏、加载条和输入区，消息列表在它的**兄弟分支**上；配了它，作用域会把消息全挡在外面，表现就是「抓取能看到『你好』、生成却说读不到」。所以 messageList 只留旧版锚点，新版靠 area 过滤、作用域退回整棵树。旧版的 nim_message_item_text_body / editTextView / titleView 仍留作候选。输入框没有 id，靠 className=EditText 兜底。",
     "messageList": [
       {
         "by": "viewId",
         "value": "biz_msg_chat_message_list_view"
-      },
-      {
-        "by": "viewId",
-        "value": "biz_rn_single_chat_bg_group"
       },
       {
         "by": "className",

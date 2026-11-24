@@ -123,6 +123,12 @@ Android 半自动回复工具：**读消息 → 生成草稿 → 填进输入框
   现在用 `#header_container` / `#bottom_container` 夹出聊天区、按 `TextView` 类型找消息，
   并跳过 WebView（挂件）和 HorizontalScrollView（底部快捷语）里的文字；
   昵称改读 `#tv_name`。旧版的 `nim_message_item_text_body` 等锚点仍留作候选。
+  - 坑一：`#biz_rn_single_chat_bg_group` **不能**当 messageList —— 它只包背景、顶栏、
+    加载条和输入区，消息列表在它的兄弟分支上；配了它就变成「抓取能看到、生成读不到」。
+  - 坑二：`#loading_text` 是列表顶部「加载更多」的常驻转圈，不代表页面没加载完，
+    已按祖先容器（fetch_more / load_more / refresh / footer）排除。
+  - 手动点「生成下一条」读空时，会换一份新根节点重读一次
+    （面板刚弹出时目标 App 的列表节点会短暂缺失）。
 - **聊天记录（默认关）**：设置页可打开「把读到的对话记在本机」。按天写
   `filesDir/chatlog/YYYY-MM-DD.txt`，同时记「对方 / 我」和**应用生成的草稿**
   （标明已填入、已复制、仅草稿），方便复盘哪句是 AI 写的、效果如何。

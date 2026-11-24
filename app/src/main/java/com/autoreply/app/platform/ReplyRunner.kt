@@ -3,6 +3,7 @@ package com.autoreply.app.platform
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import com.autoreply.app.capture.CaptureService
 import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.guard.DraftQueue
@@ -65,7 +66,8 @@ class ReplyRunner(
         notifyPeer: String? = null,
         onDone: ((Result) -> Unit)? = null,
     ) {
-        val root = service.targetRoot()
+        // var：读空重读时要换一份新的根节点（旧的那份子节点可能已经被回收）
+        var root = service.targetRoot()
         if (root == null) {
             finish(emptyList(), "", "目标界面不在前台", false, false, onDone)
             return
@@ -87,6 +89,23 @@ class ReplyRunner(
         val clipboardMode = config.clipboardOnly || profile.clipboardPreferred
 
         var messages = NodeQuery.readMessages(root, profile)
+        // 读空先重读一次，别急着下结论。
+        //
+        // 真机现象（心遇）：IME 面板刚弹出来时，目标 App 的列表节点会短暂缺失，
+        // 读一次是空的，状态行就报"还在加载"—— 而屏幕上明明有消息，
+        // 再点一次又好了。窗口切换/焦点变化那一两百毫秒就是这样。
+        // 这里等一拍、换一份新的根节点再读，把这类瞬时缺失挡掉。
+        // 只在**手动**点击时重读。自动触发是事件驱动的，界面一变还会再来一次，
+        // 为了它在这睡 400 毫秒只会拖慢主线程；而手动点击是一次性的，
+        // 用户正盯着屏幕等结果，这一拍值得。
+        if (messages.isEmpty() && manual) {
+            SystemClock.sleep(400)
+            root = service.targetRoot() ?: root
+            messages = NodeQuery.readMessages(root, profile)
+            if (messages.isNotEmpty()) {
+                service.logAuto("第一次没读到，重读成功（${messages.size} 条）")
+            }
+        }
         if (messages.isEmpty() && !notifyText.isNullOrBlank()) {
             // 退而用通知当上下文。
             //
@@ -130,17 +149,17 @@ class ReplyRunner(
                 return
             }
             // 界面明明有消息、程序说没有：这是最难自己查的失败。
-            // 把"树长什么样"写进首页日志一次（日志只留 4 条，所以只在失败时写）。
+            // **诊断一定要先写进日志**（含命中/排除/坐标各几条），
+            // 否则只剩一句"还在加载"，下次又只能靠猜。
+            val diag = NodeQuery.emptyDiagnosis(root, profile)
+            service.logAuto("读不到消息 · $diag")
             val loading = NodeQuery.loadingHint(root)
             if (loading != null) {
                 // 还在加载 → 这次不算"读不到消息"，1.5 秒后让界面事件再触发一轮。
-                // 心遇真机上这条日志原来写的是「选择器一个都没命中」，人被带着去改配置了。
                 service.postponeAuto(1_500)
-                service.logAuto("$loading，稍后自动重试")
                 finish(emptyList(), "", "$loading，稍等再试", false, false, onDone)
                 return
             }
-            service.logAuto("读不到消息 · " + NodeQuery.emptyDiagnosis(root, profile))
             finish(emptyList(), "", "没读到消息 —— 首页日志里有诊断", false, false, onDone)
             return
         }

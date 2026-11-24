@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.app.Activity
 import android.widget.Button
@@ -194,6 +195,13 @@ class MainActivity : Activity() {
         // 页面抓不到时，用户长按复制的对方原话就是上下文。
         val clipboardMode = config.clipboardOnly || profile.clipboardPreferred
         var messages = NodeQuery.readMessages(root, profile)
+        // 读空先重读一次：面板刚弹出时目标 App 的列表节点会短暂缺失（心遇真机），
+        // 等一拍、换一份新根再读，比直接报"没读到"有用得多。
+        if (messages.isEmpty() && !clipboardMode) {
+            SystemClock.sleep(400)
+            val fresh = service.targetRoot() ?: root
+            messages = NodeQuery.readMessages(fresh, profile)
+        }
         if (messages.isEmpty() && clipboardMode) {
             ClipboardPeerText.read(this, config)?.let {
                 messages = listOf(ChatMessage(it, fromOther = true, rect = Rect()))
@@ -205,7 +213,7 @@ class MainActivity : Activity() {
             output.text = when {
                 clipboardMode -> "没拿到对方的话：先在聊天页长按对方消息复制，再回来点生成。"
                 loading != null -> "$loading。等 1~2 秒再点一次。"
-                else -> "没读到消息，选择器可能失效。"
+                else -> "没读到消息，选择器可能失效。\n" + NodeQuery.emptyDiagnosis(root, profile)
             }
             return
         }
