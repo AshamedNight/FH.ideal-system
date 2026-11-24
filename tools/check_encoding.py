@@ -101,10 +101,42 @@ def scan_comments(raw):
     return problems
 
 
+def scan_continuation(raw):
+    """上一行以 `}` / `)` 收尾、下一行却以二元运算符开头 —— Kotlin 不允许。
+
+    `?.use { it.write(bytes) }` 换行再接 `!= null` 时，`}` 就结束了这条表达式，
+    下一行的 `!=` 成了语法错误的起点，编译器报 `Expecting an element`，
+    连着一条 `Type mismatch: inferred type is Boolean? but Boolean was expected`。
+
+    只查 `!=` `==` `&&` `||` 四种：`?:` 在行首是**合法**的（Elvis 例外，
+    项目里已经这么写了很多处），不能误报。
+    """
+    problems = []
+    prev_line = ""
+    prev_no = 0
+    for no, line in enumerate(raw.splitlines(), 1):
+        s = line.strip()
+        if not s:
+            continue
+        # KDoc / 块注释里的内容（以 * 开头）不参与判断
+        if s.startswith("*") or s.startswith("//"):
+            prev_line = line
+            prev_no = no
+            continue
+        if prev_line.rstrip().endswith(("}", ")")) and s.startswith(("!=", "==", "&&", "||")):
+            problems.append(
+                f"{no} 以运算符开头（上一行第 {prev_no} 行以括号收尾）→ {s[:40]}"
+            )
+        prev_line = line
+        prev_no = no
+    return problems
+
+
 def main() -> int:
     bad_chars = []
     bad_strings = []
     bad_comments = []
+    bad_lines = []
 
     for root in ROOTS:
         for dirpath, _, files in os.walk(root):
@@ -122,6 +154,8 @@ def main() -> int:
                     continue
                 for msg in scan_comments(raw):
                     bad_comments.append(f"{path}:{msg}")
+                for msg in scan_continuation(raw):
+                    bad_lines.append(f"{path}:{msg}")
                 # 引号数奇数的行 = 这行字符串没闭合（跳过注释和 KDoc 起始行）
                 for i, ln in enumerate(raw.split("\n"), 1):
                     st = ln.strip()
@@ -147,6 +181,11 @@ def main() -> int:
         ok = False
         print("  ✗ 块注释有问题（Kotlin 的 /* */ 可以嵌套，多半是文档里写了 /*）：")
         for b in bad_comments:
+            print("     " + b)
+    if bad_lines:
+        ok = False
+        print("  ✗ 续行写了二元运算符（Kotlin 不允许以 != == && || 开新行）：")
+        for b in bad_lines:
             print("     " + b)
     if ok:
         print("  ✓ 通过")

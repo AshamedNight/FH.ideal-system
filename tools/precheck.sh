@@ -84,13 +84,14 @@ else
     say "  （没有 python，跳过）"
 fi
 
-say "== 7. 乱码字符 / 字符串闭合 / 块注释嵌套 =="
+say "== 7. 乱码字符 / 字符串闭合 / 块注释嵌套 / 续行运算符 =="
 # 三项都是 CI 报错但极难看懂的：
 #   乱码在界面上是个方块；
 #   字符串没闭合会一次报四五条 "Expecting '"'" 且位置对不上真实原因；
 #   块注释里写了"斜杠星号"（例如文档里提 assets 下的 json 文件名）会**再开一层注释**
 #   —— Kotlin 的注释可以嵌套 —— 后面整个文件被吞掉，
-#   报 `Missing '}'` + 满屏 Unresolved reference，真因离报错位置几百行。
+#   报 `Missing '}'` + 满屏 Unresolved reference，真因离报错位置几百行；
+#   `}` 收尾后换行接 `!=` 之类二元运算符 —— Kotlin 不允许，报 `Expecting an element`。
 if command -v python >/dev/null 2>&1; then
     python tools/check_encoding.py || fail=1
 else

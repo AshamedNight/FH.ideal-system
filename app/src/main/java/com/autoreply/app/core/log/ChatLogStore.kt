@@ -34,12 +34,25 @@ object ChatLogStore {
     data class Entry(val text: String, val fromOther: Boolean)
 
     /**
-     * 进程内去重：同一条消息在一次运行里会被读到很多次（判定、填入、连点各读一次），
-     * 不去重就会写成几十行重复。
+     * 进程内去重：同一条消息在一次运行里会被读到很多次（判定、填入、连点各读一次）。
+     *
+     * 用有界 LinkedHashSet 而不是覆写 `removeEldestEntry` —— 后者要覆写
+     * Java 的 protected 方法，签名对不上就是编译错误，而这条路径每天只跑几百次，
+     * 手动淘汰一点不麻烦。
      */
-    private val seen = object : LinkedHashMap<String, Boolean>(512, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>?) =
-            size > 800
+    private val seen = LinkedHashSet<String>()
+
+    /** 记一笔；已经记过返回 false。超过 800 条淘汰最早的。 */
+    private fun remember(fp: String): Boolean {
+        if (!seen.add(fp)) return false
+        if (seen.size > 800) {
+            val it = seen.iterator()
+            if (it.hasNext()) {
+                it.next()
+                it.remove()
+            }
+        }
+        return true
     }
 
     private var lastCleanupDay = 0L
@@ -90,8 +103,11 @@ object ChatLogStore {
         val rewrite = start == 0 && cursor.isNotEmpty()
         for (e in fresh) {
             val fp = "$platform|$peer|${mark(e)}"
-            if (rewrite && seen.put(fp, true) != null) continue
-            if (!rewrite) seen[fp] = true
+            if (rewrite) {
+                if (!remember(fp)) continue
+            } else {
+                remember(fp)
+            }
             append(file, "[$tm] ${peer.ifBlank { "未知会话" }} ${if (e.fromOther) "对方" else "我"}：${e.text}")
         }
         sp.edit().putString(key, mark(list.last())).apply()
@@ -114,7 +130,7 @@ object ChatLogStore {
     ) {
         if (text.isBlank()) return
         val fp = "$platform|$peer|D|${text.take(120)}"
-        if (seen.put(fp, true) != null) return
+        if (!remember(fp)) return
         append(
             dayFile(context, now),
             "[${hhmm(now)}] ${peer.ifBlank { "未知会话" }} 草稿（$delivery）：$text",

@@ -445,15 +445,21 @@ class SettingsActivity : Activity() {
         pendingExport = ""
         val uri = data?.data
         if (resultCode != RESULT_OK || uri == null || text.isEmpty()) return
+        val bytes = text.toByteArray(Charsets.UTF_8)
+        // 刻意分步写，不用 `?.use { ... } != null` 这种一行流：
+        // `}` 之后换行再接 `!=` 会被 Kotlin 当成两条语句的边界，
+        // 编译报的是「Expecting an element」，而报错位置指在 `!=` 上（踩过）。
         val written = runCatching {
-            contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
-                != null
+            val out = contentResolver.openOutputStream(uri)
+            if (out == null) {
+                false
+            } else {
+                out.use { it.write(bytes) }
+                true
+            }
         }.getOrDefault(false)
-        Toast.makeText(
-            this,
-            if (written) "已导出 ${text.length} 个字符" else "导出失败：那个位置写不进去",
-            Toast.LENGTH_LONG,
-        ).show()
+        val msg = if (written) "已导出 ${text.length} 个字符" else "导出失败：那个位置写不进去"
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
     }
 
     // ------------------------------------------------------------ UI 小工具
