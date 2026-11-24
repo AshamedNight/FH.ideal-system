@@ -127,8 +127,10 @@ class SettingsActivity : Activity() {
             root.addView(field("llmProxy", "代理（可选）", config.llmProxy, InputType.TYPE_TEXT_VARIATION_URI))
             root.addView(note("代理只作用于「发往模型接口」的请求，目标 App 的流量不经过它 —— 所以不必为此打开手机的系统级 VPN。\n例：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080（Termux 里跑的代理填这里）。走电脑中转时留空。"))
             root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，也可改成电脑中转：http://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
+            // 模型名也只给开发版改：分发包里成员改成一个上游不认的名字，
+            // 报错是「模型不存在」，看着像中转坏了。固定值在 distribution.json 的 model。
+            root.addView(field("llmModel", "模型名", config.llmModel, InputType.TYPE_CLASS_TEXT))
         }
-        root.addView(field("llmModel", "模型名", config.llmModel, InputType.TYPE_CLASS_TEXT))
 
         root.addView(section("剪贴板交付（抓不到输入框时用）"))
         root.addView(
@@ -349,8 +351,10 @@ class SettingsActivity : Activity() {
             config.llmBaseUrl = textOf("llmBaseUrl")
             config.llmApiKey = textOf("llmApiKey")
             config.llmProxy = textOf("llmProxy")
+            // 这三个输入框在分发模式下根本没建，textOf 会返回空串 ——
+            // 无条件写回去等于把配置清空。所以整段一起跳过。
+            config.llmModel = textOf("llmModel")
         }
-        config.llmModel = textOf("llmModel")
         config.persona = textOf("persona")
         config.personaJson = textOf("personaJson")
         config.bannedWords = textOf("bannedWords")

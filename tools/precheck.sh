@@ -9,6 +9,10 @@
 #   3. findViewById 的 id 没在 layout 或 ids.xml 里声明
 #   4. Manifest 声明的类没有对应文件
 #   5. assets 里的 JSON 不合法（运行时才炸，最隐蔽）
+#   6. 用了项目内的类却没 import
+#   7. 乱码字符 / 字符串没闭合
+#   8. addView 里调的构造函数不存在（改函数名漏改调用处）
+#   9. 同一作用域里重复声明（新写一份忘了删旧的，报错位置完全对不上）
 #
 # 用法：bash tools/precheck.sh
 # 退出码非 0 就别 push。
@@ -99,9 +103,20 @@ else
     say "  （没有 python，跳过）"
 fi
 
+say "== 9. 同一作用域里有没有重复声明 =="
+# 改一个已有属性时"新写一份、忘了删旧的"，Kotlin 会报成
+# 「AppConfig.kt:19:65 Missing '}'」+ 满屏 Unresolved reference ——
+# 真正的原因在文件中间，前后几条报错全是连带后果。
+# 括号是平衡的、import 是全的、字符串也是闭合的，前 8 步一条都查不出来。
+if command -v python >/dev/null 2>&1; then
+    python tools/check_dupes.py || fail=1
+else
+    say "  （没有 python，跳过）"
+fi
+
 echo
 if [ $fail -ne 0 ]; then
     say "自检未通过 —— 修掉再 push，否则 CI 会白跑一轮。"
     exit 1
 fi
-say "自检全部通过。注意：只覆盖「必现失败」「漏 import」「缺构造函数」，其余类型错误仍只能靠 CI。"
+say "自检全部通过。注意：只覆盖「必现失败」「漏 import」「缺构造函数」「重复声明」，其余类型错误仍只能靠 CI。"

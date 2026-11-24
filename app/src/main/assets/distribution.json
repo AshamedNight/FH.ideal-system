@@ -3,8 +3,10 @@
   "_relayUrl": "成员设备访问中转的公网地址，带 /v1。是穿透工具给你的域名，例如 https://xxxx.natappfree.cc/v1 —— 绝对不是 0.0.0.0:8021，那个是中转在自己手机上的监听地址，别的手机连不上。",
   "_sharedKey": "固定假 key。用 `node relay.js keygen` 生成一次，同一个值同时填进 Termux 的 start-termux.sh（SHARED_KEY）和这里。它不是上游真 Key，反编译 APK 拿去也换不出 sk-xxx。想吊销所有已发出的包：换这个值 + 换服务端 SHARED_KEY + 重新出包。",
   "_deviceId": "不用填。App 首次启动自动生成 16 位随机编号并存在本机，每台设备不同。中转按它分账，本机 master 在 /admin/devices 看到编号后可单独调额。界面只读展示，改不了。",
+  "_model": "可选但建议填。上游模型名，例如 deepseek-chat。填了就把成员设备的模型名钉死（设置页那个输入框不再出现）；不填则沿用 App 默认值，但成员能自己改 —— 改成上游不认的名字会一律 400。",
 
   "enabled": false,
   "relayUrl": "",
-  "sharedKey": ""
+  "sharedKey": "",
+  "model": ""
 }

@@ -306,15 +306,30 @@ class AppConfig(context: Context) {
         }
         set(value) = sp.edit().putString(KEY_LLM_KEY, value.trim()).apply()
 
+    /**
+     * 模型名。分发模式下如果 distribution.json 里填了 `model`，就用它 ——
+     * 成员改成一个上游不认的名字，报错是「模型不存在」，看起来像中转坏了。
+     * 没填则沿用默认值（此时成员仍可改，属于有意留的余地）。
+     */
     var llmModel: String
-        get() = sp.getString(KEY_LLM_MODEL, "deepseek-chat") ?: ""
+        get() {
+            if (distributionEnabled) {
+                val fixed = dist!!.optString("model").trim()
+                if (fixed.isNotEmpty()) return fixed
+            }
+            return sp.getString(KEY_LLM_MODEL, "deepseek-chat") ?: ""
+        }
         set(value) = sp.edit().putString(KEY_LLM_MODEL, value.trim()).apply()
 
     /**
-     * 分发模式下强制清空代理。
+     * 只给「模型请求」用的代理，例：`http://127.0.0.1:7890` 或 `socks5://127.0.0.1:1080`。
      *
-     * 成员设备的手机不该为了连中转而挂任何代理 —— 那正是
-     * 「中转方案-手机不挂代理.md」里权重最高的风控信号。中转本身在公网上，
+     * 和「手机开系统级 VPN」的区别很大：系统级 VPN 会让**所有 App** 都从代理出去，
+     * 目标平台看到的是境外 IP；而这里只有我们发往模型接口的那一次请求走代理，
+     * 目标 App 的流量完全不经过它。留空则直连。
+     *
+     * **分发模式下强制清空**：成员设备的手机不该为了连中转而挂任何代理 ——
+     * 那正是「中转方案-手机不挂代理.md」里权重最高的风控信号。中转本身在公网上，
      * 直连即可；留着代理字段反而可能把模型请求导到别人的机器上。
      */
     var llmProxy: String
@@ -341,19 +356,6 @@ class AppConfig(context: Context) {
     var lastClipboardDraft: String
         get() = sp.getString(KEY_LAST_CLIP_DRAFT, "") ?: ""
         set(value) = sp.edit().putString(KEY_LAST_CLIP_DRAFT, value).apply()
-
-    /**
-     * 只给「模型请求」用的代理，例：`http://127.0.0.1:7890` 或 `socks5://127.0.0.1:1080`。
-     *
-     * 和「手机开系统级 VPN」的区别很大：系统级 VPN 会让**所有 App** 都从代理出去，
-     * 目标平台看到的是境外 IP；而这里只有我们发往模型接口的那一次请求走代理，
-     * 目标 App 的流量完全不经过它。
-     *
-     * 留空则直连（走电脑中转时留空即可 —— 中转本身在局域网里）。
-     */
-    var llmProxy: String
-        get() = sp.getString(KEY_LLM_PROXY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_LLM_PROXY, value.trim()).apply()
 
     /** 模型调用累计次数。只增不清 —— 用来回答"这么测下去要花多少钱"。 */
     val llmCalls: Int

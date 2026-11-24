@@ -51,11 +51,19 @@ MainActivity 首页「生成并填入」是独立于 ReplyRunner 的生成路径
 - Hold 分支补 `lastClipboardDraft` 记录（防自反馈）。
 
 ## 验证
-- `tools/precheck.sh` 8 步全过（每次改完复跑）。
+- `tools/precheck.sh` **9 步**全过（新增第 9 步：同一作用域重复声明）。
 - `relay/selftest.js` **39 项全过**（新增 pinned、穿透无口令被拒、调额需口令等）。
 - 爱聊：`profiles.json` 引用的每个 viewId 都在 dump 里存在（脚本核对，缺 0 个）；
-  用真机 bounds 复刻方向判定（「哈喽」→ 对方；右侧 → 我方；隐藏宽 0 → 跳过）。
+  用真机 bounds 复刻方向判定（「你好」→ 对方、我方气泡 → 我方、最后一条是我方 → 不生成）。
 - 本机无 JDK，编译仍走 GitHub Actions；push 由用户在交互终端执行。
+
+### 第 9 步的由来
+
+首轮 CI 挂在 `AppConfig.kt:19:65 Missing '}'` + 满屏 `Unresolved reference`。
+真因是加分发模式时新写了一个 `llmProxy`、忘了删旧的 —— **同一作用域声明两次**，
+整个文件解析失败，所有调用点跟着报错。前 8 步全都查不出来（括号平衡、import 齐全、
+字符串闭合）。`tools/check_dupes.py` 只查类/对象体成员，用坏提交验证过能精确报出
+`354 重复声明 var llmProxy（第 320 行已声明）`，全量跑零误报。
 
 ## 文档
 - `relay/README.md` 重写：8021 / pinned / ADMIN_TOKEN / 分发步骤 / 吊销。
@@ -67,7 +75,7 @@ MainActivity 首页「生成并填入」是独立于 ReplyRunner 的生成路径
 | 端 | 位置 | 填什么 |
 |---|---|---|
 | 服务器 | Termux `start-termux.sh` | `UPSTREAM_KEY`（真 key）、`SHARED_KEY`、`ADMIN_TOKEN` |
-| APK | `app/src/main/assets/distribution.json` | `enabled:true`、`relayUrl`（穿透域名 + `/v1`）、`sharedKey`（= SHARED_KEY） |
+| APK | `app/src/main/assets/distribution.json` | `enabled:true`、`relayUrl`（穿透域名 + `/v1`）、`sharedKey`（= SHARED_KEY）、可选 `model`（钉死模型名） |
 | 环境 | 穿透工具 | 指向 `127.0.0.1:8021` |
 
 已核过没有隐藏坑：manifest 有 `usesCleartextTraffic="true"`（免费 http 域名可用）；

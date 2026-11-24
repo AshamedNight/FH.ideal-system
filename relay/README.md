@@ -82,7 +82,9 @@ bash start-termux.sh
 
 1. 中转端：`AUTH_MODE=pinned`，`SHARED_KEY` 设一把随机串（`node relay.js keygen`）
 2. 打 APK 前：把穿透后的公网地址和 SHARED_KEY 填进
-   `app/src/main/assets/distribution.json` 的 `relayUrl` / `sharedKey`，`enabled` 改 `true`
+   `app/src/main/assets/distribution.json` 的 `relayUrl` / `sharedKey`，`enabled` 改 `true`；
+   可选再填 `model`（例如 `deepseek-chat`）—— 填了成员就改不了模型名，
+   免得被改成上游不认的名字、报错看起来像中转坏了
 3. 装到成员手机后：
 
    - 设置页模型段变成三行只读说明（中转地址、设备编号、额度），**没有输入框可改**
