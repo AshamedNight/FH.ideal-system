@@ -341,6 +341,54 @@ class CaptureService : AccessibilityService() {
     private val BATCH_WAIT_POLL_MS = 10_000L
 
     /**
+     * 连点收工后的观察期截止时刻（0 = 不在观察期）。
+     *
+     * 待命只覆盖"连点还活着"的情况。真机上还有另一种：连点因为别的原因收工了
+     * （名额用完、看门狗跳过、点了没换会话），紧接着对方才回 —— 那时谁也不会再去点。
+     * 所以收工后留 10 分钟窗口：这期间界面上只要冒出「下一个未读」，就自动接着干。
+     *
+     * 用户点「停止」时窗口会被清掉（见 stopBatch 的 watch 参数），
+     * 不能让"停止"变成"过一会儿自己又动"。
+     */
+    private var batchResumeUntil = 0L
+    private val BATCH_RESUME_WINDOW_MS = 10 * 60_000L
+
+    /** 观察期里别每个界面事件都去遍历树，3 秒看一次够用。 */
+    private var lastResumeCheckElapsed = 0L
+
+    /**
+     * 观察期检查：有「下一个未读」就重新开一轮连点。
+     *
+     * 名额按设置里的批量数重新给 —— 这一轮的语义是"又来了新的，继续"，
+     * 而不是延续上一轮那个已经用完的计数。
+     */
+    private fun maybeResumeBatch(pkg: String) {
+        if (batchActive) return
+        if (batchResumeUntil == 0L) return
+        val now = SystemClock.elapsedRealtime()
+        if (now > batchResumeUntil) {
+            batchResumeUntil = 0L
+            return
+        }
+        if (now - lastResumeCheckElapsed < 3_000L) return
+        lastResumeCheckElapsed = now
+
+        val cfg = config ?: return
+        val profile = Profiles.forPackage(pkg) ?: return
+        if (profile.message.isEmpty() || profile.nextUnread.isEmpty()) return
+        val roots = allTargetRoots()
+        if (roots.isEmpty()) return
+        if (roots.none { NodeQuery.hasNextUnread(it, profile) }) return
+
+        batchResumeUntil = 0L
+        batchActive = true
+        batchLeft = cfg.batchSize.coerceAtLeast(1)
+        batchWaitStart = 0L
+        logAuto("又出现了未读会话，接着连点（剩 $batchLeft 个额度）")
+        batchStep()
+    }
+
+    /**
      * 最近一次成功读到的目标包名。
      *
      * 兜底用：用户很可能在设置里填了应用名（「同城夜聊」）而不是包名
@@ -355,6 +403,7 @@ class CaptureService : AccessibilityService() {
         batchActive = true
         batchLeft = count
         batchWaitStart = 0L
+        batchResumeUntil = 0L
         logAuto("连点开始：$count 个，正在切到目标应用…")
 
         // **必须先把目标应用拉到前台。**
@@ -434,10 +483,18 @@ class CaptureService : AccessibilityService() {
         return "启动不了 ${candidates.joinToString("/")}：设置里要填包名（如 com.huwei.fox），不是应用名"
     }
 
-    fun stopBatch(note: String = "连点已停止") {
+    fun stopBatch(note: String = "连点已停止", watch: Boolean = false) {
         batchActive = false
         batchLeft = 0
         batchWaitStart = 0L
+        // 收工后要不要继续观察：只在"暂时没有新未读"这条路上开。
+        // 名额用完 / 用户点停止 / 平台不支持这些情况一律关掉 ——
+        // 否则点了「停止」，十秒后它自己又动起来，那是惊吓不是功能。
+        batchResumeUntil = if (watch) {
+            SystemClock.elapsedRealtime() + BATCH_RESUME_WINDOW_MS
+        } else {
+            0L
+        }
         batchWatchdog?.let { mainHandler.removeCallbacks(it) }
         batchWatchdog = null
         // 没发完的断句一起丢掉：停下来了就不该再往任何会话里填东西
@@ -600,7 +657,11 @@ class CaptureService : AccessibilityService() {
                 batchWaitStart = 0L
                 stopBatch(
                     "连点结束：等了 ${BATCH_WAIT_LIMIT_MS / 60_000} 分钟没有新未读。" +
-                        "要换到另一个 App，点输入法面板的「切下一个平台」"
+                        "接着 ${BATCH_RESUME_WINDOW_MS / 60_000} 分钟里若出现新未读会自动接着干，" +
+                        "要彻底结束或换 App 请点「停止」/「切下一个平台」",
+                    // 观察期：待命结束不等于这件事结束。对方几分钟后才回是常态，
+                    // 那之后还得有人去点「下一个未读」。
+                    watch = true,
                 )
                 return
             }
@@ -866,6 +927,10 @@ class CaptureService : AccessibilityService() {
             lastAutoCheckElapsed = elapsed
             maybeAutoReplyOnChange()
         }
+
+        // 连点收工后的观察期：界面上任何一次变化都可能是"来了新的未读会话"。
+        // 放在自动回复之后 —— 先保证正常回消息，再考虑要不要接着连点。
+        if (!batchActive) maybeResumeBatch(pkg)
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastDumpElapsed < MIN_DUMP_INTERVAL_MS) return

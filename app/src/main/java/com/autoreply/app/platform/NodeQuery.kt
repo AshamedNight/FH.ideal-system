@@ -612,6 +612,18 @@ object NodeQuery {
         return false
     }
 
+    /**
+     * 只判断「下一个未读」在不在，**不点**。
+     *
+     * 给连点收工后的"观察期"用：界面上每次变化都看一眼这个按钮 ——
+     * 在就说明来了新的未读会话。真正点它仍然由 batchStep 去点，
+     * 因为那里有"点了之后会话到底有没有换"的校验，不能绕过。
+     */
+    fun hasNextUnread(root: AccessibilityNodeInfo, profile: PlatformProfile): Boolean {
+        if (profile.nextUnread.isEmpty()) return false
+        return firstMatch(root, profile.nextUnread) != null
+    }
+
     fun clickNextUnread(
         root: AccessibilityNodeInfo,
         profile: PlatformProfile,
