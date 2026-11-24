@@ -3,6 +3,7 @@ package com.autoreply.app.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -24,6 +25,8 @@ import com.autoreply.app.core.llm.ReplyEngine
 import com.autoreply.app.core.llm.Turn
 import com.autoreply.app.core.persona.PersonaLoader
 import com.autoreply.app.platform.AccessibilityReplySink
+import com.autoreply.app.platform.ChatMessage
+import com.autoreply.app.platform.ClipboardPeerText
 import com.autoreply.app.platform.FillResult
 import com.autoreply.app.platform.NodeQuery
 import com.autoreply.app.platform.Profiles
@@ -185,9 +188,22 @@ class MainActivity : Activity() {
             return
         }
 
-        val messages = NodeQuery.readMessages(root, profile)
+        // 剪贴板模式（全局开关，或平台标了 clipboardPreferred —— 爱聊/他趣）。
+        // 与 ReplyRunner.runOnce 的第三层兜底共用 [ClipboardPeerText]：
+        // 页面抓不到时，用户长按复制的对方原话就是上下文。
+        val clipboardMode = config.clipboardOnly || profile.clipboardPreferred
+        var messages = NodeQuery.readMessages(root, profile)
+        if (messages.isEmpty() && clipboardMode) {
+            ClipboardPeerText.read(this, config)?.let {
+                messages = listOf(ChatMessage(it, fromOther = true, rect = Rect()))
+            }
+        }
         if (messages.isEmpty()) {
-            output.text = "没读到消息，选择器可能失效。"
+            output.text = if (clipboardMode) {
+                "没拿到对方的话：先在聊天页长按对方消息复制，再回来点生成。"
+            } else {
+                "没读到消息，选择器可能失效。"
+            }
             return
         }
         val lastOther = messages.lastOrNull { it.fromOther }
@@ -269,6 +285,37 @@ class MainActivity : Activity() {
 
                 when (outcome) {
                     is ReplyFlow.Outcome.Fill -> {
+                        // ---- 剪贴板交付：与 ReplyRunner.deliver 同一套早返回 ----
+                        // 抓不到输入框的平台（爱聊/他趣，或全局开了剪贴板模式）走这条：
+                        // 整段**不断句**（断句队列靠"检测到发送→自动填下一段"推进，
+                        // 这里没有输入框可填，队列只会卡住）、只进剪贴板、不碰输入框。
+                        if (clipboardMode) {
+                            DraftQueue.clear()
+                            val sink = AccessibilityReplySink(service, profile)
+                            val copied = sink.copyToClipboard(outcome.text)
+                            config.lastClipboardDraft = if (copied) outcome.text else ""
+                            // 去重/防抖照旧：不 mark 的话界面每变一次就重生成一遍
+                            dedup.mark(peer, lastOther.text, now)
+                            service.noteFill()
+                            if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
+                            output.text = buildString {
+                                append(head)
+                                append("\n草稿（已进剪贴板）：").append(outcome.text)
+                                if (copied) {
+                                    append("\n\n回聊天页 → 点输入框 → 长按 → 粘贴 → 自己点发送。")
+                                } else {
+                                    append("\n\n剪贴板没写进去（被别的 App 占用？），请手动复制上面这段。")
+                                }
+                                if (!mockMode) {
+                                    appendUsage(
+                                        outcome.inputTokens,
+                                        outcome.outputTokens,
+                                        outcome.estimatedInputTokens,
+                                    )
+                                }
+                            }
+                            return@runOnUiThread
+                        }
                         val sink = AccessibilityReplySink(service, profile)
                         // 断句：拆成 2~3 条发，只填第一段，其余排队等你发完再填。
                         // 和 ReplyRunner 里是同一套逻辑 —— 手动/自动两条路必须一致，
@@ -343,6 +390,9 @@ class MainActivity : Activity() {
                         // 填进输入框的话人多半顺手就发了 —— 那是用界面诱导犯错。
                         val sink = AccessibilityReplySink(service, profile)
                         val copied = sink.copyToClipboard(outcome.text)
+                        // 和 ReplyRunner 的 Hold 分支一致：记下自己写的草稿，
+                        // 剪贴板模式下才不会把它当成对方的新消息（自己回自己）
+                        if (copied) config.lastClipboardDraft = outcome.text
                         if (!mockMode) config.recordUsage(outcome.inputTokens, outcome.outputTokens)
                         output.text = buildString {
                             append(head)

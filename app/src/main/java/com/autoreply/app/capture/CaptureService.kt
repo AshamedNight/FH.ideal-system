@@ -483,11 +483,20 @@ class CaptureService : AccessibilityService() {
             stopBatch("连点停止：这个平台没有配置")
             return
         }
+        // 剪贴板交付靠人粘贴、人点发送，没有"检测到发送 → 自动切下一个"这条链，
+        // 连点在这里只会空转。明确停掉并说清该用什么，比让它撞墙好。
+        if (cfg.clipboardOnly || profile.clipboardPreferred) {
+            stopBatch(
+                "剪贴板模式不连点：生成后回聊天页长按粘贴、自己点发送，" +
+                    "要处理下一个会话请手动切过去再点「生成下一条」"
+            )
+            return
+        }
         // 会话列表读不到的平台（他趣：整棵树被 noimp 摘掉）根本没有"下一个未读"可点，
         // 连点在这里只会白转三圈然后报"所有平台都没有未读了"。
         // 直接说清楚，比让它自己撞墙好。
         if (profile.message.isEmpty()) {
-            stopBatch("这个平台读不到会话列表（他趣这类），连点用不了 —— 用通知触发或手动处理")
+            stopBatch("这个平台读不到会话列表（他趣这类），连点用不了 —— 开「剪贴板交付」用手动粘贴")
             return
         }
         val dedup = com.autoreply.app.core.guard.ReplyDedup(this)
@@ -1009,13 +1018,44 @@ class CaptureService : AccessibilityService() {
         return sb.toString()
     }
 
+    /**
+     * 兜底：未登记包名的 App，也要能抓一份给它"上户口"。
+     *
+     * 新平台第一次接入时，profiles.json 里还没有它 → isTarget() 返回 false →
+     * targetRoot() 拿不到 → 抓取按钮只会甩一句"没抓到界面"。可这时窗口明明在
+     * （就是本机爱聊那次：窗口清单里有 `APP com.mosheng [0,0,1080,2400]`，
+     * 说明根节点可读的，不是 App 屏蔽了无障碍）。
+     *
+     * 所以取面积最大、非本 App、非系统 UI 的 TYPE_APPLICATION 窗口 ——
+     * 也就是"用户正盯着的那个别的 App"。抓到的树只用于排查，不进缓存。
+     */
+    private fun fallbackAppRoot(): AccessibilityNodeInfo? {
+        val list = windows ?: return null
+        var best: AccessibilityNodeInfo? = null
+        var bestArea = 0
+        for (w in list) {
+            if (w == null || !isAppWindow(w)) continue
+            val r = w.root ?: continue
+            val pkg = r.packageName?.toString() ?: continue
+            if (pkg == packageName || isSystemUi(pkg)) continue
+            val rect = Rect()
+            w.getBoundsInScreen(rect)
+            val area = rect.width() * rect.height()
+            if (area > bestArea) {
+                bestArea = area
+                best = r
+            }
+        }
+        return best
+    }
+
     /** 前台是不是目标 App。L0 档要靠它决定能不能动作。 */
     fun isTargetForeground(): Boolean = isTarget(rootInActiveWindow?.packageName?.toString())
 
     data class Snapshot(val text: String, val source: String)
 
     /**
-     * 前台就是目标时抓实时；否则退回最近一次缓存。都没有返回 null。
+     * 前台就是目标时抓实时；否则退回最近一次缓存；再不行抓一个未登记平台兜底。
      *
      * 不管走哪条路，末尾都附一份「当前窗口」清单 —— 抓错对象时，
      * 光看节点树看不出为什么抓到了它；有窗口清单就能直接看到
@@ -1031,12 +1071,26 @@ class CaptureService : AccessibilityService() {
             cachedAtWall = System.currentTimeMillis()
             cachedPkg = root.packageName?.toString() ?: ""
             source = "实时"
-        } else if (cachedDump.isNotEmpty()) {
-            body = cachedDump
-            val who = if (cachedPkg.isEmpty()) "" else "（$cachedPkg）"
-            source = "缓存于 ${agoText(cachedAtWall)}$who"
         } else {
-            return null
+            // 未登记的平台：抓一份进来，好让人照着往 profiles.json 加选择器。
+            // 不写缓存 —— 缓存代表"这个平台的树"，混进别的 App 会误导后续判断。
+            val other = fallbackAppRoot()
+            if (other != null) {
+                val pkg = other.packageName?.toString().orEmpty()
+                body = buildString {
+                    append("# （未登记的平台：").append(pkg).append("）\n")
+                    append("# 这份只是排查用。设置 → 目标应用包名 里加上它，或把它写进 profiles.json，\n")
+                    append("# 下次抓取才会当成正式目标（也才会被自动回复链路使用）。\n\n")
+                    append(NodeDumper.dump(other, labelOf(pkg)))
+                }
+                source = "实时（未登记 $pkg）"
+            } else if (cachedDump.isNotEmpty()) {
+                body = cachedDump
+                val who = if (cachedPkg.isEmpty()) "" else "（$cachedPkg）"
+                source = "缓存于 ${agoText(cachedAtWall)}$who"
+            } else {
+                return null
+            }
         }
         val text = body + "\n\n# ---- 当前窗口（排查用）----\n" + describeWindows()
         return Snapshot(text, source)

@@ -24,6 +24,17 @@ data class Selector(
         // 配置里只写短名，比较时取最后一段 —— 写全名的话换渠道包就失效。
         "viewId" -> node.viewIdResourceName?.substringAfterLast('/') == value
         "viewIdEnds" -> node.viewIdResourceName?.endsWith(value) == true
+        // 一条选择器匹配多个 id（逗号分隔）。
+        //
+        // 为什么需要：左右气泡常常是**不同的 id**（爱聊：对方 #left_iv_text /
+        // #left_tv，自己 #right_tv）。而 readMessages 命中第一种选择器就停，
+        // 拆成三条也只能拿到其中一侧 —— 拿不到"我发的"，
+        // 发送确认（SentTracker 数我方条数）就永远为 0，配额不涨、断句不推进。
+        // 合在一条里，一次遍历左右都收，方向仍由水平位置判断。
+        "viewIdIn" -> {
+            val name = node.viewIdResourceName?.substringAfterLast('/') ?: ""
+            value.split(',').any { name == it.trim() }
+        }
         "className" -> node.className?.toString() == value
         "text" -> node.text?.toString()?.trim() == value
         "textContains" -> node.text?.toString()?.contains(value) == true
@@ -101,8 +112,17 @@ data class PlatformProfile(
      * 读不到时退回纯文本指纹（有误判风险，但比完全不能用强）。
      */
     val peerName: List<Selector> = emptyList(),
+
+    /**
+     * 这个平台**默认**走剪贴板交付。
+     *
+     * 用在「输入框对无障碍/输入法都不可见」或「整棵树被摘掉」的平台：
+     * 爱聊、他趣这类。生成结果只进剪贴板，用户长按粘贴、自己点发送。
+     * 它比全局开关更准 —— 只对确实写不进去的平台降级，同城/心遇照旧自动填入。
+     */
+    val clipboardPreferred: Boolean = false,
 ) {
-    val isConfigured: Boolean get() = input.isNotEmpty() || message.isNotEmpty()
+    val isConfigured: Boolean get() = input.isNotEmpty() || message.isNotEmpty() || clipboardPreferred
 }
 
 /** 读取 assets/profiles.json。解析失败不抛异常，只是没有可用配置。 */
@@ -146,6 +166,7 @@ object Profiles {
                     exclude = o.strings("exclude"),
                     nextUnread = o.selectors("nextUnread"),
                     peerName = o.selectors("peerName"),
+                    clipboardPreferred = o.optBoolean("clipboardPreferred", false),
                 )
             }
         } catch (e: Exception) {

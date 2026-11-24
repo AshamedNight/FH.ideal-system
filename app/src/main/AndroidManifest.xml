@@ -21,6 +21,8 @@
         <package android:name="com.huwei.fox" />
         <!-- 他趣 -->
         <package android:name="com.xingjiabi.shengsheng" />
+        <!-- 爱聊 -->
+        <package android:name="com.mosheng" />
     </queries>
 
     <!--

@@ -106,8 +106,9 @@ object NodeQuery {
      * 只读"可见的"：聊天记录是列表，滑上去的历史不在这里 —— 这符合我们的用法，
      * 因为需要回的是**最新一条**，翻历史反而会把旧消息当新的。
      *
-     * 方向判定用水平位置：气泡靠左 = 对方，靠右 = 自己。
-     * 这是各聊天 App 最通用的信号，比"找头像在左还是右"稳 ——
+     * 方向判定：先看 viewId 前缀（`left_` / `right_`，爱聊这类左右不同 id 的平台靠它），
+     * 再看水平位置（气泡靠左 = 对方，靠右 = 自己）。
+     * 位置是各聊天 App 最通用的信号，比"找头像在左还是右"稳 ——
      * 头像节点经常被 App 复用或隐藏，而气泡的横向对齐不会变。
      */
     fun readMessages(root: AccessibilityNodeInfo, profile: PlatformProfile): List<ChatMessage> {
@@ -184,7 +185,19 @@ object NodeQuery {
                         maxOf(1, r.height() / 2)
                 }
                 if (duplicated) continue
-                raw.add(ChatMessage(t, r.left < mineFromLeft, r))
+                // 方向：优先看 id 前缀，再看位置。
+                //
+                // 位置判定在「贴边气泡」上会翻车：爱聊的 #right_tv 收起态坐标是
+                // [24,1201,24,1266]（宽 0 会被跳过），但它说明这棵树上右气泡的左边缘
+                // 并不保证落在屏幕右半边。而 id 前缀（left_/right_）是布局语义，
+                // 不随尺寸、机型、是否贴合边缘变化。
+                val idName = n.viewIdResourceName?.substringAfterLast('/').orEmpty()
+                val fromOther = when {
+                    idName.startsWith("right_") || idName.startsWith("mine_") -> false
+                    idName.startsWith("left_") || idName.startsWith("other_") -> true
+                    else -> r.left < mineFromLeft
+                }
+                raw.add(ChatMessage(t, fromOther, r))
             }
             // 第一种选择器命中就够了；多条候选是给版本差异用的，不是用来叠加的
             if (raw.isNotEmpty()) break

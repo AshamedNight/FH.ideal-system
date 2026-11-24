@@ -1,5 +1,5 @@
 {
-  "_README": "每个平台一段，key 是包名。by 支持 viewId / viewIdEnds / className / text / textContains / contentDesc；pick 支持 first / last。所有值必须来自真机 dump。字段是候选列表，按顺序试，任一命中即停 —— 同一个 App 的不同页面锚点不同，靠候选列表一起覆盖。",
+  "_README": "每个平台一段，key 是包名。by 支持 viewId / viewIdEnds / className / text / textContains / contentDesc / contentDescContains；pick 支持 first / last。所有值必须来自真机 dump。字段是候选列表，按顺序试，任一命中即停 —— 同一个 App 的不同页面锚点不同，靠候选列表一起覆盖。label = 给人看的应用名（通知诊断、切换平台提示用）。clipboardPreferred=true 表示该平台默认走剪贴板交付（抓不到输入框或整棵树被摘掉时用）：生成结果只进剪贴板、人工粘贴发送；上下文依次取节点树 / 通知 / 用户复制到剪贴板的对方原话。**只登记包名、选择器留空也是有效的** —— isTarget() 靠 forPackage 认窗口，登记后抓取工具才能 dump 出这个 App 的节点树，这是接新平台的第一步。",
   "com.ss.android.ugc.aweme": {
     "_note": "抖音。2026-11-16 两份真机 dump：① 私信聊天页（有真实对话）② 内置豆包 AI 页。两条候选分别对应这两个页面，私信排在前面。抖音的 viewId 是资源混淆后的 1-3 字符短名，大版本更新可能变，所以每条都留了兜底。",
     "messageList": [
@@ -251,7 +251,9 @@
     ]
   },
   "com.xingjiabi.shengsheng": {
-    "_note": "他趣 8.7.3.1（网易易盾加固）。2026-11-17 真机 dump：根节点 View [0,0,0] noimp，全树只有 1 个节点 —— 整棵树被 importantForAccessibility=no 摘掉了，所以**消息读不到**（不是自绘，是主动关闭无障碍）。但输入焦点仍能拿到：EditText #editContent editable=true，所以填字有戏（靠 NodeQuery.firstEditable 的 findFocus 兜底，不靠遍历）。读消息要靠通知监听，下一步再接。",
+    "_note": "他趣 8.7.3.1（网易易盾加固）。2026-11-17 真机 dump：根节点 View [0,0,0] noimp，全树只有 1 个节点 —— 整棵树被 importantForAccessibility=no 摘掉了，所以**消息读不到**（不是自绘，是主动关闭无障碍）。但输入焦点仍能拿到：EditText #editContent editable=true，所以填字有戏（靠 NodeQuery.firstEditable 的 findFocus 兜底，不靠遍历）。2026-11-23 起默认走剪贴板交付：读上下文靠通知或用户复制的对方原话，回复只进剪贴板，人工粘贴发送 —— 不再赌那个时灵时不灵的输入焦点。",
+    "label": "他趣",
+    "clipboardPreferred": true,
     "messageList": [],
     "message": [],
     "input": [
@@ -271,5 +273,42 @@
       }
     ],
     "exclude": []
+  },
+  "com.mosheng": {
+    "_note": "爱聊。2026-11-23/24 两次真机 dump 确认（1080x2400）。①消息 id 分四类：对方文字 #left_iv_text（旧版 #left_tv），我方文字 #right_iv_text（旧版 #right_tv）—— 必须用 viewIdIn 一条收全，否则 readMessages 命中首个就停、只拿一侧，发送确认数不到「我发的」条数。②方向绝不能只靠坐标：实测我方气泡 #right_iv_text 的 bounds 是 [229,895,915,1048]，左边缘 229 < 屏幕三分点 360，纯坐标会把它判成对方 → 代码里已改成 id 前缀（left_/right_）优先。③输入框 #editText 可编辑，不需要剪贴板模式。④自带 #unread_msg_view「下一个未读」，连点可用。⑤#right_iv_text_readState_iv 是「未读」角标（文本『未读』，左边缘 147），不在选择器里，别加。",
+    "label": "爱聊",
+    "clipboardPreferred": false,
+    "messageList": [
+      { "by": "viewId", "value": "list" }
+    ],
+    "message": [
+      { "by": "viewIdIn", "value": "left_iv_text,right_iv_text,right_tv,left_tv" }
+    ],
+    "input": [
+      { "by": "viewId", "value": "editText" }
+    ],
+    "pageHint": [
+      { "by": "viewId", "value": "editText" },
+      { "by": "viewId", "value": "recyclerView_quick_msg" }
+    ],
+    "peerName": [
+      { "by": "viewId", "value": "textTitle" }
+    ],
+    "nextUnread": [
+      { "by": "viewId", "value": "unread_msg_view" },
+      { "by": "textContains", "value": "下一个未读" }
+    ],
+    "exclude": [
+      "爱聊提醒",
+      "提交真人认证",
+      "已真人认证",
+      "已实名认证",
+      "爱聊猫",
+      "别错过缘分",
+      "上次登录",
+      "视频通话",
+      "请选择",
+      "请输入消息"
+    ]
   }
 }

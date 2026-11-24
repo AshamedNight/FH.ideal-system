@@ -1,6 +1,8 @@
 package com.autoreply.app.core
 
 import android.content.Context
+import org.json.JSONObject
+import java.util.UUID
 
 /**
  * 全部可调参数集中在这里。
@@ -11,8 +13,55 @@ import android.content.Context
  */
 class AppConfig(context: Context) {
 
-    private val sp = context.applicationContext
+    private val appContext = context.applicationContext
+
+    private val sp = appContext
         .getSharedPreferences("autoreply", Context.MODE_PRIVATE)
+
+    /**
+     * 分发配置（assets/distribution.json）。**文件不存在或 enabled=false 时整份忽略**，
+     * 这时 App 跟开发版完全一样：设置页手填接口和 Key。
+     *
+     * 为什么放 assets 而不是 BuildConfig：不用动 build.gradle.kts，CI 零风险；
+     * 而且 precheck 第 5 步本来就会校验 assets/*.json 是否合法。
+     */
+    private val dist: JSONObject? by lazy {
+        try {
+            JSONObject(appContext.assets.open("distribution.json").bufferedReader().use { it.readText() })
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 是否进入「分发模式」。
+     *
+     * 三个条件必须同时成立才启用 —— 尤其后两个不能省：分发方漏填 relayUrl 或
+     * sharedKey 时，如果照样隐藏设置页，用户就既连不上、又改不了，彻底卡死。
+     */
+    val distributionEnabled: Boolean
+        get() = dist?.optBoolean("enabled", false) == true &&
+            (dist?.optString("relayUrl", "") ?: "").isNotBlank() &&
+            (dist?.optString("sharedKey", "") ?: "").isNotBlank()
+
+    /**
+     * 本机设备编号。首次取用时随机生成并持久化，之后不变。
+     *
+     * 它不是密钥，只是中转用来分账的 id：每台设备一条额度记录，本机 master
+     * 按这个 id 单独调额（relay 的 /admin/devices 会列出来）。
+     * 格式对齐服务端 `[A-Za-z0-9_-]{6,32}`。
+     *
+     * 界面上可以显示（供 master 认领设备），但**不可修改** —— 改了就等于换一台
+     * 设备、白拿一份新额度，所以没有 setter。
+     */
+    val deviceId: String
+        get() {
+            val saved = sp.getString(KEY_DEVICE_ID, "") ?: ""
+            if (saved.isNotBlank()) return saved
+            val fresh = "d" + UUID.randomUUID().toString().replace("-", "").take(15)
+            sp.edit().putString(KEY_DEVICE_ID, fresh).apply()
+            return fresh
+        }
 
     /** 风险档位。0=L0 只填不发，1=L1 通知驱动，2=L2 列表轮询。默认 1。 */
     var level: Int
@@ -226,17 +275,72 @@ class AppConfig(context: Context) {
     val allowsOpeningConversation: Boolean
         get() = level >= LEVEL_NOTIFY
 
+    /**
+     * 接口地址。分发模式下**强制**用内置的穿透域名，忽略设置页里的一切输入。
+     *
+     * 这是「其他设备上的 key 隐藏且不可复制」的落点：真 Key 在中转上，成员设备
+     * 拿到的只是一枚假 key；连地址都不让改，改成别的中转也换不到真 Key。
+     * getter 覆盖而不是改调用处，是因为 LlmClient / 首页 Key 检查 / 设置页
+     * 三处都读它 —— 在一个地方收口，比改三个地方更不容易漏。
+     */
     var llmBaseUrl: String
-        get() = sp.getString(KEY_LLM_URL, "https://api.deepseek.com/v1") ?: ""
+        get() = if (distributionEnabled) {
+            dist!!.optString("relayUrl").trim()
+        } else {
+            sp.getString(KEY_LLM_URL, "https://api.deepseek.com/v1") ?: ""
+        }
         set(value) = sp.edit().putString(KEY_LLM_URL, value.trim()).apply()
 
+    /**
+     * API Key 字段。分发模式下返回 `<deviceId>.<固定假 key>`，正是 relay 的
+     * pinned 模式认的令牌格式。
+     *
+     * 注意它**不是**上游真 Key，只是「入场券」。反编译 APK 拿到它也只能连到
+     * 中转、按 deviceId 领一份额度，换不出 sk-xxx。
+     */
     var llmApiKey: String
-        get() = sp.getString(KEY_LLM_KEY, "") ?: ""
+        get() = if (distributionEnabled) {
+            "${deviceId}.${dist!!.optString("sharedKey").trim()}"
+        } else {
+            sp.getString(KEY_LLM_KEY, "") ?: ""
+        }
         set(value) = sp.edit().putString(KEY_LLM_KEY, value.trim()).apply()
 
     var llmModel: String
         get() = sp.getString(KEY_LLM_MODEL, "deepseek-chat") ?: ""
         set(value) = sp.edit().putString(KEY_LLM_MODEL, value.trim()).apply()
+
+    /**
+     * 分发模式下强制清空代理。
+     *
+     * 成员设备的手机不该为了连中转而挂任何代理 —— 那正是
+     * 「中转方案-手机不挂代理.md」里权重最高的风控信号。中转本身在公网上，
+     * 直连即可；留着代理字段反而可能把模型请求导到别人的机器上。
+     */
+    var llmProxy: String
+        get() = if (distributionEnabled) "" else sp.getString(KEY_LLM_PROXY, "") ?: ""
+        set(value) = sp.edit().putString(KEY_LLM_PROXY, value.trim()).apply()
+
+    /**
+     * 剪贴板交付模式：生成结果**只**放进剪贴板，绝不尝试写输入框。
+     *
+     * 用于输入框对无障碍/输入法都不可见的平台（爱聊这类）。用户多一步
+     * 「长按粘贴 + 自己点发送」，换来的是不依赖任何写入通道 —— 抓不到输入框
+     * 也能用。默认关；profiles.json 里标了 preferClipboard 的平台会单独生效。
+     */
+    var clipboardOnly: Boolean
+        get() = sp.getBoolean(KEY_CLIPBOARD_ONLY, false)
+        set(value) = sp.edit().putBoolean(KEY_CLIPBOARD_ONLY, value).apply()
+
+    /**
+     * 上一次由我们写进剪贴板的草稿。
+     *
+     * 剪贴板模式下还要从剪贴板读「对方说了什么」当上下文。不记下自己刚写的
+     * 那句，下一轮就会把它当成对方的新消息，自己回自己 —— 无限循环。
+     */
+    var lastClipboardDraft: String
+        get() = sp.getString(KEY_LAST_CLIP_DRAFT, "") ?: ""
+        set(value) = sp.edit().putString(KEY_LAST_CLIP_DRAFT, value).apply()
 
     /**
      * 只给「模型请求」用的代理，例：`http://127.0.0.1:7890` 或 `socks5://127.0.0.1:1080`。
@@ -362,6 +466,9 @@ class AppConfig(context: Context) {
         private const val KEY_LLM_KEY = "llm_key"
         private const val KEY_LLM_MODEL = "llm_model"
         private const val KEY_LLM_PROXY = "llm_proxy"
+        private const val KEY_DEVICE_ID = "device_id"
+        private const val KEY_CLIPBOARD_ONLY = "clipboard_only"
+        private const val KEY_LAST_CLIP_DRAFT = "last_clip_draft"
         private const val KEY_LLM_CALLS = "llm_calls"
         private const val KEY_LLM_TOKENS_IN = "llm_tok_in"
         private const val KEY_LLM_TOKENS_OUT = "llm_tok_out"

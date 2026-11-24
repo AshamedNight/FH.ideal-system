@@ -115,12 +115,33 @@ class SettingsActivity : Activity() {
         })
 
         root.addView(section("模型"))
-        root.addView(field("llmBaseUrl", "接口地址", config.llmBaseUrl, InputType.TYPE_TEXT_VARIATION_URI))
-        root.addView(field("llmApiKey", "API Key", config.llmApiKey, InputType.TYPE_TEXT_VARIATION_PASSWORD))
+        // 分发版：接口与凭据由 assets/distribution.json 内置，界面上不给看、不给改、不给复制。
+        // 只显示一个只读的设备编号 —— master 调额时要靠它认领这台机器。
+        if (config.distributionEnabled) {
+            root.addView(note("这一版已内置接口地址和授权，无需填写，也不能查看或修改。\n真实 Key 在中转服务器上，本机没有。"))
+            root.addView(note("本机编号（给分发方调每日额度用）：\n${config.deviceId}"))
+            root.addView(note("分发版不开代理：成员手机不挂任何 VPN 或代理，直接连公网中转。"))
+        } else {
+            root.addView(field("llmBaseUrl", "接口地址", config.llmBaseUrl, InputType.TYPE_TEXT_VARIATION_URI))
+            root.addView(field("llmApiKey", "API Key", config.llmApiKey, InputType.TYPE_TEXT_VARIATION_PASSWORD))
+            root.addView(field("llmProxy", "代理（可选）", config.llmProxy, InputType.TYPE_TEXT_VARIATION_URI))
+            root.addView(note("代理只作用于「发往模型接口」的请求，目标 App 的流量不经过它 —— 所以不必为此打开手机的系统级 VPN。\n例：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080（Termux 里跑的代理填这里）。走电脑中转时留空。"))
+            root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，也可改成电脑中转：http://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
+        }
         root.addView(field("llmModel", "模型名", config.llmModel, InputType.TYPE_CLASS_TEXT))
-        root.addView(field("llmProxy", "代理（可选）", config.llmProxy, InputType.TYPE_TEXT_VARIATION_URI))
-        root.addView(note("代理只作用于「发往模型接口」的请求，目标 App 的流量不经过它 —— 所以不必为此打开手机的系统级 VPN。\n例：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080（Termux 里跑的代理填这里）。走电脑中转时留空。"))
-        root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，也可改成电脑中转：http://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
+
+        root.addView(section("剪贴板交付（抓不到输入框时用）"))
+        root.addView(
+            check("只生成到剪贴板，不写输入框", config.clipboardOnly) { config.clipboardOnly = it }
+        )
+        root.addView(note(
+            "通用兜底：读上下文 → 生成 → 放进剪贴板，你回聊天页长按粘贴、再自己点发送。" +
+                "比自动填入多一步，但完全不依赖输入框对无障碍/输入法是否可见 —— " +
+                "爱聊、他趣这类抓不到输入框或整棵树被摘掉的平台靠它也能用。\n\n" +
+                "上下文按顺序取：① 聊天页节点 ② 新消息通知 ③ 剪贴板里你刚复制的对方原话。" +
+                "三者都读不到时不会瞎编，会明确告诉你缺什么。\n" +
+                "开着它时不会切输入法、不会连点换会话；发送永远是你自己点。"
+        ))
 
         root.addView(section("时段"))
         root.addView(
@@ -321,10 +342,15 @@ class SettingsActivity : Activity() {
         }
         config.greetingLines = inputs["greetingLines"]?.text?.toString().orEmpty()
             .split('\n').map { it.trim() }.filter { it.isNotEmpty() }
-        config.llmBaseUrl = textOf("llmBaseUrl")
-        config.llmApiKey = textOf("llmApiKey")
+        // 分发模式下这三个 field 根本没建，textOf 会返回空串。
+        // 写进去虽不影响 getter（它优先返回内置值），但会污染 sp ——
+        // 万一哪天关掉分发模式，开发版就变成一套空配置。所以只在非分发版写。
+        if (!config.distributionEnabled) {
+            config.llmBaseUrl = textOf("llmBaseUrl")
+            config.llmApiKey = textOf("llmApiKey")
+            config.llmProxy = textOf("llmProxy")
+        }
         config.llmModel = textOf("llmModel")
-        config.llmProxy = textOf("llmProxy")
         config.persona = textOf("persona")
         config.personaJson = textOf("personaJson")
         config.bannedWords = textOf("bannedWords")

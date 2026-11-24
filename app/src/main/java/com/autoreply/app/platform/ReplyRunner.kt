@@ -80,6 +80,11 @@ class ReplyRunner(
         val peer = NodeQuery.peerName(root, profile)
             .ifEmpty { notifyPeer.orEmpty().trim() }
 
+        // 剪贴板模式：全局开关，或这个平台自己标了 clipboardPreferred（爱聊/他趣）。
+        // 它同时管「读」和「写」两端 —— 抓不到页面时，用户复制的对方原话就是上下文；
+        // 写不进输入框时，生成结果只进剪贴板。
+        val clipboardMode = config.clipboardOnly || profile.clipboardPreferred
+
         var messages = NodeQuery.readMessages(root, profile)
         if (messages.isEmpty() && !notifyText.isNullOrBlank()) {
             // 退而用通知当上下文。
@@ -92,7 +97,26 @@ class ReplyRunner(
                 .ifEmpty { listOf(notifyText.trim()) }
             messages = lines.map { ChatMessage(it, fromOther = true, rect = Rect()) }
         }
+        // 第三层兜底：节点树和通知都没有时，用「用户事先复制到剪贴板的对方原话」。
+        // 这是剪贴板模式真正的价值 —— 连页面完全抓不到的平台也能用：
+        // 长按对方消息复制 → 点生成 → 回复进剪贴板 → 长按粘贴 → 自己点发送。
+        if (messages.isEmpty() && clipboardMode) {
+            ClipboardPeerText.read(service, config)?.let {
+                messages = listOf(ChatMessage(it, fromOther = true, rect = Rect()))
+                service.logAuto("上下文来自剪贴板：${it.take(16)}")
+            }
+        }
         if (messages.isEmpty()) {
+            if (clipboardMode) {
+                // 剪贴板模式下三种上下文都没拿到，给一条明确的行动指令，
+                // 而不是让人对着"没读到消息"猜哪里坏了。
+                finish(
+                    emptyList(), "",
+                    "没拿到对方的话：先在聊天页长按对方消息复制，再点生成",
+                    false, false, onDone,
+                )
+                return
+            }
             if (profile.message.isEmpty()) {
                 // 他趣这类：App 把整棵树摘掉了，读消息在设计上就不可能。
                 // 说清楚"这不是坏了"，比留一句"没读到"有用得多 ——
@@ -221,6 +245,31 @@ class ReplyRunner(
         // 输入法面板的状态行只有 28 个字，所以标记要短 ——
         // 放前面是为了让人一眼看出"这次是重来"，而不是"又来了一条新消息"
         val tag = if (replay) "手动重来 · " else ""
+        val clipboardMode = config.clipboardOnly || profile.clipboardPreferred
+
+        // ---- 剪贴板交付：抓不到输入框的平台走这一条 ----
+        //
+        // 刻意**不断句**：断句队列靠"检测到你点发送 → 自动填下一段"推进，
+        // 而剪贴板模式下没有输入框可自动填，队列只会卡住或粘错。
+        // 整段一次给全，由人自己决定粘多少、分几次发。
+        if (clipboardMode && outcome is ReplyFlow.Outcome.Fill) {
+            DraftQueue.clear()
+            val copied = sink.copyToClipboard(outcome.text)
+            config.lastClipboardDraft = if (copied) outcome.text else ""
+            // 去重/防抖照旧：写剪贴板不改界面，但窗口事件仍会来。
+            // 不 mark 的话界面每变一次就重生成一遍，剪贴板被覆盖成最后一句，
+            // 用户粘到的就不是刚看过的那条（这个坑在自动填入路径上踩过）。
+            dedup.mark(peer, messageText, now)
+            service.noteFill()
+            config.recordUsage(outcome.inputTokens, outcome.outputTokens)
+            val note = if (copied) {
+                "已复制 · 回聊天页长按粘贴，自己点发送"
+            } else {
+                "剪贴板写不进去（被别的 App 占用？）"
+            }
+            finish(trace, outcome.text, tag + note, false, copied, onDone)
+            return
+        }
 
         when (outcome) {
             is ReplyFlow.Outcome.Fill -> {
@@ -308,6 +357,7 @@ class ReplyRunner(
             is ReplyFlow.Outcome.Hold -> {
                 // 风险太高：不替你填，但把草稿放到剪贴板，你要用自己粘贴
                 val copied = sink.copyToClipboard(outcome.text)
+                if (copied) config.lastClipboardDraft = outcome.text
                 config.recordUsage(outcome.inputTokens, outcome.outputTokens)
                 finish(trace, outcome.text, tag + outcome.reason, false, copied, onDone)
             }
@@ -329,6 +379,9 @@ class ReplyRunner(
             }
         }
     }
+
+    // 读取剪贴板对方原话的过滤规则已抽到 [ClipboardPeerText] ——
+    // 首页「生成并填入」按钮也要用它，两处共用一份，避免规则漂移。
 
     private fun finish(
         trace: List<String>,

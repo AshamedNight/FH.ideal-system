@@ -305,6 +305,9 @@ class AutoReplyImeService : InputMethodService() {
                     chip("开场白库", { cfg.greetingEnabled }) {
                         cfg.greetingEnabled = !cfg.greetingEnabled
                     },
+                    // 抓不到输入框的平台（爱聊/他趣）在这里一键切到剪贴板交付。
+                    // 面板上放这个开关，是为了不用来回切回 App 设置页。
+                    chip("剪贴板", { cfg.clipboardOnly }) { cfg.clipboardOnly = !cfg.clipboardOnly },
                 )
             )
             addView(
@@ -518,8 +521,13 @@ class AutoReplyImeService : InputMethodService() {
         val h = hintView ?: return
         val cfg = AppConfig(this)
         h.text = when {
+            // 剪贴板模式下草稿根本不进输入框，提示语必须改口，
+            // 否则用户会盯着空输入框等它自己出现（这个坑在 IME 通道踩过多次）。
+            cfg.clipboardOnly && currentPage == 0 ->
+                "草稿只进剪贴板 · 回聊天页长按输入框粘贴，自己点发送"
             // 面板上没有发送键，这句话是告诉用户"下一步去哪儿"
             currentPage == 0 -> "发送用 App 自带的按钮"
+            cfg.clipboardOnly -> "剪贴板模式：不写输入框，抓不到输入框的平台用它"
             // 演练模式读的是样例表，所以**人设生效、风格不生效** —— 这两件事别混着说
             cfg.drillMode -> "演练模式：风格不生效（人设仍然生效）"
             else -> "人设是整份替换，风格只改语气"

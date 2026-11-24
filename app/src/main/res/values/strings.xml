@@ -44,7 +44,7 @@
     <string name="btn_stop">停止</string>
 
     <string name="hint_usage">用法：先开启读屏与通知读取，再在设置里填好模型和人设。收到新消息后，程序会把回复草稿填进输入框，由你点发送。</string>
-    <string name="hint_no_dump">还没抓到界面：先切到目标 App 的聊天页，停留 2 秒以上让它稳定并触发一次读取，再切回来点「抓取当前界面」。</string>
+    <string name="hint_no_dump">还没抓到界面：屏幕上没有可读的 App 窗口。先切到目标 App 的聊天页，停留 2 秒以上让它稳定，再切回来点「抓取当前界面」。若那个 App 还没登记包名，去 设置 → 目标应用包名 加一行。</string>
 
     <string name="level_0">L0 只填不发</string>
     <string name="level_1">L1 通知驱动（推荐）</string>
