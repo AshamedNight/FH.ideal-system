@@ -23,6 +23,7 @@ import com.autoreply.app.core.guard.ReplyFlow
 import com.autoreply.app.core.guard.SentenceSplitter
 import com.autoreply.app.core.guard.SentTracker
 import com.autoreply.app.core.llm.ReplyEngine
+import com.autoreply.app.core.llm.ConversationMemory
 import com.autoreply.app.core.llm.Turn
 import com.autoreply.app.core.log.ChatLogStore
 import com.autoreply.app.core.persona.PersonaLoader
@@ -223,13 +224,18 @@ class MainActivity : Activity() {
             return
         }
 
-        val turns = messages.map { Turn(it.text, it.fromOther) }
-
         // ---- 去重：同一条消息 30 分钟内只处理一次 ----
         // 指纹带对方昵称 —— 交友平台大量新会话第一句都是「你好」，
         // 只按文本去重会把第二个会话直接锁死（这个坑踩过）。
         val now = System.currentTimeMillis()
         val peer = NodeQuery.peerName(root, profile)
+
+        // 和 ReplyRunner 同一条规则：屏幕只能看到可见区，滚上去的靠会话记忆补回来。
+        // （必须放在 peer 之后 —— 记忆是按「平台+昵称」分桶的。）
+        val turns = ConversationMemory.merge(
+            ConversationMemory.keyOf(pkg, peer),
+            messages.map { Turn(it.text, it.fromOther) },
+        )
 
         // 聊天记录（默认关）：记「读到的对话」。和 ReplyRunner 是同一条路径的另一半 ——
         // 首页按钮不经过 ReplyRunner，这里漏了就会「自动触发有记录、手动点击没有」。

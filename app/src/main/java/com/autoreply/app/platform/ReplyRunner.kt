@@ -11,6 +11,7 @@ import com.autoreply.app.core.guard.ReplyDedup
 import com.autoreply.app.core.guard.ReplyFlow
 import com.autoreply.app.core.guard.SentenceSplitter
 import com.autoreply.app.core.guard.SentTracker
+import com.autoreply.app.core.llm.ConversationMemory
 import com.autoreply.app.core.llm.Turn
 import com.autoreply.app.core.log.ChatLogStore
 import com.autoreply.app.notify.NotifyContext
@@ -205,7 +206,12 @@ class ReplyRunner(
             return
         }
 
-        val turns = messages.map { Turn(it.text, it.fromOther) }
+        // 屏幕只能看到"当前可见"的那几条，滚上去的就没了 ——
+        // 用会话记忆把之前真正读到过的接回来，否则会出现"刚聊过又重问一遍"。
+        val turns = ConversationMemory.merge(
+            ConversationMemory.keyOf(pkg, peer),
+            messages.map { Turn(it.text, it.fromOther) },
+        )
         // 「我上一句是多久之前说的」只认**确认发出**的时间。
         // 之前用的是"上次生成草稿"的时间，后果是：连着试几次生成（一条都没真发出去），
         // 判定链就以为你刚跟对方说完话，每条都扣 0.25 分、一路掉进「先等等」。

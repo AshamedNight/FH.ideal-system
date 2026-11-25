@@ -160,8 +160,8 @@ class ReplyEngine(
         // **掷骰子只发生在这一处**，所以同一次生成里重试的几次都保持同一策略，
         // 不会"第一次单条、重写时又变三条"。
         val burst = config.burstChance > 0 && Random.nextInt(100) < config.burstChance
-        val system = buildSystem(persona, adaptiveMaxChars(turns, config.maxReplyChars), burst)
-        val baseUser = buildUser(turns)
+        val system = buildSystem(persona, adaptiveMaxChars(turns, config.maxReplyChars))
+        val baseUser = buildUser(turns, burst)
         val client = LlmClient(effectiveBaseUrl, config.llmApiKey, config.llmModel, config.llmProxy)
 
         var lastHit = ""
@@ -360,7 +360,7 @@ class ReplyEngine(
         return "${period}${hour}点${weekend}。$ban".trim()
     }
 
-    private fun buildSystem(persona: Persona, maxChars: Int, burst: Boolean = false): String = buildString {
+    private fun buildSystem(persona: Persona, maxChars: Int): String = buildString {
         appendLine(persona.identity.trim())
 
         // 注：「现在几点」放在 buildUser 里，不放这里。
@@ -384,18 +384,17 @@ class ReplyEngine(
         appendLine()
         appendLine(persona.styleRules(maxChars))
 
-        // 偶尔分条。只在这一轮加，不加的时候提示词一个字都没变（前缀缓存不受影响）。
+        // 不重复提问。这条规则是固定的，不随对话变 —— 前缀缓存照样能命中。
         //
-        // 关键是"可以不拆"：不给出路的话，模型会把每句都强行拆成三条，
-        // 于是每条消息都变成连发，比单条更像脚本。
-        if (burst) {
-            appendLine()
-            appendLine("# 这一次可以分几条发")
-            appendLine("如果这句话本来就有两三个小点，就拆成 2~3 条，每条单独一行：")
-            appendLine("- 每条都是能独立成立的短句，不超过 20 字，别用「1.」「-」这类列表符号")
-            appendLine("- 顺序按你想说的先后，第一行最要紧")
-            appendLine("- 一句话就能说完的，就只回一行 —— 不要为了凑条数硬拆")
-        }
+        // 真机表现（截图）：对方说「在家玩手机」→「看短剧」→「甜的」，
+        // 回了两轮之后又问「那你平时刷手机都看啥」。信息全是它自己问出来的，
+        // 却像没听过一样又绕回去 —— 这不是"没上下文"，是没把上下文用起来。
+        appendLine()
+        appendLine("# 别把聊过的话题当新话题")
+        appendLine(
+            "对方已经回答过的事，不要换个说法再问一遍（刚说了在看短剧，就别再问「平时看什么」）。" +
+                "想接着聊，就顺着他的回答往下说一句自己的看法或细节，而不是重新提问。"
+        )
 
         if (persona.knowledge.isNotEmpty()) {
             appendLine()
@@ -459,7 +458,7 @@ class ReplyEngine(
         return GREETING_WORDS.any { t.contains(it) }
     }
 
-    private fun buildUser(turns: List<Turn>): String = buildString {
+    private fun buildUser(turns: List<Turn>, burst: Boolean = false): String = buildString {
         // 现在几点。放这里而不是 system：system 变动会让整段缓存失效（见上面的注释）。
         // 模型自己没有时钟，不说的话它早上九点也在讲"刚下班"。
         appendLine("# 现在")
@@ -483,11 +482,44 @@ class ReplyEngine(
             appendLine()
         }
 
+        val shown = turns.takeLast(CONTEXT_TURNS)
+        // 更早的内容压成一行提醒。
+        //
+        // 为什么不是"再多塞几条全文"：token 是每条消息都要付的，历史越长每条越贵。
+        // 而"更早"这部分真正的作用只有一个 —— 别把聊过的话题当新话题再问一遍。
+        // 所以每条只留 16 字，够认出话题，不够复述。
+        val older = turns.dropLast(shown.size).takeLast(OLDER_TURNS)
+        if (older.isNotEmpty()) {
+            appendLine("# 更早聊过（只用来避免重复提问，不要复述、不要接着这个话题再问）")
+            appendLine(
+                older.joinToString("；") { t ->
+                    (if (t.fromOther) "对方说" else "我说") +
+                        "「" + t.text.replace("\n", " ").take(16) + "」"
+                }
+            )
+            appendLine()
+        }
+
         appendLine("# 最近的对话")
-        turns.takeLast(CONTEXT_TURNS).forEach { t ->
+        shown.forEach { t ->
             appendLine((if (t.fromOther) "对方：" else "我：") + t.text.replace("\n", " "))
         }
         appendLine()
+
+        // 偶尔分条。**放在 user 里，不放 system**。
+        //
+        // 这是按概率出现的指令：塞进 system 的话，命中分条的那 30% 调用会让
+        // 整段 system 前缀变掉 —— 上游的前缀缓存全失效，那一次的费用按未命中算。
+        // 放 user 的代价是每次都能省下缓存，多出来的几十字本来也每条都要发。
+        if (burst) {
+            appendLine("# 这一次可以分几条发")
+            appendLine("如果这句话本来就有两三个小点，就拆成 2~3 条，每条单独一行：")
+            appendLine("- 每条都是能独立成立的短句，不超过 20 字，别用「1.」「-」这类列表符号")
+            appendLine("- 顺序按你想说的先后，第一行最要紧")
+            appendLine("- 一句话就能说完的，就只回一行 —— 不要为了凑条数硬拆")
+            appendLine()
+        }
+
         append("请回最后这一条。")
     }
 
@@ -554,5 +586,13 @@ class ReplyEngine(
          * 表现就是"接不上话""回复很模板化"。
          */
         const val CONTEXT_TURNS = 12
+
+        /**
+         * 「更早聊过」最多带几条（每条截到 16 字）。
+         *
+         * 6 条 × 约 20 字 ≈ 120 字，大约 80 token —— 换来的效果是
+         * 不会把三分钟前刚聊过的「看短剧」再当成新话题问一遍。
+         */
+        const val OLDER_TURNS = 6
     }
 }
