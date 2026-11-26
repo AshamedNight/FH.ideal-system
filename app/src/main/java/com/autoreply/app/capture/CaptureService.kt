@@ -612,8 +612,11 @@ class CaptureService : AccessibilityService() {
         // 会话列表读不到的平台（他趣：整棵树被 noimp 摘掉）根本没有"下一个未读"可点，
         // 连点在这里只会白转三圈然后报"所有平台都没有未读了"。
         // 直接说清楚，比让它自己撞墙好。
+        //
+        // 注意：他趣现在**不再**走上面那条剪贴板分支（读降级、写走输入法），
+        // 所以这句话要指向"手动逐个处理"，不能再让人去开剪贴板开关。
         if (profile.message.isEmpty()) {
-            stopBatch("这个平台读不到会话列表（他趣这类），连点用不了 —— 开「剪贴板交付」用手动粘贴")
+            stopBatch("这个平台读不到会话列表（他趣这类），连点用不了 —— 手动点「生成下一条」，发完自己切下一个会话")
             return
         }
         val dedup = com.autoreply.app.core.guard.ReplyDedup(this)

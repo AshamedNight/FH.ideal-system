@@ -191,28 +191,47 @@ class MainActivity : Activity() {
             return
         }
 
-        // 剪贴板模式（全局开关，或平台标了 clipboardPreferred —— 爱聊/他趣）。
-        // 与 ReplyRunner.runOnce 的第三层兜底共用 [ClipboardPeerText]：
+        // 读侧降级（全局开关 / 平台 readFallback / 整条剪贴板）。
+        // 与 ReplyRunner.runOnce 的兜底共用 [ClipboardPeerText]：
         // 页面抓不到时，用户长按复制的对方原话就是上下文。
-        val clipboardMode = config.clipboardOnly || profile.clipboardPreferred
+        val readFallback = config.clipboardOnly || profile.readFallback || profile.clipboardPreferred
+        // 写侧降级只影响交付方式，不影响"上下文从哪来" —— 他趣读不到，但能填。
+        val writeToClipboard = config.clipboardOnly || profile.clipboardPreferred
+        // 昵称提前取：通知攒的上下文按「平台+昵称」存，兜底要用它
+        val peer = NodeQuery.peerName(root, profile)
         var messages = NodeQuery.readMessages(root, profile)
         // 读空先重读一次：面板刚弹出时目标 App 的列表节点会短暂缺失（心遇真机），
         // 等一拍、换一份新根再读，比直接报"没读到"有用得多。
-        if (messages.isEmpty() && !clipboardMode) {
+        if (messages.isEmpty() && !readFallback) {
             SystemClock.sleep(400)
             val fresh = service.targetRoot() ?: root
             messages = NodeQuery.readMessages(fresh, profile)
         }
-        if (messages.isEmpty() && clipboardMode) {
-            ClipboardPeerText.read(this, config)?.let {
-                messages = listOf(ChatMessage(it, fromOther = true, rect = Rect()))
+        if (messages.isEmpty()) {
+            // 通知攒的兜底（他趣：树被摘，只有通知栏还能看到"对方说了什么"）。
+            // peer 读不到时用「最近来通知的那个人」—— 只在他趣这类平台才有意义。
+            val lines = NotifyContext.recent(
+                pkg,
+                peer.ifEmpty { NotifyContext.lastPeer(pkg, System.currentTimeMillis()) },
+                System.currentTimeMillis(),
+            )
+            if (lines.isNotEmpty()) {
+                messages = lines.map { ChatMessage(it, fromOther = true, rect = Rect()) }
+            }
+        }
+        if (readFallback) {
+            ClipboardPeerText.read(this, config)?.let { clip ->
+                // 复制的那句放最末当最新一条；和通知/树里的重复就不重复加
+                if (messages.none { it.text == clip }) {
+                    messages = messages + ChatMessage(clip, fromOther = true, rect = Rect())
+                }
             }
         }
         if (messages.isEmpty()) {
             // 先分清"还没渲染"和"选择器失效"：前者让人去改配置就是纯浪费
             val loading = NodeQuery.loadingHint(root)
             output.text = when {
-                clipboardMode -> "没拿到对方的话：先在聊天页长按对方消息复制，再回来点生成。"
+                readFallback -> "没拿到对方的话：先在聊天页长按对方消息复制，再回来点生成。"
                 loading != null -> "$loading。等 1~2 秒再点一次。"
                 else -> "没读到消息，选择器可能失效。\n" + NodeQuery.emptyDiagnosis(root, profile)
             }
@@ -228,7 +247,6 @@ class MainActivity : Activity() {
         // 指纹带对方昵称 —— 交友平台大量新会话第一句都是「你好」，
         // 只按文本去重会把第二个会话直接锁死（这个坑踩过）。
         val now = System.currentTimeMillis()
-        val peer = NodeQuery.peerName(root, profile)
 
         // 和 ReplyRunner 同一条规则：屏幕只能看到可见区，滚上去的靠会话记忆补回来。
         // （必须放在 peer 之后 —— 记忆是按「平台+昵称」分桶的。）
@@ -315,10 +333,10 @@ class MainActivity : Activity() {
                 when (outcome) {
                     is ReplyFlow.Outcome.Fill -> {
                         // ---- 剪贴板交付：与 ReplyRunner.deliver 同一套早返回 ----
-                        // 抓不到输入框的平台（爱聊/他趣，或全局开了剪贴板模式）走这条：
+                        // 只有**写不进输入框**的平台走这条（或全局开了剪贴板模式）：
                         // 整段**不断句**（断句队列靠"检测到发送→自动填下一段"推进，
                         // 这里没有输入框可填，队列只会卡住）、只进剪贴板、不碰输入框。
-                        if (clipboardMode) {
+                        if (writeToClipboard) {
                             DraftQueue.clear()
                             val sink = AccessibilityReplySink(service, profile)
                             val copied = sink.copyToClipboard(outcome.text)
@@ -359,16 +377,28 @@ class MainActivity : Activity() {
                         // 和 ReplyRunner 里是同一套逻辑 —— 手动/自动两条路必须一致，
                         // 否则"手动能拆、自动不拆"这种差异查起来最费劲。
                         // 三种来源：多发开场白的 parts → 整句 single → 按标点拆。
-                        val parts = when {
+                        val rawParts = when {
                             outcome.parts.isNotEmpty() -> outcome.parts
                             outcome.single -> listOf(outcome.text)
                             else -> SentenceSplitter.split(outcome.text)
+                        }
+                        // 读不到我方消息的平台（他趣）确认不了"上一段已发出"，
+                        // 排队只会停在第二段 —— 合成一条填，人自己决定分不分。
+                        // 和 ReplyRunner 同一条规则，手动/自动不能有差异。
+                        val canAdvance = profile.message.isNotEmpty()
+                        val parts = if (!canAdvance && rawParts.size > 1) {
+                            listOf(rawParts.joinToString("\n"))
+                        } else {
+                            rawParts
                         }
                         DraftQueue.reset(parts.drop(1))
 
                         // 两条通道：无障碍优先，失败自动落到输入法
                         val write = TextWriter.write(service, profile, parts.first())
-                        val copied = if (write.written || write.pending) {
+                        // 只要没真写进输入框就留一份在剪贴板 —— 包括"输入法挂起等焦点"
+                        // 的情况：那条路可能等不到人点，手里有份可粘的总比没有强。
+                        // 与 ReplyRunner.deliver 保持一致（那边一直是这么做的）。
+                        val copied = if (write.written) {
                             false
                         } else {
                             // 只放第一段：整段塞进剪贴板，用户粘一次就发完了，
@@ -404,9 +434,14 @@ class MainActivity : Activity() {
                             if (parts.size > 1) {
                                 append("\n（拆成 ").append(parts.size)
                                 append(" 段：发完这段会自动填下一段）")
+                            } else if (rawParts.size > 1) {
+                                append("\n（").append(rawParts.size)
+                                append(" 段合在一起，发的时候可以分开）")
                             }
                             append("\n\n填入：").append(write.note)
-                            if (copied) {
+                            if (copied && write.pending) {
+                                append("\n也已复制：点一下输入框草稿会自动出现，万一没出现就长按粘贴")
+                            } else if (copied) {
                                 append("\n已复制到剪贴板：点一下输入框 → 长按 → 粘贴")
                             }
                             if (!write.written && !write.pending) {
@@ -426,6 +461,7 @@ class MainActivity : Activity() {
                                 this@MainActivity, platformLabel, peer, outcome.text,
                                 when {
                                     write.written -> "已填入输入框"
+                                    write.pending -> "已挂起：点一下输入框即填入"
                                     copied -> "已复制到剪贴板"
                                     else -> "未交付"
                                 },

@@ -20,14 +20,19 @@ object PersonaLoader {
 
     fun load(context: Context, config: AppConfig): Persona = resolve(context, config).persona
 
+    /** 只算"外层那份"（设置页 JSON → 内置 → 自由文本），不含本地编辑。 */
+    fun base(context: Context, config: AppConfig): Persona = resolveBuiltin(context, config).persona
+
     fun resolve(context: Context, config: AppConfig): Loaded {
         val builtin = resolveBuiltin(context, config)
 
-        // 用户自己在 App 里改的「问答样例 / 行为准则」覆盖内置的那两项。
-        // 只换这两项，identity / tone / boundaries 保持原样 ——
+        // 用户自己在 App 里改的「我是谁 / 问答样例 / 行为准则 / 情况」覆盖内置的那几项。
+        // 其余（语气、边界、禁止词）保持原样 ——
         // 把整个 persona 交给用户编辑，改坏了他也看不出哪里坏了。
         val ov = PersonaStore.load(context) ?: return builtin
         val merged = builtin.persona.copy(
+            // 身份必须跟着预设走：多个号之间最容易露馅的就是"我是谁"。
+            identity = ov.identity ?: builtin.persona.identity,
             fewShot = ov.fewShot ?: builtin.persona.fewShot,
             rules = ov.rules ?: builtin.persona.rules,
             knowledge = ov.knowledge ?: builtin.persona.knowledge,

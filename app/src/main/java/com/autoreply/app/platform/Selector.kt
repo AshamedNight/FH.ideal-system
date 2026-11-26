@@ -123,6 +123,16 @@ data class PlatformProfile(
     val clipboardPreferred: Boolean = false,
 
     /**
+     * 读侧降级：节点树读空时，允许用「通知攒的几条」和「用户长按复制的原话」当上下文。
+     *
+     * **和 [clipboardPreferred] 分开的原因**（2026-11-25 拆的）：
+     * 他趣整棵树被加固摘掉（dump 只有 1 个节点、noimp hidden），读只能靠通知/复制，
+     * 但写走输入法 `commitText` **不依赖无障碍树** —— 一个开关管两头，
+     * 会把本来能自动填的平台也一起退成手动粘贴。
+     */
+    val readFallback: Boolean = false,
+
+    /**
      * 聊天内容区的上下边界（可选）。
      *
      * 心遇改版后消息 `TextView` 完全没有 id，只能按类型找；而按类型找会把
@@ -135,7 +145,8 @@ data class PlatformProfile(
     val areaTop: List<Selector> = emptyList(),
     val areaBottom: List<Selector> = emptyList(),
 ) {
-    val isConfigured: Boolean get() = input.isNotEmpty() || message.isNotEmpty() || clipboardPreferred
+    val isConfigured: Boolean
+        get() = input.isNotEmpty() || message.isNotEmpty() || clipboardPreferred || readFallback
 }
 
 /** 读取 assets/profiles.json。解析失败不抛异常，只是没有可用配置。 */
@@ -180,6 +191,7 @@ object Profiles {
                     nextUnread = o.selectors("nextUnread"),
                     peerName = o.selectors("peerName"),
                     clipboardPreferred = o.optBoolean("clipboardPreferred", false),
+                    readFallback = o.optBoolean("readFallback", false),
                     areaTop = o.selectors("areaTop"),
                     areaBottom = o.selectors("areaBottom"),
                 )

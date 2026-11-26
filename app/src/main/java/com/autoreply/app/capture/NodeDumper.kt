@@ -39,7 +39,7 @@ object NodeDumper {
         sb.append("，被标不重要 ").append(stats[2])
         sb.append('\n')
         if (stats[0] == 0) {
-            sb.append("# 全树没有可编辑节点 —— 输入框对无障碍不可见，只能走粘贴\n")
+            sb.append("# 全树没有可编辑节点 —— 输入框对无障碍不可见，写只能走输入法通道（或粘贴）\n")
         }
         appendFocus(root, sb)
         return sb.toString()
@@ -65,7 +65,13 @@ object NodeDumper {
             null
         }
         if (f == null) {
-            sb.append("# 无（输入框对无障碍不可见，或当前没有焦点）\n")
+            // 「无」有两种完全不同的原因，混在一起会误导判断（2026-11-25 他趣实测）：
+            // 抓取面板本身是个 Activity，它盖在目标 App 上时，焦点在**我们自己**身上，
+            // 于是 findFocus 必然返回 null —— 这不代表目标 App 的输入框不可见。
+            // 看下面窗口列表里带 active focused 的那一行是谁即可分辨。
+            sb.append("# 无（两种可能：①输入框对无障碍不可见；②本面板正盖在上面占了焦点）\n")
+            sb.append("# 分辨方法：看窗口列表里 active focused 是不是 ").append("com.autoreply.app")
+            sb.append("；是的话先收起面板再抓一次\n")
             return
         }
         val cls = f.className?.toString()?.substringAfterLast('.') ?: "?"

@@ -14,8 +14,11 @@ import java.io.File
  * 所以内置的那份当**默认值**，用户改的这份当**覆盖**，
  * 存到 filesDir 下一个 json 里，随时可改、可清空、可恢复默认。
  *
- * 只覆盖这两项，不动 identity / tone / boundaries ——
+ * 只覆盖「我是谁 / 情况 / 样例 / 准则」四项，不动 tone / boundaries / 禁止词 ——
  * 那几项改坏了会让整个回复跑偏，而且用户很难自己看出来改坏了什么。
+ *
+ * 身份原来不在这份里，2026-11-26 挪了进来：人设预设搬的就是这个文件，
+ * 身份留在外层的话，切预设换的只是"怎么说话"，"我是谁"没变。
  */
 object PersonaStore {
 
@@ -31,6 +34,14 @@ object PersonaStore {
         val fewShot: List<FewShot>?,
         val rules: List<String>?,
         val knowledge: List<KnowledgeItem>?,
+        /**
+         * 「我是谁」。null = 没改过，用外层（设置页 JSON / 内置 assets）。
+         *
+         * 为什么要放进覆盖文件：人设预设只搬这一份。
+         * 身份留在外层的话，切预设换的只是"怎么说话"，名字、年龄、职业没变 ——
+         * 而多号之间最容易露馅的恰恰是这些（2026-11-26 用户实测反馈）。
+         */
+        val identity: String? = null,
     )
 
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)
@@ -66,7 +77,10 @@ object PersonaStore {
                     else KnowledgeItem(topic, listOf(topic), answer)
                 }
             }
-            Override(shots, rules, knowledge)
+            // 空串 = 没覆盖（回到外层那份）。区分"改成空"和"没改过"没意义：
+            // 一个没有人设的账号本来也不成立，所以清空输入框就当作回落。
+            val identity = o.optString("identity", "").trim().ifEmpty { null }
+            Override(shots, rules, knowledge, identity)
         } catch (_: Exception) {
             // 文件坏了就当没改过，不要让整个回复流程因为一个坏 json 起不来
             null
@@ -79,8 +93,14 @@ object PersonaStore {
         fewShot: List<FewShot>,
         rules: List<String>,
         knowledge: List<KnowledgeItem> = emptyList(),
+        /**
+         * 「我是谁」。传空串 = 不覆盖，回到外层那份。
+         * 调用方负责判断"用户到底改没改"（见 PersonaActivity.persist）。
+         */
+        identity: String = "",
     ): Boolean = try {
         val o = JSONObject()
+        o.put("identity", identity.trim())
         o.put("few_shot", JSONArray().apply {
             fewShot.forEach {
                 put(JSONObject().put("q", it.q).put("a", it.a))

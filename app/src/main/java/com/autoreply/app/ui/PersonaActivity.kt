@@ -21,17 +21,19 @@ import com.autoreply.app.core.persona.PersonaPresets
 import com.autoreply.app.core.persona.PersonaStore
 
 /**
- * 话术管理：让使用者自己调「问答样例」和「行为准则」，不用改代码重新打包。
+ * 话术管理：把「我是谁 / 我的情况 / 问答样例 / 行为准则」放在一页里改，
+ * 四样一起跟着「人设预设」走，切换预设 = 换一整套人。
  *
- * ## 为什么只开放这两项
+ * ## 为什么这四项开放，语气 / 禁止词不开放
  *
- * identity / tone / boundaries 也能改，但改坏的表现是"回复忽然变得很奇怪"，
- * 而用户几乎不可能反推出是哪一项导致的。这两项不一样 ——
- * 样例是"这句该这么答"，准则是"这种时候该这么接"，都是可以直接对着读的。
+ * 这四项都是可以直接对着读的：身份是自我介绍，情况是事实卡，
+ * 样例是"这句该这么答"，准则是"这种时候该这么接"。
+ * 语气参数（正式度、长度）和禁止词改坏的表现是"回复忽然变得很奇怪"，
+ * 用户几乎不可能反推出是哪一项导致的 —— 所以它们留在设置页。
  *
  * ## 数据怎么存
  *
- * 内置那份在 assets/persona.json 当默认值，这里改的存到 filesDir 下单独一个
+ * 内置那份在 assets/persona.json 当默认值，这里的覆盖存到 filesDir 下单独的
  * json（[PersonaStore]）。"恢复内置默认"就是删掉那个文件。
  */
 class PersonaActivity : Activity() {
@@ -40,6 +42,7 @@ class PersonaActivity : Activity() {
     private lateinit var ruleList: LinearLayout
     private lateinit var knowledgeList: LinearLayout
     private lateinit var presetList: LinearLayout
+    private lateinit var identityInput: EditText
     private lateinit var titleView: TextView
 
     private class ShotRow(val q: EditText, val a: EditText, val container: LinearLayout)
@@ -75,7 +78,8 @@ class PersonaActivity : Activity() {
         content.addView(
             note(
                 "这里改的东西立刻生效（下次生成就用），不用重新打包。\n" +
-                    "只影响「问答样例」和「行为准则」两项；身份、语气、禁止词仍在设置页。"
+                    "「我是谁 / 我的情况 / 问答样例 / 行为准则」都是一份预设的一部分 —— " +
+                    "换预设，这四样一起换。语气参数和禁止词仍在设置页，全局共用。"
             )
         )
 
@@ -87,7 +91,7 @@ class PersonaActivity : Activity() {
         content.addView(section("人设预设"))
         content.addView(
             note(
-                "同一时间只有一份生效。切换会把那一份的「情况 / 样例 / 准则」整份换上来 ——\n" +
+                "同一时间只有一份生效。切换会把那一份的「我是谁 / 情况 / 样例 / 准则」整份换上来 ——\n" +
                     "多个号、或者同一个人设换种性格，靠它切，不用每次手改。\n" +
                     "切换前会先保存当前这一页的改动，所以改完直接点另一份就行。"
             )
@@ -95,6 +99,34 @@ class PersonaActivity : Activity() {
         presetList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(presetList)
         content.addView(ghostButton("＋ 新建（复制当前这份）") { newPreset() })
+
+        // ---- 我是谁 ----
+        //
+        // 放在预设下面、情况上面：换预设时第一件被换掉的就是"我是谁"。
+        // 这一项原来只能去设置页粘 JSON，切预设换不掉 —— 而名字、年龄、职业
+        // 恰恰是多个号之间最容易露馅的地方。
+        content.addView(section("我是谁（跟着预设走）"))
+        content.addView(
+            note(
+                "这段会原样进提示词最前面：叫什么、多大、哪人、在做什么、什么姿态说话。\n" +
+                    "别写成业务介绍 —— 自我介绍和主动推销是两件事，后者更招人烦。\n" +
+                    "填了以这里为准；清空并保存 = 回到设置页那份（或内置的那份）。"
+            )
+        )
+        identityInput = EditText(this).apply {
+            hint = "你叫……，多大，哪人，在做什么，说话什么风格"
+            textSize = 13f
+            gravity = Gravity.TOP
+            setTextColor(getColor(R.color.ink))
+            setHintTextColor(getColor(R.color.ink_faint))
+            setBackgroundResource(R.drawable.bg_input)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            maxLines = 8
+            minHeight = dp(112)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        content.addView(identityInput)
 
         // ---- 我的情况 ----
         content.addView(section("我的情况（模型能说的事实）"))
@@ -163,6 +195,10 @@ class PersonaActivity : Activity() {
     private fun loadCurrent() {
         val persona = PersonaLoader.resolve(this, AppConfig(this)).persona
 
+        // 显示的是**当前生效**的身份（可能来自覆盖、设置页 JSON 或内置）。
+        // 保存时会和"外层那份"比对，一样就不写覆盖 —— 见 persist。
+        identityInput.setText(persona.identity)
+
         knowledge.clear()
         knowledgeList.removeAllViews()
         persona.knowledge.forEach { addKnowledgeRow(it.topic, it.answer) }
@@ -212,7 +248,16 @@ class PersonaActivity : Activity() {
             if (topic.isEmpty() || answer.isEmpty()) null else KnowledgeItem(topic, listOf(topic), answer)
         }
 
-        val ok = PersonaStore.save(this, fewShot, ruleTexts, items)
+        // 身份：只有**和外面不一样**才写进覆盖文件。
+        //
+        // 不比的话，第一次保存就把外层 JSON 的身份固化成本地覆盖，
+        // 之后改设置页那份再也不生效 —— 用户会以为"设置页坏了"。
+        // 清空输入框 = 回到外层那份（空串在 Override 里就是"没覆盖"）。
+        val baseIdentity = PersonaLoader.base(this, AppConfig(this)).identity.trim()
+        val identityText = identityInput.text.toString().trim()
+        val identityOverride = if (identityText == baseIdentity) "" else identityText
+
+        val ok = PersonaStore.save(this, fewShot, ruleTexts, items, identityOverride)
         if (!ok) {
             Toast.makeText(this, "保存失败：写不进 filesDir", Toast.LENGTH_LONG).show()
             return false

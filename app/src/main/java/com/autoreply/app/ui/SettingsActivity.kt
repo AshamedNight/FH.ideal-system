@@ -333,11 +333,12 @@ class SettingsActivity : Activity() {
 
         // 话术管理单独一页：样例和准则会改得很频繁，塞进这个已经很长的页面
         // 会把其他设置冲散
-        root.addView(action("话术管理（问答样例 / 行为准则）") {
+        root.addView(action("话术管理（我是谁 / 情况 / 样例 / 准则）") {
             startActivity(Intent(this@SettingsActivity, PersonaActivity::class.java))
         })
         root.addView(multi("persona", config.persona, 8))
         root.addView(note("用「你是……」开头描述这个人是什么身份、怎么说话、绝不说什么。不要写「请帮我生成回复」，那是任务不是人设。"))
+        root.addView(note("这里填的是**所有预设共用**的底稿；某一套人设想换身份，去话术管理里改「我是谁」，那边跟着预设走。"))
 
         root.addView(section("人设 JSON（进阶，可选）"))
         root.addView(multi("personaJson", config.personaJson, 6))

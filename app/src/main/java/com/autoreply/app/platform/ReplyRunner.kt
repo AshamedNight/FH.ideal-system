@@ -84,10 +84,13 @@ class ReplyRunner(
         val peer = NodeQuery.peerName(root, profile)
             .ifEmpty { notifyPeer.orEmpty().trim() }
 
-        // 剪贴板模式：全局开关，或这个平台自己标了 clipboardPreferred（爱聊/他趣）。
-        // 它同时管「读」和「写」两端 —— 抓不到页面时，用户复制的对方原话就是上下文；
-        // 写不进输入框时，生成结果只进剪贴板。
-        val clipboardMode = config.clipboardOnly || profile.clipboardPreferred
+        // 读侧降级：全局剪贴板模式、平台标了 readFallback（他趣），或整条走剪贴板。
+        // 抓不到页面时，用户复制的对方原话就是上下文。
+        //
+        // 2026-11-25 把「读」和「写」拆开了：他趣的树被加固摘光，读只能靠通知/复制，
+        // 但它的输入框能用输入法 commitText 写 —— 一个开关管两头，会把能自动填的
+        // 平台一起退成手动粘贴。
+        val readFallback = config.clipboardOnly || profile.readFallback || profile.clipboardPreferred
 
         var messages = NodeQuery.readMessages(root, profile)
         // 读空先重读一次，别急着下结论。
@@ -107,28 +110,41 @@ class ReplyRunner(
                 service.logAuto("第一次没读到，重读成功（${messages.size} 条）")
             }
         }
-        if (messages.isEmpty() && !notifyText.isNullOrBlank()) {
-            // 退而用通知当上下文。
+        if (messages.isEmpty()) {
+            // 通知兜底。他趣这类平台唯一还能看到"对方说了什么"的就是通知栏：
+            // 攒的是同一会话最近几条（10 分钟内），有就整段给；
+            // 只回最后一条的话，模型看到的是半句话。
             //
-            // 只用最后一条太薄了：对方可能连发三句，而通知栏只剩最后一句，
-            // 模型看到的就是半句话，回出来也只能是半句。
-            // NotifyContext 攒了同一会话最近几条（10 分钟内、最多 3 条），
-            // 有就一起给；没有才退回单条。
-            val lines = NotifyContext.recent(pkg, notifyPeer.orEmpty(), System.currentTimeMillis())
-                .ifEmpty { listOf(notifyText.trim()) }
-            messages = lines.map { ChatMessage(it, fromOther = true, rect = Rect()) }
+            // 注意**不再要求 notifyText 非空**：手动点「生成下一条」时一样该用它 ——
+            // 通知是系统投的，不依赖这次点击是怎么触发的。
+            val ctxPeer = notifyPeer.orEmpty().ifEmpty { peer }
+                .ifEmpty { NotifyContext.lastPeer(pkg, System.currentTimeMillis()) }
+            val lines = NotifyContext.recent(pkg, ctxPeer, System.currentTimeMillis())
+                .ifEmpty {
+                    if (notifyText.isNullOrBlank()) emptyList() else listOf(notifyText.trim())
+                }
+            if (lines.isNotEmpty()) {
+                messages = lines.map { ChatMessage(it, fromOther = true, rect = Rect()) }
+                if (lines.size > 1) {
+                    service.logAuto("上下文来自通知攒的 ${lines.size} 条")
+                }
+            }
         }
         // 第三层兜底：节点树和通知都没有时，用「用户事先复制到剪贴板的对方原话」。
         // 这是剪贴板模式真正的价值 —— 连页面完全抓不到的平台也能用：
         // 长按对方消息复制 → 点生成 → 回复进剪贴板 → 长按粘贴 → 自己点发送。
-        if (messages.isEmpty() && clipboardMode) {
-            ClipboardPeerText.read(service, config)?.let {
-                messages = listOf(ChatMessage(it, fromOther = true, rect = Rect()))
-                service.logAuto("上下文来自剪贴板：${it.take(16)}")
+        if (readFallback) {
+            ClipboardPeerText.read(service, config)?.let { clip ->
+                // 用户复制的一般是"对方刚说的那句"，放在最末当最新一条；
+                // 和树/通知里的重复就不重复加
+                if (messages.none { it.text == clip }) {
+                    messages = messages + ChatMessage(clip, fromOther = true, rect = Rect())
+                    service.logAuto("上下文补了剪贴板：${clip.take(16)}")
+                }
             }
         }
         if (messages.isEmpty()) {
-            if (clipboardMode) {
+            if (readFallback) {
                 // 剪贴板模式下三种上下文都没拿到，给一条明确的行动指令，
                 // 而不是让人对着"没读到消息"猜哪里坏了。
                 finish(
@@ -291,14 +307,16 @@ class ReplyRunner(
         // 输入法面板的状态行只有 28 个字，所以标记要短 ——
         // 放前面是为了让人一眼看出"这次是重来"，而不是"又来了一条新消息"
         val tag = if (replay) "手动重来 · " else ""
-        val clipboardMode = config.clipboardOnly || profile.clipboardPreferred
+        // 写侧降级：只对**真的写不进输入框**的平台退成剪贴板。
+        // 读侧降级（readFallback）不影响这里 —— 他趣读不到树，但输入法通道能填。
+        val writeToClipboard = config.clipboardOnly || profile.clipboardPreferred
 
         // ---- 剪贴板交付：抓不到输入框的平台走这一条 ----
         //
         // 刻意**不断句**：断句队列靠"检测到你点发送 → 自动填下一段"推进，
         // 而剪贴板模式下没有输入框可自动填，队列只会卡住或粘错。
         // 整段一次给全，由人自己决定粘多少、分几次发。
-        if (clipboardMode && outcome is ReplyFlow.Outcome.Fill) {
+        if (writeToClipboard && outcome is ReplyFlow.Outcome.Fill) {
             DraftQueue.clear()
             val copied = sink.copyToClipboard(outcome.text)
             config.lastClipboardDraft = if (copied) outcome.text else ""
@@ -339,10 +357,20 @@ class ReplyRunner(
                 //   ① outcome.parts —— 多发开场白：用户自己写的几条整句，绝不能拆
                 //   ② single=true   —— 库里的一行也是一整句（拆开会丢问句）
                 //   ③ 其余          —— 交给 SentenceSplitter 按标点拆
-                val parts = when {
+                val rawParts = when {
                     outcome.parts.isNotEmpty() -> outcome.parts
                     outcome.single -> listOf(outcome.text)
                     else -> SentenceSplitter.split(outcome.text)
+                }
+                // 分段推进靠「读到我方消息条数变了」确认上一段真的发出去了。
+                // 树被摘的平台（他趣）永远读不到 —— 排队只会停在第二段，
+                // 用户看到的就是"只回了一句"。
+                // 所以这类平台把多段**合成一条**填出去，发的时候人自己决定分不分。
+                val canAdvance = profile.message.isNotEmpty()
+                val parts = if (!canAdvance && rawParts.size > 1) {
+                    listOf(rawParts.joinToString("\n"))
+                } else {
+                    rawParts
                 }
                 DraftQueue.reset(parts.drop(1))
 
@@ -401,13 +429,21 @@ class ReplyRunner(
                 } else {
                     ""
                 }
+                // 多段被合成一条（读不到树的平台）：说清楚，否则用户以为只回了一半
+                val mergedHint = if (rawParts.size > 1 && parts.size == 1) {
+                    "（${rawParts.size} 段合在一起，发的时候可以分开）"
+                } else {
+                    ""
+                }
                 // write.note 里已经带了"已复制到剪贴板"这句（TextWriter 写的），
                 // 这里再拼一遍就变成「已复制到剪贴板（已复制到剪贴板）」
                 val note = when {
                     copied && parts.size > 1 ->
                         "${write.note}；第 1 段在上面，剩下 ${parts.size - 1} 段发完自动复制"
-                    copied -> write.note
-                    else -> write.note + segHint
+                    // 输入法已挂起、等焦点：剪贴板里也有一份，两条路都能走
+                    copied && write.pending -> "点一下输入框草稿会出现；也已复制" + mergedHint
+                    copied -> write.note + mergedHint
+                    else -> write.note + segHint + mergedHint
                 }
                 finish(
                     trace, outcome.text, tag + note, write.written, copied, onDone,
@@ -418,6 +454,7 @@ class ReplyRunner(
                         service, platformLabel(profile), peer, outcome.text,
                         when {
                             write.written -> "已填入输入框"
+                            write.pending -> "已挂起：点一下输入框即填入"
                             copied -> "已复制到剪贴板"
                             else -> "未交付"
                         },

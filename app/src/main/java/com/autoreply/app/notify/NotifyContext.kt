@@ -21,7 +21,12 @@ package com.autoreply.app.notify
  */
 object NotifyContext {
 
-    private const val MAX_LINES = 3
+    /**
+     * 攒最近几条。3 → 6：真机里对方经常连发 2~3 句（「在吗」「照片呢」「怎么不理人」），
+     * 只留 3 条时上一段话题已经被挤出去了；6 条大致覆盖一个来回。
+     * 再多也不留 —— 通知攒的本来就没有时间序以外的结构，长了反而稀释最新那条。
+     */
+    private const val MAX_LINES = 6
     private const val TTL_MS = 10 * 60_000L
 
     /** 键的组成部分用 U+241F 分隔：昵称里可能出现竖线，撞上会把两个会话粘成一个。 */
@@ -47,6 +52,33 @@ object NotifyContext {
         val q = map[key] ?: return emptyList()
         while (q.isNotEmpty() && now - q.first().second > TTL_MS) q.removeFirst()
         return q.map { it.first }
+    }
+
+    /**
+     * 这个平台最近来通知的是谁。
+     *
+     * 手动点「生成下一条」时没有 notifyPeer 可用，而树被摘的平台（他趣）从页面上
+     * 也读不到昵称 —— 不这么推就永远匹配不上攒下的上下文。取"最近一次来通知"的那个，
+     * 并且只在 TTL 内：远了就当没有，宁可没有上下文，也不把 A 的话算到 B 头上。
+     *
+     * 有多个会话都在活跃时，它挑的是最新的一个 —— 生成出来的草稿先给人看，
+     * 人要粘了再发，错配能被看见。
+     */
+    @Synchronized
+    fun lastPeer(pkg: String, now: Long): String {
+        val prefix = "$pkg$SEP"
+        var bestPeer = ""
+        var bestAt = 0L
+        for ((key, q) in map) {
+            if (!key.startsWith(prefix)) continue
+            val at = q.lastOrNull()?.second ?: continue
+            if (now - at > TTL_MS) continue
+            if (at >= bestAt) {
+                bestAt = at
+                bestPeer = key.removePrefix(prefix)
+            }
+        }
+        return bestPeer
     }
 
     @Synchronized

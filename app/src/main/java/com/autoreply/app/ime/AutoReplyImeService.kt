@@ -305,8 +305,9 @@ class AutoReplyImeService : InputMethodService() {
                     chip("开场白库", { cfg.greetingEnabled }) {
                         cfg.greetingEnabled = !cfg.greetingEnabled
                     },
-                    // 抓不到输入框的平台（爱聊/他趣）在这里一键切到剪贴板交付。
+                    // 连输入法都写不进去的场合，在这里一键切到剪贴板交付。
                     // 面板上放这个开关，是为了不用来回切回 App 设置页。
+                    // 注意他趣不需要开：它读降级、写仍走输入法（点一下输入框就填）。
                     chip("剪贴板", { cfg.clipboardOnly }) { cfg.clipboardOnly = !cfg.clipboardOnly },
                 )
             )
