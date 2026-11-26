@@ -27,6 +27,7 @@ import com.autoreply.app.core.llm.ConversationMemory
 import com.autoreply.app.core.llm.Turn
 import com.autoreply.app.core.log.ChatLogStore
 import com.autoreply.app.core.persona.PersonaLoader
+import com.autoreply.app.core.persona.PersonaPresets
 import com.autoreply.app.notify.NotifyContext
 import com.autoreply.app.platform.AccessibilityReplySink
 import com.autoreply.app.platform.ChatMessage
@@ -57,6 +58,11 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         config = AppConfig(this)
+
+        // 内置人设（assets/personas）：只装一次、不激活。
+        // 放在启动时做，这样输入法面板里的人设列表也能看到它，
+        // 不用先绕去「话术管理」才出现。
+        PersonaPresets.seedBundled(this)
 
         statusService = findViewById(R.id.status_service)
         statusNotify = findViewById(R.id.status_notify)

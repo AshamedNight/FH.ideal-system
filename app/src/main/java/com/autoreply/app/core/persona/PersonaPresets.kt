@@ -177,6 +177,117 @@ object PersonaPresets {
         return if (persist(context, o)) id else null
     }
 
+    /**
+     * 直接插一份预设（内容由调用方给）。
+     *
+     * 和 [createFromCurrent] 的区别：那个复制"当前这份"，这个接受任意内容 ——
+     * 从文件导入、把内置人设装进来，都走这里。
+     *
+     * [activate] = false 时**不动当前生效的人设**（内置那几份就靠这个，
+     * 悄悄把用户的号换掉是最不该做的事）。重名自动加「（2）」，不覆盖已有预设。
+     */
+    fun insert(
+        context: Context,
+        name: String,
+        personaJson: String,
+        override: JSONObject,
+        activate: Boolean,
+    ): String? {
+        val o = load(context)
+        val arr = o.optJSONArray("presets") ?: return null
+        val base = name.trim().ifEmpty { "未命名" }
+        val used = list(context).map { it.name }.toMutableSet()
+        var finalName = base
+        var k = 2
+        while (used.contains(finalName)) {
+            finalName = "$base（$k）"
+            k++
+        }
+        val id = newId(System.currentTimeMillis() + arr.length())
+        if (findById(arr, id) != null) return null
+        arr.put(
+            JSONObject()
+                .put("id", id)
+                .put("name", finalName)
+                .put("body", bodyOf(personaJson, override))
+        )
+        if (activate) o.put("active", id)
+        if (!persist(context, o)) return null
+        if (activate) {
+            // 两份一起写：身份/语气在 personaJson，样例/准则/情况在 override
+            if (!PersonaStore.writeRaw(context, override)) return null
+            AppConfig(context).personaJson = personaJson
+        }
+        return id
+    }
+
+    /**
+     * 解析一份"人设 JSON"文本。
+     *
+     * 支持两种形态：
+     *   ① 完整 persona —— name / identity / tone / knowledge / few_shot / rules；
+     *   ② 预设 body —— `{ personaJson, override }`，也就是从预设里搬出来的那份。
+     * 两种都认，免得"导出再导入"走样。
+     *
+     * 返回 null 表示里面没有任何可用内容 —— 宁可让人看到"这个文件不行"，
+     * 也不要装进去一份空人设，那会让回复变成没头没脑的通用句子。
+     */
+    fun parsePersonaText(raw: String): JSONObject? {
+        val text = raw.removePrefix("\uFEFF").trim()
+        if (!text.startsWith("{")) return null
+        val o = runCatching { JSONObject(text) }.getOrNull() ?: return null
+        val inner = if (o.has("personaJson")) {
+            runCatching { JSONObject(o.optString("personaJson")) }.getOrNull() ?: return null
+        } else {
+            o
+        }
+        // 去掉下划线开头的说明字段（_note / _README）：它们只对人有用，
+        // 留着会跟着 personaJson 一起进提示词估算
+        val keys = inner.keys()
+        val drop = ArrayList<String>()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            if (key.startsWith("_")) drop.add(key)
+        }
+        drop.forEach { inner.remove(it) }
+
+        val hasIdentity = inner.optString("identity", "").trim().isNotEmpty()
+        val shots = inner.optJSONArray("few_shot")?.length() ?: 0
+        val knowledge = inner.optJSONArray("knowledge")?.length() ?: 0
+        val rules = inner.optJSONArray("rules")?.length() ?: 0
+        if (!hasIdentity && shots == 0 && knowledge == 0 && rules == 0) return null
+        return inner
+    }
+
+    /**
+     * 把 assets 的 personas 目录里那几份内置人设装成预设。
+     *
+     * 只装一次（root 上的 seeded 标记），而且**不激活** ——
+     * 装完用户的号还是原来那个，只是列表里多出可以点的一份。
+     * 这就是"装完就有小陈大夫可直接选"的实现方式。
+     */
+    fun seedBundled(context: Context): Int {
+        if (load(context).optBoolean("seeded", false)) return 0
+        val files = runCatching { context.assets.list("personas") }.getOrNull().orEmpty()
+        var added = 0
+        for (f in files) {
+            if (!f.endsWith(".json")) continue
+            val text = runCatching {
+                context.assets.open("personas/$f").bufferedReader().use { it.readText() }
+            }.getOrNull() ?: continue
+            val persona = parsePersonaText(text) ?: continue
+            val name = persona.optString("name", "").trim().ifEmpty { f.removeSuffix(".json") }
+            if (list(context).any { it.name == name }) continue
+            if (insert(context, name, persona.toString(2), JSONObject(), activate = false) != null) {
+                added++
+            }
+        }
+        val fresh = load(context)
+        fresh.put("seeded", true)
+        persist(context, fresh)
+        return added
+    }
+
     fun rename(context: Context, id: String, name: String): Boolean {
         val o = load(context)
         val arr = o.optJSONArray("presets") ?: return false

@@ -2,6 +2,7 @@ package com.autoreply.app.ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -19,6 +20,7 @@ import com.autoreply.app.core.persona.KnowledgeItem
 import com.autoreply.app.core.persona.PersonaLoader
 import com.autoreply.app.core.persona.PersonaPresets
 import com.autoreply.app.core.persona.PersonaStore
+import org.json.JSONObject
 
 /**
  * 话术管理：把「我是谁 / 我的情况 / 问答样例 / 行为准则」放在一页里改，
@@ -56,6 +58,9 @@ class PersonaActivity : Activity() {
 
     /** 段落编号，和设置页一样自动递增。 */
     private var sectionIndex = 0
+
+    /** 选人设文件（SAF）。数字随便取，只要和别的请求码不撞。 */
+    private val reqImport = 7011
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,6 +104,9 @@ class PersonaActivity : Activity() {
         presetList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         content.addView(presetList)
         content.addView(ghostButton("＋ 新建（复制当前这份）") { newPreset() })
+        // 导入：一份 JSON 直接变成一份可用的预设，不用再回设置页粘。
+        // 走 SAF，不申请存储权限 —— 和「导出聊天记录」同一套做法。
+        content.addView(ghostButton("＋ 从文件导入 JSON") { pickPersonaFile() })
 
         // ---- 我是谁 ----
         //
@@ -187,6 +195,9 @@ class PersonaActivity : Activity() {
         })
 
         loadCurrent()
+        // 把 assets/personas 里的内置人设装成预设。只装一次，而且不激活 ——
+        // 装完列表里多几份可以点的，当前是谁还是谁。
+        PersonaPresets.seedBundled(this)
         refreshPresets()
     }
 
@@ -362,6 +373,66 @@ class PersonaActivity : Activity() {
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    // ---------------------------------------------------------------- 导入
+
+    /**
+     * 选一份人设 JSON。
+     *
+     * 用 ACTION_OPEN_DOCUMENT（SAF）：用户自己选文件，不给存储权限 ——
+     * 和「导出聊天记录」是同一套做法。mime 只做优先提示不做硬过滤，
+     * 手机上的文件管理器对 .json 的标注很随意，硬过滤常常让人选不到自己的文件。
+     */
+    private fun pickPersonaFile() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/plain", "text/*"))
+        }
+        if (runCatching { startActivityForResult(intent, reqImport) }.isFailure) {
+            Toast.makeText(this, "这台设备没有文件选择器", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != reqImport || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+
+        val text = runCatching {
+            contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+        }.getOrNull()
+        if (text.isNullOrBlank()) {
+            Toast.makeText(this, "读不到文件内容（可能没给访问权限）", Toast.LENGTH_LONG).show()
+            return
+        }
+        // 人设是纯文本，超过 200KB 基本是选错文件；先拦，别把主线程读死
+        if (text.length > 200_000) {
+            Toast.makeText(this, "文件太大（>200KB），这不像人设 JSON", Toast.LENGTH_LONG).show()
+            return
+        }
+        val persona = PersonaPresets.parsePersonaText(text)
+        if (persona == null) {
+            Toast.makeText(
+                this,
+                "这份文件里没有可用人设：identity / few_shot / knowledge / rules 至少要有一样",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        // 先把这一页的改动存回当前预设，否则导入完会把刚改的东西吞掉
+        if (!persist(exitAfter = false)) return
+
+        val name = persona.optString("name", "").trim().ifEmpty { "导入的人设" }
+        // 覆盖层清空：这份 JSON 自己带着样例 / 准则 / 情况，留着旧的会串味
+        val id = PersonaPresets.insert(this, name, persona.toString(2), JSONObject(), activate = true)
+        if (id == null) {
+            Toast.makeText(this, "导入失败：写不进 filesDir", Toast.LENGTH_LONG).show()
+            return
+        }
+        Toast.makeText(this, "已导入「$name」，现在用它", Toast.LENGTH_SHORT).show()
+        recreate()
     }
 
     private fun renamePreset(p: PersonaPresets.Preset) {
