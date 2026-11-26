@@ -20,6 +20,8 @@ import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.llm.GreetingHooks
 import com.autoreply.app.core.llm.TalkStyle
 import com.autoreply.app.core.log.ChatLogStore
+import com.autoreply.app.core.persona.PersonaPresets
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -344,6 +346,10 @@ class SettingsActivity : Activity() {
         root.addView(multi("personaJson", config.personaJson, 6))
         root.addView(note("留空则用内置那份。填了就覆盖它，改完保存立刻生效，不用重新打包。"))
         root.addView(note("这里能填 few_shot（对方说→我回的样例）——治「回复单一」最有效的就是它，比写一堆形容词管用。格式照仓库里的 assets/persona.json。"))
+        // 这个框是"所有预设共用的底稿"，直接改它只会换掉**当前这一份**的身份。
+        // 想"另外存一个人"，得显式走预设：和话术管理的「从文件导入」同一个入口。
+        root.addView(action("把上面的 JSON 存成一份独立预设") { saveJsonAsPreset() })
+        root.addView(note("点上面这个按钮 = 新建一份预设并切过去，以后在话术管理里可以来回换。\n直接改框再保存 = 只改当前这一份，不会多出一份。"))
 
         root.addView(section("禁止出现的内容"))
         root.addView(multi("bannedWords", config.bannedWords, 5))
@@ -436,10 +442,41 @@ class SettingsActivity : Activity() {
         // 身份 / 语气（personaJson）也是"人设"的一部分，而人设是按预设切换的。
         // 存完必须同步进当前预设 —— 否则下次切走再切回来，
         // 会把刚改的身份悄悄还原成旧预设里那份。
-        com.autoreply.app.core.persona.PersonaPresets.snapshotActive(this)
+        PersonaPresets.snapshotActive(this)
 
         Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show()
         finish()
+    }
+
+    /**
+     * 把「人设 JSON」框里的内容存成一份**独立预设**。
+     *
+     * 为什么需要单独一个按钮：那个框是"所有预设共用的底稿"（写进 personaJson）。
+     * 直接粘一份新的人设进来再保存，只会把**当前这一份**预设的身份换掉，
+     * 列表里不会多出一个人 —— 想"另存一个人"，只有显式走预设这一条路。
+     *
+     * 和话术管理的「从文件导入」共用 [PersonaPresets.parsePersonaText] + [PersonaPresets.insert]，
+     * 两条入口行为一致：新建预设、设为生效、不覆盖同名的那份。
+     */
+    private fun saveJsonAsPreset() {
+        val text = inputs["personaJson"]?.text?.toString().orEmpty()
+        val persona = PersonaPresets.parsePersonaText(text)
+        if (persona == null) {
+            Toast.makeText(
+                this,
+                "框里还不是可用的人设：identity / few_shot / knowledge / rules 至少要有一样",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        val name = persona.optString("name", "").trim().ifEmpty { "粘贴的人设" }
+        if (PersonaPresets.insert(this, name, persona.toString(2), JSONObject(), activate = true) == null) {
+            Toast.makeText(this, "存预设失败：写不进 filesDir", Toast.LENGTH_LONG).show()
+            return
+        }
+        // 回填规范化后的文本：把 _note 之类的说明字段去掉，框里看到的就是实际生效的内容
+        inputs["personaJson"]?.setText(persona.toString(2))
+        Toast.makeText(this, "已存成预设「$name」—— 去话术管理里可以来回切", Toast.LENGTH_LONG).show()
     }
 
     private fun textOf(key: String): String = inputs[key]?.text?.toString().orEmpty()

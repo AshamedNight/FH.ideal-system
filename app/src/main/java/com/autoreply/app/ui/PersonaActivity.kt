@@ -246,10 +246,15 @@ class PersonaActivity : Activity() {
         val ruleTexts = rules.mapNotNull {
             it.text.text.toString().trim().ifEmpty { null }
         }
+        val identityText = identityInput.text.toString().trim()
 
-        // 两个都空 = 等于把回复能力清空了。允许，但要拦一下确认
-        if (fewShot.isEmpty() && ruleTexts.isEmpty()) {
-            Toast.makeText(this, "样例和准则都是空的，至少要留一条", Toast.LENGTH_LONG).show()
+        // 三样全空 = 等于把这个人清空了，拦一下。
+        //
+        // 原来只看到「样例 + 准则」，于是 **只有身份的人设（导入的 JSON 常见）会被判成空**：
+        // 点保存失败、点另一个预设也失败 —— 表现就是"卡在这一份上，换不走"。
+        // 身份也是人设的一部分，填了就说明这份是有效的。
+        if (fewShot.isEmpty() && ruleTexts.isEmpty() && identityText.isEmpty()) {
+            Toast.makeText(this, "身份、样例、准则都是空的，至少要留一样", Toast.LENGTH_LONG).show()
             return false
         }
 
@@ -265,7 +270,6 @@ class PersonaActivity : Activity() {
         // 之后改设置页那份再也不生效 —— 用户会以为"设置页坏了"。
         // 清空输入框 = 回到外层那份（空串在 Override 里就是"没覆盖"）。
         val baseIdentity = PersonaLoader.base(this, AppConfig(this)).identity.trim()
-        val identityText = identityInput.text.toString().trim()
         val identityOverride = if (identityText == baseIdentity) "" else identityText
 
         val ok = PersonaStore.save(this, fewShot, ruleTexts, items, identityOverride)
@@ -421,8 +425,10 @@ class PersonaActivity : Activity() {
             ).show()
             return
         }
-        // 先把这一页的改动存回当前预设，否则导入完会把刚改的东西吞掉
-        if (!persist(exitAfter = false)) return
+        // 先把这一页的改动存回当前预设。**不看返回值**：导入是整份替换，
+        // 真存不下去的情况只有"整页是空的"，那种内容本来也没什么可保的；
+        // 拦在这里只会让人看到"选了文件却什么都没发生"。
+        persist(exitAfter = false)
 
         val name = persona.optString("name", "").trim().ifEmpty { "导入的人设" }
         // 覆盖层清空：这份 JSON 自己带着样例 / 准则 / 情况，留着旧的会串味
@@ -431,7 +437,7 @@ class PersonaActivity : Activity() {
             Toast.makeText(this, "导入失败：写不进 filesDir", Toast.LENGTH_LONG).show()
             return
         }
-        Toast.makeText(this, "已导入「$name」，现在用它", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "已存成预设「$name」，现在用它 —— 在列表里可以来回切", Toast.LENGTH_LONG).show()
         recreate()
     }
 

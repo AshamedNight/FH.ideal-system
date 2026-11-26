@@ -51,8 +51,12 @@ object PersonaPresets {
     private fun load(context: Context): JSONObject {
         val f = file(context)
         if (f.isFile) {
-            val o = runCatching { JSONObject(f.readText()) }.getOrNull()
+            val raw = runCatching { f.readText() }.getOrNull()
+            val o = raw?.let { runCatching { JSONObject(it) }.getOrNull() }
             if (o != null && (o.optJSONArray("presets")?.length() ?: 0) > 0) return o
+            // 文件在、但读不出来（写一半被系统杀掉、存储出错…）：先留一份 .bad 再重建。
+            // 直接覆盖等于把用户的几份人设静默删光 —— 这种"人设全没了"根本查不出原因。
+            runCatching { f.copyTo(File(f.parentFile, FILE_NAME + ".bad"), overwrite = true) }
         }
         val id = newId(System.currentTimeMillis())
         val o = JSONObject()
