@@ -110,9 +110,13 @@ class ReplyRunner(
                 service.logAuto("第一次没读到，重读成功（${messages.size} 条）")
             }
         }
+        // 上下文来源计数（重读之后再记，否则算的是第一次那份）
+        val fromTree = messages.size
+        var fromNotify = 0
+        var fromClip = 0
         if (messages.isEmpty()) {
             // 通知兜底。他趣这类平台唯一还能看到"对方说了什么"的就是通知栏：
-            // 攒的是同一会话最近几条（10 分钟内），有就整段给；
+            // 攒的是同一会话最近几条（30 分钟内），有就整段给；
             // 只回最后一条的话，模型看到的是半句话。
             //
             // 注意**不再要求 notifyText 非空**：手动点「生成下一条」时一样该用它 ——
@@ -125,6 +129,7 @@ class ReplyRunner(
                 }
             if (lines.isNotEmpty()) {
                 messages = lines.map { ChatMessage(it, fromOther = true, rect = Rect()) }
+                fromNotify = lines.size
                 if (lines.size > 1) {
                     service.logAuto("上下文来自通知攒的 ${lines.size} 条")
                 }
@@ -139,9 +144,15 @@ class ReplyRunner(
                 // 和树/通知里的重复就不重复加
                 if (messages.none { it.text == clip }) {
                     messages = messages + ChatMessage(clip, fromOther = true, rect = Rect())
+                    fromClip = 1
                     service.logAuto("上下文补了剪贴板：${clip.take(16)}")
                 }
             }
+        }
+        // 读不到树的平台上，"模型到底看到了几句话"是用户唯一能判断草稿靠不靠谱的依据。
+        // 正常平台读树就够了，不打印这行（避免日志噪音）。
+        if (messages.isNotEmpty() && (fromNotify > 0 || fromClip > 0)) {
+            service.logAuto("上下文：树 $fromTree 条 / 通知 $fromNotify 条 / 剪贴板 $fromClip 条")
         }
         if (messages.isEmpty()) {
             if (readFallback) {
