@@ -21,6 +21,7 @@ import com.autoreply.app.core.persona.KnowledgeItem
 import com.autoreply.app.core.persona.PersonaLoader
 import com.autoreply.app.core.persona.PersonaPresets
 import com.autoreply.app.core.persona.PersonaStore
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -107,6 +108,12 @@ class PersonaActivity : Activity() {
         // 导入：一份 JSON 直接变成一份可用的预设，不用再回设置页粘。
         // 走 SAF，不申请存储权限 —— 和「导出聊天记录」同一套做法。
         content.addView(ghostButton("＋ 从文件导入 JSON") { pickPersonaFile() })
+        content.addView(
+            note(
+                "文件里带「我是谁」（identity）= 整套人设 → 新建一份预设并切过去。\n" +
+                    "只带样例 / 情况 / 准则 = 话术包 → 会问你是替换还是追加到**当前**预设，身份不动。"
+            )
+        )
 
         // ---- 我是谁 ----
         //
@@ -435,6 +442,14 @@ class PersonaActivity : Activity() {
         // 拦在这里只会让人看到"选了文件却什么都没发生"。
         persist(exitAfter = false)
 
+        // 没有 identity = 这是一份「话术包」（只含样例 / 情况 / 准则）。
+        // 那种文件不能当整套人设导入 —— 否则 identity 会回落成通用默认，
+        // 名字、年龄、职业全没了。这里改成合并进当前预设，身份和语气不动。
+        if (persona.optString("identity", "").trim().isEmpty()) {
+            askTalkPack(persona)
+            return
+        }
+
         val name = persona.optString("name", "").trim().ifEmpty { "导入的人设" }
         // 覆盖层清空：这份 JSON 自己带着样例 / 准则 / 情况，留着旧的会串味
         val id = PersonaPresets.insert(this, name, persona.toString(2), JSONObject(), activate = true)
@@ -453,6 +468,123 @@ class PersonaActivity : Activity() {
             Toast.LENGTH_LONG,
         ).show()
         recreate()
+    }
+
+    /**
+     * 导入的是「话术包」（文件里没有 identity）时，问一句：替换还是追加。
+     *
+     * 为什么要区分：整套人设导入会新建一份预设；而"我只改了话术"这种文件
+     * 如果也走新建，identity 会回落成通用默认（名字、年龄、职业全丢）。
+     * 所以这类文件一律合并进**当前**预设，只动它带来的那几项。
+     */
+    private fun askTalkPack(pack: JSONObject) {
+        val sh = pack.optJSONArray("few_shot")?.length() ?: 0
+        val kn = pack.optJSONArray("knowledge")?.length() ?: 0
+        val ru = pack.optJSONArray("rules")?.length() ?: 0
+        if (sh + kn + ru == 0) {
+            Toast.makeText(this, "文件里没有问题 / 情况 / 准则，没什么可导入的", Toast.LENGTH_LONG).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("这是话术包，不是整套人设")
+            .setMessage(
+                "文件里没有「我是谁」，只有 $kn 条情况 / $sh 条样例 / $ru 条准则。\n\n" +
+                    "替换：这几项用文件里的内容覆盖当前预设。\n" +
+                    "追加：保留现有的，把文件里的接在后面（重复的自动去掉）。\n\n" +
+                    "两种都不动身份和语气。"
+            )
+            .setPositiveButton("替换") { _, _ -> applyTalkPack(pack, append = false) }
+            .setNeutralButton("追加") { _, _ -> applyTalkPack(pack, append = true) }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /**
+     * 把话术包写进当前预设的覆盖层。
+     *
+     * 直接改原始 JSON 而不是走 `PersonaStore.save(...)`：
+     * 那个方法要求把四项都传齐，这里只想动文件里出现的那几项 ——
+     * 没出现的（比如只给了样例、没给准则）应该原样保留。
+     */
+    private fun applyTalkPack(pack: JSONObject, append: Boolean) {
+        val raw = PersonaStore.readRaw(this) ?: JSONObject()
+        var fields = 0
+        pack.optJSONArray("few_shot")?.let { add ->
+            val cur = if (append) raw.optJSONArray("few_shot") ?: JSONArray() else JSONArray()
+            raw.put("few_shot", mergeShots(cur, add))
+            fields++
+        }
+        pack.optJSONArray("rules")?.let { add ->
+            val cur = if (append) raw.optJSONArray("rules") ?: JSONArray() else JSONArray()
+            raw.put("rules", mergeTexts(cur, add))
+            fields++
+        }
+        pack.optJSONArray("knowledge")?.let { add ->
+            val cur = if (append) raw.optJSONArray("knowledge") ?: JSONArray() else JSONArray()
+            raw.put("knowledge", mergeKnowledge(cur, add))
+            fields++
+        }
+        if (fields == 0) {
+            Toast.makeText(this, "文件里没有可合并的字段", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!PersonaStore.writeRaw(this, raw)) {
+            Toast.makeText(this, "写入失败：filesDir 不可写", Toast.LENGTH_LONG).show()
+            return
+        }
+        // 覆盖层变了要立刻存回当前预设，否则切走再切回来会还原
+        PersonaPresets.snapshotActive(this)
+        Toast.makeText(
+            this,
+            if (append) "已追加到当前预设" else "已用文件里的内容替换当前预设的话术",
+            Toast.LENGTH_SHORT,
+        ).show()
+        recreate()
+    }
+
+    /** 问答样例：按「问 + 答」去重，同一句问话的不同答法都保留。 */
+    private fun mergeShots(cur: JSONArray, add: JSONArray): JSONArray {
+        val out = JSONArray()
+        val seen = HashSet<String>()
+        for (arr in arrayOf(cur, add)) {
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val q = o.optString("q", "").trim()
+                val a = o.optString("a", "").trim()
+                if (q.isEmpty() || a.isEmpty()) continue
+                // 分隔符用 U+241F：正文里不会出现，避免 "ab"+"c" 与 "a"+"bc" 撞车
+                if (seen.add(q + "\u241F" + a)) out.put(JSONObject().put("q", q).put("a", a))
+            }
+        }
+        return out
+    }
+
+    private fun mergeTexts(cur: JSONArray, add: JSONArray): JSONArray {
+        val out = JSONArray()
+        val seen = HashSet<String>()
+        for (arr in arrayOf(cur, add)) {
+            for (i in 0 until arr.length()) {
+                val t = arr.optString(i, "").trim()
+                if (t.isNotEmpty() && seen.add(t)) out.put(t)
+            }
+        }
+        return out
+    }
+
+    /** 情况：同一个话题只留一条（追加时以现有那条为准，避免两套说法互相打架）。 */
+    private fun mergeKnowledge(cur: JSONArray, add: JSONArray): JSONArray {
+        val out = JSONArray()
+        val seen = HashSet<String>()
+        for (arr in arrayOf(cur, add)) {
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val topic = o.optString("topic", "").trim()
+                val answer = o.optString("answer", "").trim()
+                if (topic.isEmpty() || answer.isEmpty()) continue
+                if (seen.add(topic)) out.put(JSONObject().put("topic", topic).put("answer", answer))
+            }
+        }
+        return out
     }
 
     /**

@@ -280,6 +280,9 @@ object PersonaPresets {
                 context.assets.open("personas/$f").bufferedReader().use { it.readText() }
             }.getOrNull() ?: continue
             val persona = parsePersonaText(text) ?: continue
+            // 只认"整套人设"。话术包（没有 identity）塞进来会变成一份身份是默认值的预设 ——
+            // 看着像"内置了一个人"，其实是套通用模板，比没有更糟。
+            if (persona.optString("identity", "").trim().isEmpty()) continue
             val name = persona.optString("name", "").trim().ifEmpty { f.removeSuffix(".json") }
             if (list(context).any { it.name == name }) continue
             if (insert(context, name, persona.toString(2), JSONObject(), activate = false) != null) {
