@@ -44,7 +44,9 @@ object PersonaLoader {
         val pasted = config.personaJson
         if (pasted.isNotEmpty()) {
             Persona.fromJson(pasted)?.let {
-                return Loaded(withGuardrails(it), "设置页粘贴的 JSON")
+                // 这份 JSON 现在由预设维护（导入 / 「高级」弹窗），设置页早已不放这个框了。
+                // 标签写"当前预设"，用户在首页「试填」里看到它就知道切没切成功。
+                return Loaded(withGuardrails(it), "当前预设的人设 JSON")
             }
         }
 
@@ -58,7 +60,8 @@ object PersonaLoader {
             // assets 缺失/损坏都不算致命，继续往下回退
         }
 
-        return Loaded(withGuardrails(Persona.fromFreeText(config.persona)), "设置页自由文本")
+        // 旧版本只有一个自由文本框，这里保留是为了不让老用户的人设凭空消失。
+        return Loaded(withGuardrails(Persona.fromFreeText(config.persona)), "旧版自由文本")
     }
 
     private fun withGuardrails(p: Persona): Persona = p.copy(

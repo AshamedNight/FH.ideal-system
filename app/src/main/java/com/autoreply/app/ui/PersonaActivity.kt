@@ -118,7 +118,7 @@ class PersonaActivity : Activity() {
             note(
                 "这段会原样进提示词最前面：叫什么、多大、哪人、在做什么、什么姿态说话。\n" +
                     "别写成业务介绍 —— 自我介绍和主动推销是两件事，后者更招人烦。\n" +
-                    "填了以这里为准；清空并保存 = 回到设置页那份（或内置的那份）。"
+                    "填了以这里为准；清空并保存 = 回到这份预设的 JSON（或内置那份）。"
             )
         )
         identityInput = EditText(this).apply {
@@ -129,7 +129,9 @@ class PersonaActivity : Activity() {
             setHintTextColor(getColor(R.color.ink_faint))
             setBackgroundResource(R.drawable.bg_input)
             setPadding(dp(10), dp(8), dp(10), dp(8))
-            maxLines = 8
+            // 12 行：导入的人设常有三段（身份 / 性格 / 说话方式），
+            // 8 行会把最后一段藏起来 —— 看着像"没导全"，实际是全的。
+            maxLines = 12
             minHeight = dp(112)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
@@ -172,7 +174,7 @@ class PersonaActivity : Activity() {
         content.addView(
             note(
                 "一句话一条，直接进提示词。写的是「该怎么做」，不是「不能说什么」" +
-                    "（禁止词在设置页）。\n" +
+                    "（禁忌词在「高级：人设 JSON」里）。\n" +
                     "比如「对方说得不清楚就问一句，别猜」——这种姿态靠样例很难教会，写一条最有效。"
             )
         )
@@ -440,7 +442,16 @@ class PersonaActivity : Activity() {
             Toast.makeText(this, "导入失败：写不进 filesDir", Toast.LENGTH_LONG).show()
             return
         }
-        Toast.makeText(this, "已存成预设「$name」，现在用它 —— 在列表里可以来回切", Toast.LENGTH_LONG).show()
+        // 把条数一起报出来：这是"导入成功、内容进对地方"最直接的证据 ——
+        // 光一句"已导入"，用户还得自己去翻页面数条目才敢信。
+        val kn = persona.optJSONArray("knowledge")?.length() ?: 0
+        val sh = persona.optJSONArray("few_shot")?.length() ?: 0
+        val ru = persona.optJSONArray("rules")?.length() ?: 0
+        Toast.makeText(
+            this,
+            "已存成预设「$name」：$kn 条情况 / $sh 条样例 / $ru 条准则，现在是当前人设",
+            Toast.LENGTH_LONG,
+        ).show()
         recreate()
     }
 
