@@ -27,6 +27,7 @@ import com.autoreply.app.core.llm.ConversationMemory
 import com.autoreply.app.core.llm.Turn
 import com.autoreply.app.core.log.ChatLogStore
 import com.autoreply.app.core.persona.PersonaLoader
+import com.autoreply.app.notify.NotifyContext
 import com.autoreply.app.platform.AccessibilityReplySink
 import com.autoreply.app.platform.ChatMessage
 import com.autoreply.app.platform.ClipboardPeerText
