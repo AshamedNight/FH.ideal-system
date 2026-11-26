@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -26,12 +27,11 @@ import org.json.JSONObject
  * 话术管理：把「我是谁 / 我的情况 / 问答样例 / 行为准则」放在一页里改，
  * 四样一起跟着「人设预设」走，切换预设 = 换一整套人。
  *
- * ## 为什么这四项开放，语气 / 禁止词不开放
+ * ## 现在这一页就是人设的全部入口
  *
- * 这四项都是可以直接对着读的：身份是自我介绍，情况是事实卡，
- * 样例是"这句该这么答"，准则是"这种时候该这么接"。
- * 语气参数（正式度、长度）和禁止词改坏的表现是"回复忽然变得很奇怪"，
- * 用户几乎不可能反推出是哪一项导致的 —— 所以它们留在设置页。
+ * 2026-11-26 把设置页那两个大输入框（自由文本 + 人设 JSON）收掉了：它们改的和这里是
+ * 同一份数据，分两处只会让人以为"改这边那边会变"。语气 / 边界 / 禁忌词留在
+ * 「高级：人设 JSON」弹窗里 —— 偶尔改一次，不值得常驻半屏。
  *
  * ## 数据怎么存
  *
@@ -84,7 +84,7 @@ class PersonaActivity : Activity() {
             note(
                 "这里改的东西立刻生效（下次生成就用），不用重新打包。\n" +
                     "「我是谁 / 我的情况 / 问答样例 / 行为准则」都是一份预设的一部分 —— " +
-                    "换预设，这四样一起换。语气参数和禁止词仍在设置页，全局共用。"
+                    "换预设，这四样一起换。语气参数和禁忌词在下面的「高级」里，同样跟着预设走。"
             )
         )
 
@@ -135,6 +135,9 @@ class PersonaActivity : Activity() {
                 android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
         content.addView(identityInput)
+        // 语气（正式度 / 长度 / 表情 / 口头禅）、边界、禁忌词只存在 personaJson 里，
+        // 没有单独输入框 —— 用这个弹窗改，避免又出现一个占半屏的大框。
+        content.addView(ghostButton("高级：语气 / 边界 / 禁忌（人设 JSON）") { editPersonaJson() })
 
         // ---- 我的情况 ----
         content.addView(section("我的情况（模型能说的事实）"))
@@ -439,6 +442,46 @@ class PersonaActivity : Activity() {
         }
         Toast.makeText(this, "已存成预设「$name」，现在用它 —— 在列表里可以来回切", Toast.LENGTH_LONG).show()
         recreate()
+    }
+
+    /**
+     * 编辑「当前预设」的整份人设 JSON。
+     *
+     * 为什么还要留这个入口：语气（formal / length / emoji / 口头禅）、边界、禁忌词
+     * 在 personaJson 里，本页没有为它们各做一个控件 —— 但也不能因为设置页隐藏了
+     * 那个框就没有入口。用弹窗而不是常驻大框：这些是偶尔改一次的东西。
+     *
+     * 校验只要求"是合法 JSON"：允许只写 tone（比如只想换口头禅），
+     * 不像导入那样强制要有 identity / 样例。
+     */
+    private fun editPersonaJson() {
+        val et = EditText(this).apply {
+            setText(AppConfig(this@PersonaActivity).personaJson)
+            textSize = 12f
+            typeface = android.graphics.Typeface.MONOSPACE
+            gravity = Gravity.TOP
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            maxLines = 16
+            minHeight = dp(320)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        AlertDialog.Builder(this)
+            .setTitle("人设 JSON（当前预设）")
+            .setMessage("留空 = 回到内置那份。身份 / 情况 / 样例 / 准则请用上面的输入框，这里重复写会被上面的覆盖。")
+            .setView(ScrollView(this).apply { addView(et) })
+            .setPositiveButton("保存") { _, _ ->
+                val text = et.text.toString().trim()
+                if (text.isNotEmpty() && runCatching { JSONObject(text) }.isFailure) {
+                    Toast.makeText(this, "这段不是合法 JSON，没有保存", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                AppConfig(this).personaJson = text
+                // 当前预设也跟着更新，否则切走再切回来会还原成旧的那份
+                persist(exitAfter = false)
+                recreate()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun renamePreset(p: PersonaPresets.Preset) {
