@@ -147,6 +147,91 @@ object SessionStore {
         }
     }
 
+    /** 会话列表里一行。 */
+    data class Session(
+        val pkg: String,
+        val peer: String,
+        val lastActive: Long,
+        val msgCount: Int,
+    )
+
+    /** 事实一行（含低置信，供「会话记忆」页核对）。 */
+    data class FactRow(val k: String, val v: String, val confidence: Float)
+
+    /** 全部会话，按最近活跃倒序。 */
+    fun sessions(ctx: Context): List<Session> {
+        val db = open(ctx) ?: return emptyList()
+        return runCatching {
+            db.query(
+                "sessions", arrayOf("pkg", "peer", "last_active", "msg_count"),
+                null, null, null, null, "last_active DESC",
+            ).use { c ->
+                buildList {
+                    while (c.moveToNext()) {
+                        add(Session(c.getString(0), c.getString(1), c.getLong(2), c.getInt(3)))
+                    }
+                }
+            }
+        }.getOrNull().orEmpty()
+    }
+
+    /**
+     * 某个人的**全部**事实（不过滤置信度）。
+     *
+     * 界面和提示词的要求不一样：提示词只该看高置信的，
+     * 而人核对时要能看到"它到底记了什么"，包括那些不确定的。
+     */
+    fun facts(ctx: Context, pkg: String, peer: String): List<FactRow> {
+        val db = open(ctx) ?: return emptyList()
+        val rows = runCatching {
+            db.query(
+                "facts", arrayOf("k", "v", "confidence"),
+                "pkg=? AND peer=?", arrayOf(pkg, peer), null, null, null,
+            ).use { c ->
+                buildList {
+                    while (c.moveToNext()) add(FactRow(c.getString(0), c.getString(1), c.getFloat(2)))
+                }
+            }
+        }.getOrNull().orEmpty()
+        return FactExtractor.ORDER.mapNotNull { k -> rows.firstOrNull { it.k == k } }
+    }
+
+    /** 人工改一条：置信度直接给 1.0 —— 人确认过的就是准的。 */
+    fun putFact(
+        ctx: Context,
+        pkg: String,
+        peer: String,
+        key: String,
+        value: String,
+        now: Long = System.currentTimeMillis(),
+    ) {
+        val v = value.trim()
+        if (v.isEmpty()) {
+            deleteFact(ctx, pkg, peer, key)
+            return
+        }
+        val db = open(ctx) ?: return
+        runCatching {
+            db.insertWithOnConflict(
+                "facts", null,
+                ContentValues().apply {
+                    put("pkg", pkg)
+                    put("peer", peer)
+                    put("k", key)
+                    put("v", v)
+                    put("confidence", 1.0f)
+                    put("updated_at", now)
+                },
+                SQLiteDatabase.CONFLICT_REPLACE,
+            )
+        }
+    }
+
+    fun deleteFact(ctx: Context, pkg: String, peer: String, key: String) {
+        val db = open(ctx) ?: return
+        runCatching { db.delete("facts", "pkg=? AND peer=? AND k=?", arrayOf(pkg, peer, key)) }
+    }
+
     /** 忘掉某个人（用户手动删、或判定读串了）。 */
     fun forget(ctx: Context, pkg: String, peer: String) {
         val db = open(ctx) ?: return

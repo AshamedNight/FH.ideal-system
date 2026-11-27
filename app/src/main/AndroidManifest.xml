@@ -72,6 +72,10 @@
         <activity
             android:name=".ui.PersonaActivity"
             android:exported="false" />
+        <!-- 会话记忆：看/改每个会话记下的事实（抽错了要能改，否则没法用） -->
+        <activity
+            android:name=".ui.MemoryActivity"
+            android:exported="false" />
 
         <!--
           读屏服务。eventTypes 只订阅窗口变化，不订阅 typeViewClicked ——

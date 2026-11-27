@@ -106,4 +106,16 @@ object FactExtractor {
 
     /** 事实的固定顺序：稳定的顺序能让上游的前缀缓存更愿意命中。 */
     val ORDER = listOf("age", "city", "job", "marriage", "kid", "want", "avoid")
+
+    /** 键 → 中文名。和 [ORDER] 一起维护，加一个键记得两边都加。 */
+    fun labelOf(key: String): String = when (key) {
+        "age" -> "年龄"
+        "city" -> "城市"
+        "job" -> "职业"
+        "marriage" -> "婚育"
+        "kid" -> "孩子"
+        "want" -> "诉求"
+        "avoid" -> "雷区"
+        else -> key
+    }
 }

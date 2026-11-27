@@ -219,6 +219,11 @@ class SettingsActivity : Activity() {
         )
         root.addView(note(if (memCount == 0) "目前还没有记录。" else "目前记了 $memCount 个会话。"))
         if (memCount > 0) {
+            // 抽错是必然会发生的（「我妹今年28」会被当成"她 28"），
+            // 所以必须有一个能看见、能改的地方，否则只能靠"清空全部"来修正。
+            root.addView(action("查看 / 修改记着的人") {
+                startActivity(Intent(this@SettingsActivity, MemoryActivity::class.java))
+            })
             root.addView(action("清空所有会话记忆") {
                 com.autoreply.app.core.memory.SessionStore.clear(this)
                 Toast.makeText(this, "已清空会话记忆", Toast.LENGTH_SHORT).show()
