@@ -61,6 +61,14 @@ class ReplyEngine(
              * 一条一条来：先填第一条，剩下的进队列，发出去再填下一条。
              */
             val parts: List<String> = emptyList(),
+            /**
+             * 这句是**哪来的**：模型 / 话术库 / 开场白库 / 演练。
+             *
+             * 为什么要标：库和开场白这两条路**不调模型、不花 token**，
+             * 但判定链原来一律写"第 1 次成稿"，用户看到"本次 0 token"就以为模型没接上。
+             * 更糟的是他会拿库里的句子去和输入框里的模型输出对账 —— 永远对不上。
+             */
+            val source: String = "模型",
         ) : Result()
         /** 不该回：要么没有对方的消息，要么触了输入侧边界。 */
         data class Blocked(val reason: String) : Result()
@@ -122,6 +130,7 @@ class ReplyEngine(
                         single = true,
                         // 只有一条时 parts 留空，走"单条"那条老路更简单
                         parts = if (filled.size > 1) filled else emptyList(),
+                        source = "开场白（多条）",
                     )
                 }
                 // 三条全空或全填不上 → 往下走库 / 模型，别让用户对着空白卡住
@@ -134,7 +143,7 @@ class ReplyEngine(
             // 而且对方还没回就连发三条，是整套行为里最像脚本的一种。
             // 现在按游标依次取，一条库项 = 一条消息。
             pickGreeting(greetings, peer, echo)?.let {
-                return Result.Draft(it, 1, 0, 0, 0, single = true)
+                return Result.Draft(it, 1, 0, 0, 0, single = true, source = "话术库")
             }
 
             // 库为空、但开着演练模式 → 用**内置钩子库**兜底。
@@ -145,7 +154,7 @@ class ReplyEngine(
             // 结果被样例接了回来 —— 这正是"改了设置还在发旧话术"的成因之一。
             if (greetings.isEmpty() && config.drillMode) {
                 pickGreeting(GreetingHooks.DEFAULT, peer, echo)?.let {
-                    return Result.Draft(it, 1, 0, 0, 0, single = true)
+                    return Result.Draft(it, 1, 0, 0, 0, single = true, source = "开场白库")
                 }
             }
             // 配了却一条都填不上（比如整库带 {昵称}、而昵称没读到）→ 交给模型写。
@@ -234,10 +243,11 @@ class ReplyEngine(
                             estimatedInputTokens = estIn,
                             single = true,
                             parts = parts,
+                            source = sourceLabel(),
                         )
                     }
                 }
-                return Result.Draft(text, attempt, inTokens, outTokens, estIn)
+                return Result.Draft(text, attempt, inTokens, outTokens, estIn, source = sourceLabel())
             }
             lastHit = hit
         }
@@ -272,6 +282,13 @@ class ReplyEngine(
     /** 演练模式标记。UI 必须显著提示，否则用户会以为这些是模型写的。 */
     val isDrill: Boolean
         get() = config.drillMode
+
+    /**
+     * 这句来自哪里。判定链要显示它 ——
+     * "本次 0 token" 只有配上"来源：话术库"才解释得通；
+     * 否则用户会以为"接了模型但没生效"，然后拿库里的句子去和输入框对账。
+     */
+    private fun sourceLabel(): String = if (isMockModel) "演练" else "模型"
 
     /**
      * 按对方这条消息的长度决定回复上限。

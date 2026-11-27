@@ -333,7 +333,12 @@ class MainActivity : Activity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
 
                 val head = buildString {
-                    append("判定链：\n")
+                    // 带时间戳：这块是"这次试填的结果"，不会跟着输入法面板的动作刷新。
+                    // 用户拿它去和面板下方的「草稿」行对照时，两张纸其实来自不同时刻 ——
+                    // 时间戳至少能让人一眼看出"这是上一次的"。
+                    append("判定链（试填 ")
+                    append(android.text.format.DateFormat.format("HH:mm:ss", now))
+                    append("）：\n")
                     trace.forEach { append("  ").append(it).append('\n') }
                 }
 

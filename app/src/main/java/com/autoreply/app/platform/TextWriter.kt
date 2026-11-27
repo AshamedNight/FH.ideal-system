@@ -69,8 +69,22 @@ object TextWriter {
         val ime = AutoReplyImeService.instance
             ?: return Outcome(false, true, "输入法服务没在运行：去系统设置里重新勾选一次 AutoReply 输入法")
 
-        if (ime.commit(text, replaceFirst = replaceExisting)) {
+        // expectedPkg：只往"你正在看的那个 App"里写。绑在别处时会被挂起，不会硬写。
+        if (ime.commit(text, replaceFirst = replaceExisting, expectedPkg = profile.pkg)) {
             return Outcome(true, true, "已通过输入法写入（未发送）")
+        }
+
+        // 绑在别的 App 的输入框上：这不是"没点到输入框"，是"焦点压根不在这个 App"。
+        // 草稿已经挂起了（commit 里做的），这里只给一句准确的指引 ——
+        // 否则用户会看到"已写入"，回聊天页却发现框里还是旧内容，日志和界面对不上。
+        val bound = ime.boundPackage()
+        if (bound.isNotEmpty() && bound != profile.pkg) {
+            val who = profile.label.ifEmpty { "目标 App" }
+            return Outcome(
+                false, true,
+                "输入法正连在别的输入框上 —— 先点一下${who}的输入框，草稿会自动出现",
+                pending = true,
+            )
         }
 
         // ---- 第三条：替用户点一下输入框，把焦点建立起来 ----

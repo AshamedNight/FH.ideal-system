@@ -207,7 +207,10 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
                 return Outcome.Error(result.reason)
             }
             is ReplyEngine.Result.Draft -> {
-                step("④ 生成：第 ${result.attempts} 次成稿")
+                // 把来源一起写进判定链：库和开场白不调模型，token 是 0。
+                // 不标的话，"本次 0 token" 会被当成"模型没接上"，
+                // 而用户拿去对账的那句话其实根本不是模型写的。
+                step("④ 生成：第 ${result.attempts} 次成稿 · 来源 ${result.source}")
                 result
             }
         }

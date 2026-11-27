@@ -52,6 +52,19 @@ class AutoReplyImeService : InputMethodService() {
      */
     private var lastCommitted: String? = null
 
+    /**
+     * 当前绑定的输入框属于哪个 App。
+     *
+     * 为什么需要：`commitText` 只会写进"当前绑定的那个 InputConnection"。
+     * 我们的面板 / 首页浮在目标 App 上面时，这个连接可能还连着**上一个**输入框 ——
+     * 于是草稿写进了别处，目标 App 的框里还是旧内容，
+     * 而日志一路报"已写入"。用户看到的就是"生成和下层日志对不上"。
+     *
+     * 空串 = 还不知道（没收到 onStartInputView），这时不做校验，保持旧行为。
+     */
+    @Volatile
+    private var boundPkg: String = ""
+
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onCreate() {
@@ -654,6 +667,10 @@ class AutoReplyImeService : InputMethodService() {
             mainHandler.post {
                 setStatus(r.note.take(28).ifEmpty { "完成" })
                 refreshDraftLine()
+                // commitText 的 selection 回调有时比我们的回调晚一拍，
+                // 立刻刷会读到写入前的内容（面板写着旧草稿、框里其实是新的）。
+                // 再补刷一次，成本接近零。
+                mainHandler.postDelayed({ refreshDraftLine() }, 250L)
             }
         }
     }
@@ -840,8 +857,19 @@ class AutoReplyImeService : InputMethodService() {
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        // 先记下"现在连的是哪个 App 的输入框"，commit 前要拿它做校验
+        boundPkg = info?.packageName?.toString().orEmpty()
         flushPending()
     }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        super.onFinishInputView(finishingInput)
+        // 收键盘就当断开了：下一次绑定之前不该再往里写字
+        if (finishingInput) boundPkg = ""
+    }
+
+    /** 当前绑定的包名（可能是空串 = 未知）。给 TextWriter 判断"是不是写错地方了"。 */
+    fun boundPackage(): String = boundPkg
 
     /**
      * 把挂起的文本写进当前输入框。
@@ -859,15 +887,22 @@ class AutoReplyImeService : InputMethodService() {
         // 看起来像"粘贴到了另一个会话"，实际上是残留的 pending。
         if (System.currentTimeMillis() - pendingAt > PENDING_TTL_MS) {
             pendingText = null
+            pendingPkg = ""
             statusView?.text = "草稿已过期（换过会话），丢弃"
             return
         }
+
+        // 挂在 A 的草稿，不能因为 B 的输入框抢到焦点就写进 B。
+        // 只有当两边都知道包名、而且对不上时才等 —— 未知时保持旧行为（照写）。
+        val want = pendingPkg
+        if (want.isNotEmpty() && boundPkg.isNotEmpty() && want != boundPkg) return
 
         val ic = currentInputConnection ?: return
         clearOwnDraft(ic)
         ic.commitText(pending, 1)
         lastCommitted = pending
         pendingText = null
+        pendingPkg = ""
         statusView?.text = "已写入：${pending.take(16)}"
         verifyWritten(pending)
     }
@@ -951,10 +986,20 @@ class AutoReplyImeService : InputMethodService() {
      * 直接 commit 就会变成「上一段 + 这一段」连在一起 ——
      * 真机现象：输入框里出现「突然有点想认识你。在吗？」，但上面已经发过一条了。
      */
-    fun commit(text: String, replaceFirst: Boolean = false): Boolean {
+    fun commit(text: String, replaceFirst: Boolean = false, expectedPkg: String? = null): Boolean {
         val ic = currentInputConnection
+        // 绑定校验：只往"该写的那个 App"里写。
+        // 绑在别处时**挂起而不是硬写** —— 写进去等于污染另一个输入框，
+        // 而且目标框仍是旧内容，日志却报成功，这是最难自查的一类错。
+        if (!expectedPkg.isNullOrEmpty() && boundPkg.isNotEmpty() && boundPkg != expectedPkg) {
+            pendingText = text
+            pendingPkg = expectedPkg
+            pendingAt = System.currentTimeMillis()
+            return false
+        }
         if (ic == null) {
             pendingText = text
+            pendingPkg = expectedPkg.orEmpty()
             pendingAt = System.currentTimeMillis()
             return false
         }
@@ -964,6 +1009,7 @@ class AutoReplyImeService : InputMethodService() {
         ic.commitText(text, 1)
         lastCommitted = text
         pendingText = null
+        pendingPkg = ""
         verifyWritten(text)
         return true
     }
@@ -995,6 +1041,15 @@ class AutoReplyImeService : InputMethodService() {
         /** 挂起待写入的文本。没有绑定输入框时先放这里。 */
         @Volatile
         var pendingText: String? = null
+
+        /**
+         * 这份 pending 是给哪个 App 的（空 = 不限制，保持旧行为）。
+         *
+         * 有了它，flushPending 才能拒绝"写进刚抢到焦点的另一个 App"——
+         * 输入框之间串话比丢一条草稿严重得多。
+         */
+        @Volatile
+        var pendingPkg: String = ""
 
         /** 挂起时刻。用来判断这份草稿是不是已经属于上一个会话了。 */
         @Volatile
