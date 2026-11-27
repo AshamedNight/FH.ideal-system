@@ -51,6 +51,9 @@ class MainActivity : Activity() {
     private lateinit var statusLevel: TextView
     private lateinit var output: TextView
 
+    /** 麦克风权限的请求码（只有「说一句」用得上）。 */
+    private val reqMic = 9101
+
     private val uiHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,6 +66,10 @@ class MainActivity : Activity() {
         // 放在启动时做，这样输入法面板里的人设列表也能看到它，
         // 不用先绕去「话术管理」才出现。
         PersonaPresets.seedBundled(this)
+
+        // 输入法面板里点「说一句」但还没授权麦克风 → 会带着这个 extra 跳过来要一次。
+        // 权限必须由一个 Activity 要，输入法服务（Service）自己弹不出来。
+        if (intent?.getBooleanExtra("ask_mic", false) == true) askMic()
 
         statusService = findViewById(R.id.status_service)
         statusNotify = findViewById(R.id.status_notify)
@@ -953,5 +960,36 @@ class MainActivity : Activity() {
 
     private fun toast(msg: String) {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * 要麦克风权限（只有「说一句」用得上）。
+     *
+     * 语音识别用系统自带的 SpeechRecognizer：音频只在系统服务里处理，
+     * 我们不录音、不落盘、不发给自己的服务器。
+     */
+    private fun askMic() {
+        val granted = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            toast("麦克风已授权 —— 回输入法点「说一句」")
+            return
+        }
+        requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), reqMic)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != reqMic) return
+        val ok = grantResults.firstOrNull() ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        toast(
+            if (ok) "已授权 —— 回输入法点「说一句」"
+            else "没授权就用不了语音；也可以点「换键盘」自己打"
+        )
     }
 }

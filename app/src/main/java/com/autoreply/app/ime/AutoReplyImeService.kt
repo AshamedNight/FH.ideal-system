@@ -73,6 +73,8 @@ class AutoReplyImeService : InputMethodService() {
     }
 
     override fun onDestroy() {
+        runCatching { recognizer?.destroy() }
+        recognizer = null
         instance = null
         super.onDestroy()
     }
@@ -258,6 +260,17 @@ class AutoReplyImeService : InputMethodService() {
                 rowOf(
                     panelCard("打开 App") { openApp() },
                     panelCard("切下一个平台") { switchPlatform() },
+                ).apply { setPadding(0, dp(8), 0, 0) }
+            )
+            // 第四行两格，解决"模型没写对、我自己有话说"那个场景：
+            //
+            // 我们的输入法没有键位，想自己打字就得切回系统键盘 —— 而切一次要来回两趟。
+            // 「换键盘」一键切过去（回来按地球图标）；「说一句」用系统语音识别，
+            // 不离开这个输入框，说的话直接落进草稿位置。
+            addView(
+                rowOf(
+                    panelCard("换键盘") { switchToOtherKeyboard() },
+                    panelCard("说一句") { startVoiceInput() },
                 ).apply { setPadding(0, dp(8), 0, 0) }
             )
         }
@@ -677,6 +690,136 @@ class AutoReplyImeService : InputMethodService() {
                 mainHandler.postDelayed({ refreshDraftLine() }, 250L)
             }
         }
+    }
+
+    // ---------------------------------------------------------------- 自己打字 / 说话
+    //
+    // 这两个入口解决的是同一个场景：**模型写的不对，但我自己心里有句话**。
+    // 我们这个输入法没有键位，原来的唯一出路是切回系统键盘、打完再切回来 ——
+    // 一来一回两次切换，比打字本身还累。
+
+    /**
+     * 切到系统里**另一个**输入法（也就是用户自己的键盘）。
+     *
+     * 用 [InputMethodService.switchInputMethod]（API 28+）直接切，不再弹选择框；
+     * 27 及以下没有这个 API，退回系统选择器 —— 多一步，总比没有强。
+     *
+     * 回来怎么办：系统键盘上有地球/切换键，点了就能回到我们这儿（我们已注册为可用的输入法）。
+     */
+    private fun switchToOtherKeyboard() {
+        val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+        val other = imm?.enabledInputMethodList?.firstOrNull { it.packageName != packageName }
+        if (other == null) {
+            setStatus("系统里没有别的键盘 —— 先装一个，或去设置里启用")
+            return
+        }
+        val label = runCatching { other.loadLabel(packageManager).toString() }
+            .getOrDefault("系统键盘")
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            runCatching { switchInputMethod(other.id) }
+                .onFailure { imm.showInputMethodPicker() }
+        } else {
+            imm.showInputMethodPicker()
+        }
+        setStatus("已切到 $label —— 打完按地球图标切回来")
+    }
+
+    /** 只在用户点「说一句」时创建；用系统语音识别，不发音频给任何第三方。 */
+    private var recognizer: android.speech.SpeechRecognizer? = null
+
+    private val voiceListener = object : android.speech.RecognitionListener {
+        override fun onReadyForSpeech(params: android.os.Bundle?) {
+            setStatus("听着… 说完自动填进输入框")
+        }
+
+        override fun onBeginningOfSpeech() {}
+
+        override fun onRmsChanged(rmsdB: Float) {}
+
+        override fun onBufferReceived(buffer: ByteArray?) {}
+
+        override fun onEndOfSpeech() {
+            setStatus("识别中…")
+        }
+
+        override fun onError(error: Int) {
+            // 5 = 没听清，7 = 超时，9 = 缺权限。都给同一句可操作的提示，
+            // 因为用户能做的只有"再说一次"或者"换键盘自己打"。
+            setStatus("没听清（$error）—— 再说一次，或点「换键盘」自己打")
+        }
+
+        override fun onResults(results: android.os.Bundle?) {
+            val text = results
+                ?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                ?.firstOrNull()?.trim().orEmpty()
+            if (text.isEmpty()) {
+                setStatus("没听清，再说一次")
+                return
+            }
+            // commit 会先擦掉我们自己上一次写的草稿再写 —— 正是这里想要的：
+            // 用户说的这句就是要替换掉模型那句，不是接在后面。
+            val ok = commit(text)
+            setStatus(if (ok) "已填入：${text.take(16)}" else "先点一下输入框，再说一次")
+            refreshDraftLine()
+            mainHandler.postDelayed({ refreshDraftLine() }, 250L)
+        }
+
+        override fun onPartialResults(partialResults: android.os.Bundle?) {}
+
+        override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+    }
+
+    /**
+     * 语音转文字，直接落进输入框。
+     *
+     * 为什么用 SpeechRecognizer 而不是系统那个识别界面（ACTION_RECOGNIZE_SPEECH）：
+     * 后者会拉起一个 Activity，把焦点从聊天框抢走 —— 输入法这时候已经没有
+     * InputConnection 了，识别完根本写不回去，只能挂起等用户再点一次。
+     * SpeechRecognizer 是我们自己起、自己收，不切界面，说话期间焦点一直在。
+     *
+     * 代价：要 RECORD_AUDIO 权限。没授权就跳去 App 里要一次，回来再点。
+     */
+    private fun startVoiceInput() {
+        val need = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (need) {
+            setStatus("语音需要麦克风权限 —— 去 App 里点一下授权")
+            runCatching {
+                startActivity(
+                    android.content.Intent(this, com.autoreply.app.ui.MainActivity::class.java)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        .putExtra("ask_mic", true)
+                )
+            }
+            return
+        }
+        if (!android.speech.SpeechRecognizer.isRecognitionAvailable(this)) {
+            setStatus("这台机器没有语音识别服务 —— 换键盘自己打吧")
+            return
+        }
+        val r = recognizer ?: runCatching {
+            android.speech.SpeechRecognizer.createSpeechRecognizer(this).also {
+                it.setRecognitionListener(voiceListener)
+                recognizer = it
+            }
+        }.getOrNull()
+        if (r == null) {
+            setStatus("语音启动失败 —— 换键盘自己打吧")
+            return
+        }
+        setStatus("正在启动语音…")
+        runCatching {
+            r.startListening(
+                android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(
+                        android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                        android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                    )
+                    putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                    putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                }
+            )
+        }.onFailure { setStatus("语音启动失败 —— 换键盘自己打吧") }
     }
 
     /**
