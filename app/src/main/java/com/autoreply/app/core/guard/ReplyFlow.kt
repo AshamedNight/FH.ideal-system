@@ -120,6 +120,11 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
          * 那是"说错代价大"，不是"时机不对"。
          */
         manual: Boolean = false,
+        /**
+         * 「关于对方」的事实（"28 岁"、"在淄博"…），来自会话记忆库。
+         * 读不到昵称的平台这里是空的 —— 那时宁可什么都不带，也不能串到别人身上。
+         */
+        facts: List<String> = emptyList(),
     ): Outcome {
         traceBuffer.clear()
 
@@ -196,7 +201,7 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
         }
 
         // ---- 4. 生成（内部已过输入边界与禁忌词） ----
-        val result = engine.generate(turns, peer)
+        val result = engine.generate(turns, peer, facts)
         val draftRes = when (result) {
             is ReplyEngine.Result.Blocked -> {
                 step("④ 生成：拦下 — ${result.reason}")

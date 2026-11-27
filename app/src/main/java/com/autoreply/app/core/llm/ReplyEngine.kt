@@ -80,8 +80,16 @@ class ReplyEngine(
      *
      * @param peer 对方昵称，只给开场白的 `{昵称}` 槽位用。读不到就传空 ——
      *   带该槽位的那几条会被跳过，而不是把花括号发出去。
+     * @param facts 「关于对方」的事实（"28 岁"、"在淄博"、"做美容"…），来自
+     *   [com.autoreply.app.core.memory.SessionStore]。放这里而不是 persona 里：
+     *   persona 是"我是谁"，这些是"她是谁"，而且按会话变 ——
+     *   混进 persona 会让每换一个人都重建那份大提示词。
      */
-    fun generate(turns: List<Turn>, peer: String = ""): Result {
+    fun generate(
+        turns: List<Turn>,
+        peer: String = "",
+        facts: List<String> = emptyList(),
+    ): Result {
         val last = turns.lastOrNull { it.fromOther }
             ?: return Result.Blocked("没有对方发来的消息")
 
@@ -170,7 +178,7 @@ class ReplyEngine(
         // 不会"第一次单条、重写时又变三条"。
         val burst = config.burstChance > 0 && Random.nextInt(100) < config.burstChance
         val system = buildSystem(persona, adaptiveMaxChars(turns, config.maxReplyChars))
-        val baseUser = buildUser(turns, burst)
+        val baseUser = buildUser(turns, burst, facts)
         val client = LlmClient(effectiveBaseUrl, config.llmApiKey, config.llmModel, config.llmProxy)
 
         var lastHit = ""
@@ -475,7 +483,11 @@ class ReplyEngine(
         return GREETING_WORDS.any { t.contains(it) }
     }
 
-    private fun buildUser(turns: List<Turn>, burst: Boolean = false): String = buildString {
+    private fun buildUser(
+        turns: List<Turn>,
+        burst: Boolean = false,
+        facts: List<String> = emptyList(),
+    ): String = buildString {
         // 现在几点。放这里而不是 system：system 变动会让整段缓存失效（见上面的注释）。
         // 模型自己没有时钟，不说的话它早上九点也在讲"刚下班"。
         appendLine("# 现在")
@@ -500,6 +512,21 @@ class ReplyEngine(
         }
 
         val shown = turns.takeLast(CONTEXT_TURNS)
+        // 「关于对方」：从会话记忆库里读出来的事实，跨会话、跨重启都还在。
+        //
+        // 放在"更早聊过"之前：它是结论，比"聊过什么话题"重要得多。
+        // 措辞上必须压住两件事 —— ① 别像查户口一样逐条复述；
+        // ② 和这一屏对话冲突时以对话为准（数据库里可能存着三天前的旧值）。
+        if (facts.isNotEmpty()) {
+            appendLine("# 关于对方（之前记下的，可能不全）")
+            appendLine(facts.joinToString("；"))
+            appendLine(
+                "和当前话题相关时才自然带一句，别逐条复述、别像查户口。" +
+                    "如果最近的对话和上面不一致，以最近的对话为准。"
+            )
+            appendLine()
+        }
+
         // 更早的内容压成一行提醒。
         //
         // 为什么不是"再多塞几条全文"：token 是每条消息都要付的，历史越长每条越贵。

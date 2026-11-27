@@ -319,6 +319,12 @@ class MainActivity : Activity() {
             // ReplyFlow 构造时会读 assets/persona.json，属于 IO，放主线程是 StrictMode 隐患。
             // 而且每点一次都重建，改完人设能立刻生效（不用重启 App）。
             val flow = ReplyFlow(this@MainActivity, config)
+            // 会话记忆：读"她是谁"、写回这一轮抽到的事实。和 ReplyRunner 同一条规则 ——
+            // 首页按钮不经过 ReplyRunner，这里漏了就会"自动触发记得、手动点击忘"。
+            val facts = com.autoreply.app.core.memory.SessionStore
+                .digest(this@MainActivity, pkg, peer)
+            com.autoreply.app.core.memory.SessionStore
+                .observe(this@MainActivity, pkg, peer, turns)
             val outcome = flow.decide(
                 turns,
                 selfSaidAgoSeconds = selfAgo,
@@ -332,6 +338,7 @@ class MainActivity : Activity() {
                 // 手动点也不动，界面上看着像程序坏了
                 manual = true,
                 peer = peer,
+                facts = facts,
             )
             // trace 必须在这里取：下一次 decide 会清空它
             val trace = flow.lastTrace

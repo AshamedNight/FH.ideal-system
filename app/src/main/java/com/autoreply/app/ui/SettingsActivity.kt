@@ -202,6 +202,30 @@ class SettingsActivity : Activity() {
             })
         }
 
+        // ---- 会话记忆（谁是谁）----
+        //
+        // 和上面的「聊天记录」是两件事：那个存的是逐字对话（默认关），
+        // 这个存的是从对话里抽出来的事实（年龄/城市/职业…），只为让模型
+        // 换会话、重启之后仍然记得对方是谁。不存原文。
+        val memCount = com.autoreply.app.core.memory.SessionStore.sessionCount(this)
+        root.addView(section("会话记忆（记住对方是谁）"))
+        root.addView(
+            note(
+                "从对话里抽出的事实：年龄、城市、职业、婚育、诉求、雷区。\n" +
+                    "它解决的是「从会话 A 切到 B、再切回 A，消息还在但模型像没见过」——" +
+                    "事实不随窗口滚动消失，也不随重启丢失。\n" +
+                    "**只存事实，不存聊天原文**；读不到昵称的平台不记（宁可不记，不能串人）。"
+            )
+        )
+        root.addView(note(if (memCount == 0) "目前还没有记录。" else "目前记了 $memCount 个会话。"))
+        if (memCount > 0) {
+            root.addView(action("清空所有会话记忆") {
+                com.autoreply.app.core.memory.SessionStore.clear(this)
+                Toast.makeText(this, "已清空会话记忆", Toast.LENGTH_SHORT).show()
+                recreate()
+            })
+        }
+
         adv.addView(section("时段"))
         adv.addView(
             note(

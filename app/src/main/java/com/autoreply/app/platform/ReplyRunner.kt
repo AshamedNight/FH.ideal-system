@@ -14,6 +14,7 @@ import com.autoreply.app.core.guard.SentTracker
 import com.autoreply.app.core.llm.ConversationMemory
 import com.autoreply.app.core.llm.Turn
 import com.autoreply.app.core.log.ChatLogStore
+import com.autoreply.app.core.memory.SessionStore
 import com.autoreply.app.notify.NotifyContext
 
 /**
@@ -257,6 +258,10 @@ class ReplyRunner(
             // 而连点的推进就靠 onDone —— 一次网络抖动就能把整条连点卡死，
             // 界面上还显示"连点剩 5 个"，用户完全不知道卡在哪。
             try {
+                // 会话记忆放在这个线程里做：SQLite 读写不该落在主线程上
+                // （自动触发那条路是从无障碍回调进来的，本身就在主线程）。
+                val facts = SessionStore.digest(service, pkg, peer)
+                SessionStore.observe(service, pkg, peer, turns)
                 // 构造要读 assets/persona.json，属于 IO；每次新建还能让改完人设立即生效
                 val flow = ReplyFlow(service, config)
                 val outcome = flow.decide(
@@ -274,6 +279,8 @@ class ReplyRunner(
                     // 昵称只给开场白的 {昵称} 槽位用。读不到就空着 ——
                     // 带该槽位的那几条会被跳过，不会把花括号发出去
                     peer = peer,
+                    // 库里记着的"她是谁"。读不到昵称时是空 —— 不猜、不串。
+                    facts = facts,
                 )
                 val trace = flow.lastTrace
                 mainHandler.post {
