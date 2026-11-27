@@ -89,7 +89,18 @@ class AutoReplyImeService : InputMethodService() {
      * 也不做成全透明/零高度：用户需要知道"现在用的是哪个输入法"，
      * 否则只会觉得键盘坏了。
      */
-    override fun onCreateInputView(): View = buildPanel()
+    override fun onCreateInputView(): View {
+        phraseSig = AppConfig(this).quickPhrases.joinToString("\u241F")
+        return buildPanel()
+    }
+
+    /**
+     * 上一次建面板时用的是哪一组常用短语。
+     *
+     * 面板是建一次反复用的，不像 Activity 会重建 —— 用户在设置里加了短语，
+     * 不重建的话要等系统把输入法杀掉才看得到，表现为"改了没生效"。
+     */
+    private var phraseSig: String = ""
 
     /**
      * 输入法面板。
@@ -163,6 +174,26 @@ class AutoReplyImeService : InputMethodService() {
                 .filter { it.id != activePersonaId }
                 .take(4 - personaRow.size)
                 .forEach { personaRow.add(it) }
+        }
+
+        // ── 常用短语：一排可横滑的小格，点一下直接替换输入框内容 ──
+        //
+        // 这是"我自己有话说"最快的入口，比语音还快：不用说话、不用等识别、
+        // 不上传任何东西。放在草稿行上面，因为它是"我来说"，
+        // 下面的草稿行是"模型说了什么"，两件事。
+        val quick = AppConfig(this).quickPhrases
+        if (quick.isNotEmpty()) {
+            val strip = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(12), dp(8), dp(12), 0)
+            }
+            quick.take(12).forEach { p -> strip.addView(phraseChip(p) { insertPhrase(p) }) }
+            root.addView(
+                android.widget.HorizontalScrollView(this).apply {
+                    isHorizontalScrollBarEnabled = false
+                    addView(strip)
+                }
+            )
         }
 
         // ── 草稿预览：让用户知道框里现在是什么，不用切回聊天页确认 ──
@@ -698,6 +729,36 @@ class AutoReplyImeService : InputMethodService() {
     // 我们这个输入法没有键位，原来的唯一出路是切回系统键盘、打完再切回来 ——
     // 一来一回两次切换，比打字本身还累。
 
+    /** 常用短语的小格子：和设置页输入框同一个底，长句自动截断，不撑破一行。 */
+    private fun phraseChip(text: String, onClick: () -> Unit): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 11f
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+        setTextColor(getColor(R.color.ink))
+        setBackgroundResource(R.drawable.bg_input)
+        setPadding(dp(10), dp(7), dp(10), dp(7))
+        setOnClickListener { onClick() }
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { marginEnd = dp(8) }
+    }
+
+    /**
+     * 把一条常用短语插进输入框。
+     *
+     * 语义是**替换**，不是追加：这句话就是对"模型写的那句"的否决，
+     * 接着写会变成「模型那句 + 我这句」连在一起 —— 那是最糟的结果。
+     * `commit()` 内部会先擦掉我们自己上一次写的草稿，正好符合这个语义。
+     */
+    private fun insertPhrase(text: String) {
+        val ok = commit(text)
+        setStatus(if (ok) "已插入：${text.take(14)}" else "先点一下输入框，再点这句")
+        refreshDraftLine()
+        mainHandler.postDelayed({ refreshDraftLine() }, 250L)
+    }
+
     /**
      * 切到系统里**另一个**输入法（也就是用户自己的键盘）。
      *
@@ -1009,6 +1070,12 @@ class AutoReplyImeService : InputMethodService() {
         super.onStartInputView(info, restarting)
         // 先记下"现在连的是哪个 App 的输入框"，commit 前要拿它做校验
         boundPkg = info?.packageName?.toString().orEmpty()
+        // 设置里改过常用短语 → 重建面板，否则要等输入法被系统重启才看得到
+        val sig = AppConfig(this).quickPhrases.joinToString("\u241F")
+        if (sig != phraseSig) {
+            phraseSig = sig
+            runCatching { setInputView(buildPanel()) }
+        }
         flushPending()
     }
 

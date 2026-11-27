@@ -244,6 +244,28 @@ class AppConfig(context: Context) {
             .apply()
 
     /**
+     * 常用短语：输入法面板上一排，点一下直接插进输入框。
+     *
+     * 解决的是"模型没写对，但我自己心里有句话"这个场景（2026-11-27）。
+     * 本来想用语音，但这台机器的系统没有语音识别服务，装也装不上；
+     * 而他要说的其实翻来覆去就那几句（不加微信、先聊两句、你哪的），
+     * 一键插入比说话更快，也不用麦克风、不上传任何东西。
+     *
+     * 一行一条，原样插入 —— 不填槽位、不改写。
+     */
+    var quickPhrases: List<String>
+        get() = (sp.getString(KEY_QUICK_PHRASES, "") ?: "")
+            .split('\n')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        set(value) = sp.edit()
+            .putString(
+                KEY_QUICK_PHRASES,
+                value.map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n"),
+            )
+            .apply()
+
+    /**
      * 开场白库的轮换游标。
      *
      * 存在的理由：原来是拿「对方那句话的 hashCode」取模选一条，结果所有说
@@ -523,6 +545,9 @@ class AppConfig(context: Context) {
         private const val KEY_IME_PAGE = "ime_page"
         private const val KEY_TALK_STYLE = "talk_style"
         private const val KEY_GREETINGS = "greeting_lines"
+
+        /** 常用短语（输入法面板一键插入）。 */
+        private const val KEY_QUICK_PHRASES = "quick_phrases"
         private const val KEY_GREETING_ON = "greeting_enabled"
         private const val KEY_GREETING_CURSOR = "greeting_cursor"
         private const val KEY_GREETING_MULTI = "greeting_multi"

@@ -366,6 +366,29 @@ class SettingsActivity : Activity() {
         })
         root.addView(note("身份、情况、样例、准则都在那一页；「人设预设」可以存多份，切换 = 整套换（身份 + 语气 + 话术）。"))
 
+        root.addView(section("常用短语（面板一键插入）"))
+        root.addView(
+            note(
+                "输入法面板上排成一排，点一下就把那句**替换进**输入框 —— " +
+                    "模型写得不对、但你自己有话的时候用，比切键盘打字快得多。\n" +
+                    "一行一条，原样插入，不填 {昵称} 这类槽位。留空则面板不显示这一排。"
+            )
+        )
+        root.addView(multi("quickPhrases", config.quickPhrases.joinToString("\n"), 5))
+        // 空列表时这个功能等于不存在，给一份能直接用的起步内容 —— 改哪句都行。
+        root.addView(action("载入 6 条示例（可以随便改）") {
+            inputs["quickPhrases"]?.setText(
+                listOf(
+                    "先聊两句吧，我这边不急",
+                    "这个先不加，聊得来再说",
+                    "刚忙完，你呢",
+                    "你平时都在忙什么",
+                    "我这会儿不太方便，晚点回你",
+                    "你哪的人啊",
+                ).joinToString("\n")
+            )
+        })
+
         root.addView(section("禁止出现的内容"))
         root.addView(multi("bannedWords", config.bannedWords, 5))
         root.addView(note("一行一个词或短语。命中的草稿会被丢弃并重新生成，两次仍命中的话只显示给你看，不填入。"))
@@ -473,6 +496,8 @@ class SettingsActivity : Activity() {
         // 人设（persona / personaJson）不在这里写了：两个输入框已经挪进「话术管理」，
         // 页面里根本没有这两个 key。硬写会把配置清空 —— textOf 对不存在的输入框返回空串。
         config.bannedWords = textOf("bannedWords")
+        // 常用短语：输入法面板那一排（一行一条，换行分隔）
+        config.quickPhrases = textOf("quickPhrases").split('\n')
         config.maxReplyChars = intOf("maxReplyChars", config.maxReplyChars)
         config.burstChance = intOf("burstChance", config.burstChance)
         config.burstMax = intOf("burstMax", config.burstMax)
