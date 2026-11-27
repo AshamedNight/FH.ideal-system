@@ -673,11 +673,17 @@ class SettingsActivity : Activity() {
         val preset = PersonaPresets.list(this)
             .firstOrNull { it.id == PersonaPresets.activeId(this) }?.name.orEmpty()
             .ifEmpty { "默认" }
-        val model = if (config.distributionEnabled) {
-            "内置接口（成员版）"
-        } else {
-            val host = config.llmBaseUrl.substringAfter("://").substringBefore("/")
-            config.llmModel.ifEmpty { "未填模型名" } + if (host.isEmpty()) " · 地址未填" else " · $host"
+        val model = when {
+            // 演练模式开着的时候，"模型"这一行必须最先说这件事：
+            // 它一开就完全不调模型，回复是从样例里拼的。写在摘要里，
+            // 才不会出现"明明填了 Key，回复却像模板"的困惑。
+            config.drillMode -> "演练模式（不调模型）"
+            config.distributionEnabled -> "内置接口（成员版）"
+            else -> {
+                val host = config.llmBaseUrl.substringAfter("://").substringBefore("/")
+                config.llmModel.ifEmpty { "未填模型名" } +
+                    if (host.isEmpty()) " · 地址未填" else " · $host"
+            }
         }
         val greet = when {
             !config.greetingEnabled -> "未启用"
