@@ -41,6 +41,16 @@ class CaptureService : AccessibilityService() {
         @Volatile
         var instance: CaptureService? = null
 
+        /**
+         * 最近一次生成实际用到的上下文条数（记忆合并之后）。
+         *
+         * 给输入法面板显示用：草稿"对不上"时，用户第一件事该问的是
+         * "模型这次看到了几句" —— 3 条和 12 条，处理方式完全不同。
+         * 0 表示这次没生成（或在读之前就返回了）。
+         */
+        @Volatile
+        var lastContextTurns: Int = 0
+
         /** 事件风暴很密（列表滚动一次几十个事件），1.2 秒一次足够。 */
         private const val MIN_DUMP_INTERVAL_MS = 1200L
 

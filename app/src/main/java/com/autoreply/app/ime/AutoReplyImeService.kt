@@ -665,7 +665,11 @@ class AutoReplyImeService : InputMethodService() {
         com.autoreply.app.platform.ReplyRunner(svc, cfg).runOnce(manual = true) { r ->
             // 回调可能在后台线程，碰 View 必须回主线程
             mainHandler.post {
-                setStatus(r.note.take(28).ifEmpty { "完成" })
+                // 末尾带上"上下文 N 条"。草稿不对时，这是第一个要看的数：
+                // 3 条 = 读少了（先长按复制对方那句再换一句）；12 条 = 读到了，问题不在上下文。
+                val ctx = com.autoreply.app.capture.CaptureService.lastContextTurns
+                val note = r.note.take(28).ifEmpty { "完成" }
+                setStatus(if (ctx > 0) "$note · 上下文 $ctx 条" else note)
                 refreshDraftLine()
                 // commitText 的 selection 回调有时比我们的回调晚一拍，
                 // 立刻刷会读到写入前的内容（面板写着旧草稿、框里其实是新的）。

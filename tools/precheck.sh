@@ -13,6 +13,7 @@
 #   7. 乱码字符 / 字符串没闭合 / 块注释嵌套（写了个"斜杠星号"把后面全注释掉）
 #   8. addView 里调的构造函数不存在（改函数名漏改调用处）
 #   9. 同一作用域里重复声明（新写一份忘了删旧的，报错位置完全对不上）
+#  10. 会话记忆的接缝算法（Python 复刻 + 7 种窗口形状）
 #
 # 用法：bash tools/precheck.sh
 # 退出码非 0 就别 push。
@@ -119,9 +120,20 @@ else
     say "  （没有 python，跳过）"
 fi
 
+say "== 10. 会话记忆的接缝算法 =="
+# "聊长了回复对不上"这类问题的根源，都是 merge 把窗口关系判错了。
+# 这个脚本用 Python 复刻同一套判定，跑 7 种窗口形状
+# （正常续聊 / 窗口滑动 / 用户翻历史 / 换人 / 顶部多一条 / 重复句 / 同文不同向）。
+# 改了 ConversationMemory.merge 必须同步改它，否则这里会变成"假通过"。
+if command -v python >/dev/null 2>&1; then
+    python tools/verify_memory_merge.py || fail=1
+else
+    say "  （没有 python，跳过）"
+fi
+
 echo
 if [ $fail -ne 0 ]; then
     say "自检未通过 —— 修掉再 push，否则 CI 会白跑一轮。"
     exit 1
 fi
-say "自检全部通过。注意：只覆盖「必现失败」「漏 import」「缺构造函数」「重复声明」，其余类型错误仍只能靠 CI。"
+say "自检全部通过。注意：只覆盖「必现失败」「漏 import」「缺构造函数」「重复声明」「记忆接缝」，其余类型错误仍只能靠 CI。"

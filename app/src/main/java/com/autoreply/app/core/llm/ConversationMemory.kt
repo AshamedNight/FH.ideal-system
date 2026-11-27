@@ -32,6 +32,14 @@ object ConversationMemory {
     /** 只留最近 32 个会话，聊过的人多了不至于一直涨。 */
     private const val MAX_SESSIONS = 32
 
+    /**
+     * 尾部对齐最多比几条。
+     *
+     * 为什么是 6 而不是"全部"：长对话里同一句话（"在吗""怎么说"）会被说好几次，
+     * 比得越长越容易对齐到更早的那一次，于是中间的几条被当成"已经有了"漏掉。
+     */
+    private const val OVERLAP_MAX = 6
+
     /** 按访问顺序淘汰的 LRU。key = 包名 + 会话昵称。 */
     private val sessions = LinkedHashMap<String, MutableList<Turn>>(16, 0.75f, true)
 
@@ -53,28 +61,92 @@ object ConversationMemory {
             return cached.toList()
         }
 
-        // 找"接缝"：缓存里的最后一条，在刚读到的列表里出现在哪。
-        // 找到 → 只追加它后面的，避免重复；找不到 → 认为换会话了，整段重置。
-        val anchor = cached.last().text.trim()
+        // ① 尾部重叠：记忆的最后 k 条 == 这一屏的前 k 条。
+        //    正常续聊就是这种形状（新消息把旧消息顶上去），最可靠、优先认它。
+        val k = tailOverlap(cached, fresh)
+        if (k > 0) {
+            for (i in k until fresh.size) cached.add(fresh[i])
+            cap(cached)
+            trim()
+            return cached.toList()
+        }
+
+        // ② 往上翻历史：这一屏的内容在记忆里**按顺序全都能找到**，
+        //    说明用户滚上去看旧消息了，这一屏整体是"过去"。
+        //
+        //    这里绝对不能像原来那样"对不上就重置" —— 那会把记忆倒退回十分钟前，
+        //    接着生成的回复就答非所问（2026-11-27 用户反馈的"聊长了就对不上"）。
+        //    正确处理是：忽略这一屏，继续用记忆里更新的事实。
+        if (isOlderWindow(fresh, cached)) return cached.toList()
+
+        // ③ 锚点：记忆最后一条出现在这一屏的中间（屏幕窗口一半旧一半新）。
+        val anchor = cached.last()
         var at = -1
         for (i in fresh.indices.reversed()) {
-            if (fresh[i].text.trim() == anchor && fresh[i].fromOther == cached.last().fromOther) {
+            if (sameAs(fresh[i], anchor)) {
                 at = i
                 break
             }
         }
-        if (at < 0) {
-            // 读到的和记忆对不上：新会话 / 界面刷新 / 消息被清理。
-            // **宁可丢记忆，也不能接错人。**
-            cached.clear()
-            cached.addAll(fresh.takeLast(MAX_TURNS))
+        if (at >= 0) {
+            for (i in (at + 1) until fresh.size) cached.add(fresh[i])
+            cap(cached)
             trim()
             return cached.toList()
         }
-        for (i in (at + 1) until fresh.size) cached.add(fresh[i])
-        while (cached.size > MAX_TURNS) cached.removeAt(0)
+
+        // ④ 三条都不成立：真的换人了 / 消息被清理 / 界面整块刷新。
+        //    **宁可丢记忆，也不能接错人。**
+        cached.clear()
+        cached.addAll(fresh.takeLast(MAX_TURNS))
         trim()
         return cached.toList()
+    }
+
+    /** 两条消息是不是"同一条"：内容 + 方向都要一致（对方说的和我说的，同文不同义）。 */
+    private fun sameAs(a: Turn, b: Turn): Boolean =
+        a.fromOther == b.fromOther && a.text.trim() == b.text.trim()
+
+    /**
+     * 记忆尾部与这一屏开头的最大重叠长度。
+     *
+     * 只比最近 [OVERLAP_MAX] 条：长对话里同一句话可能被说过好几次，
+     * 比太长反而更容易"对齐到更早的那次"，把中间的几条漏掉。
+     */
+    private fun tailOverlap(cached: List<Turn>, fresh: List<Turn>): Int {
+        val max = minOf(OVERLAP_MAX, cached.size, fresh.size)
+        for (k in max downTo 1) {
+            var ok = true
+            for (i in 0 until k) {
+                if (!sameAs(cached[cached.size - k + i], fresh[i])) {
+                    ok = false
+                    break
+                }
+            }
+            if (ok) return k
+        }
+        return 0
+    }
+
+    /**
+     * 这一屏是不是"更早的一段历史"：每一条都能在记忆里按顺序找到。
+     *
+     * 判据刻意宽松（允许跳过记忆里的条目）：用户滚动时屏幕上的消息本来就可能跳着显示
+     * （中间有图片/语音这类读不到文字的气泡）。只要顺序对得上，就认定是旧窗口。
+     */
+    private fun isOlderWindow(fresh: List<Turn>, cached: List<Turn>): Boolean {
+        if (fresh.size > cached.size) return false
+        var j = 0
+        for (t in fresh) {
+            while (j < cached.size && !sameAs(cached[j], t)) j++
+            if (j >= cached.size) return false
+            j++
+        }
+        return true
+    }
+
+    private fun cap(list: MutableList<Turn>) {
+        while (list.size > MAX_TURNS) list.removeAt(0)
     }
 
     /** 主动忘记某个会话（比如用户换了人聊、或判定不可靠时）。 */

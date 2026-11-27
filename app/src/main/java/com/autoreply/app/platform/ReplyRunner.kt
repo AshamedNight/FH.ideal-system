@@ -239,6 +239,9 @@ class ReplyRunner(
             ConversationMemory.keyOf(pkg, peer),
             messages.map { Turn(it.text, it.fromOther) },
         )
+        // 面板和日志都要知道"这次模型看到了几句"。草稿不对时这是第一判据：
+        // 3 条说明读少了（通知/剪贴板没攒到），11~12 条说明读到了，问题在别处。
+        CaptureService.lastContextTurns = turns.size
         // 「我上一句是多久之前说的」只认**确认发出**的时间。
         // 之前用的是"上次生成草稿"的时间，后果是：连着试几次生成（一条都没真发出去），
         // 判定链就以为你刚跟对方说完话，每条都扣 0.25 分、一路掉进「先等等」。
