@@ -177,7 +177,11 @@ class ReplyEngine(
         // **掷骰子只发生在这一处**，所以同一次生成里重试的几次都保持同一策略，
         // 不会"第一次单条、重写时又变三条"。
         val burst = config.burstChance > 0 && Random.nextInt(100) < config.burstChance
-        val system = buildSystem(persona, adaptiveMaxChars(turns, config.maxReplyChars))
+        // system 里只放**稳定**的字数上限（config 的基准值）。
+        // 自适应出来的那个数是随对方消息长度变的，放进 system 等于每次都换一份前缀 ——
+        // 上游按字面命中缓存，一个字变了就整段重算，费用照样翻倍。
+        // 自适应值改在 buildUser 里给（见"这一条的长度"那一段）。
+        val system = buildSystem(persona, config.maxReplyChars)
         val baseUser = buildUser(turns, burst, facts)
         val client = LlmClient(effectiveBaseUrl, config.llmApiKey, config.llmModel, config.llmProxy)
 
@@ -549,6 +553,17 @@ class ReplyEngine(
             appendLine((if (t.fromOther) "对方：" else "我：") + t.text.replace("\n", " "))
         }
         appendLine()
+
+        // 长度跟着对方走。**放 user 不放 system** —— 这个数随对方消息长度变，
+        // 塞进 system 会让前缀缓存每次都失效（按字面命中，一个字变了就整段重算）。
+        // system 里留的是 config 的基准值，这里的数字与它不同时以这里为准。
+        val cap = adaptiveMaxChars(turns, config.maxReplyChars)
+        if (cap != config.maxReplyChars) {
+            val otherLen = turns.lastOrNull { it.fromOther }?.text?.length ?: 0
+            appendLine("# 这一条的长度")
+            appendLine("对方刚说了 $otherLen 字，这条控制在 $cap 字以内（比系统里那个通用上限优先）。")
+            appendLine()
+        }
 
         // 偶尔分条。**放在 user 里，不放 system**。
         //

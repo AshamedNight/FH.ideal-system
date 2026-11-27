@@ -82,7 +82,9 @@ class ReplyRunner(
         }
 
         // 昵称：界面读得到就用界面的（它更准，跟着会话走），读不到才用通知标题。
-        val peer = NodeQuery.peerName(root, profile)
+        // var：通知兜底算出来的名字要**回写**进来（见"读空"那一段），
+        // 否则记忆/去重/会话键全用空串，十个人的对话会挤进同一个桶。
+        var peer = NodeQuery.peerName(root, profile)
             .ifEmpty { notifyPeer.orEmpty().trim() }
 
         // 读侧降级：全局剪贴板模式、平台标了 readFallback（他趣），或整条走剪贴板。
@@ -124,6 +126,9 @@ class ReplyRunner(
             // 通知是系统投的，不依赖这次点击是怎么触发的。
             val ctxPeer = notifyPeer.orEmpty().ifEmpty { peer }
                 .ifEmpty { NotifyContext.lastPeer(pkg, System.currentTimeMillis()) }
+            // 回写：界面读不到昵称时，通知标题就是"这一屏是谁"。
+            // 不回写的话，下面记忆/去重/会话键都在用空串 —— A 说过的话会接给 B。
+            if (peer.isBlank() && ctxPeer.isNotBlank()) peer = ctxPeer
             val lines = NotifyContext.recent(pkg, ctxPeer, System.currentTimeMillis())
                 .ifEmpty {
                     if (notifyText.isNullOrBlank()) emptyList() else listOf(notifyText.trim())
@@ -236,10 +241,25 @@ class ReplyRunner(
 
         // 屏幕只能看到"当前可见"的那几条，滚上去的就没了 ——
         // 用会话记忆把之前真正读到过的接回来，否则会出现"刚聊过又重问一遍"。
-        val turns = ConversationMemory.merge(
-            ConversationMemory.keyOf(pkg, peer),
-            messages.map { Turn(it.text, it.fromOther) },
-        )
+        //
+        // 名字还是空的（界面读不到、通知也没有）→ 这一轮**不碰记忆**：
+        // 空 key 会把所有人的对话挤进一个桶，宁可这一次记不住，也不能串人。
+        val named = peer.isNotBlank()
+        val turns = if (named) {
+            ConversationMemory.merge(
+                ConversationMemory.keyOf(pkg, peer),
+                messages.map { Turn(it.text, it.fromOther) },
+            )
+        } else {
+            service.logAuto("读不到昵称：这一轮不用会话记忆（避免串会话）")
+            messages.map { Turn(it.text, it.fromOther) }
+        }
+        // 记忆判定"接不上、换人了"→ 上一个人还没发完的第 2、3 段要一起丢掉，
+        // 否则用户一点发送，下一段就填进了新会话里。
+        if (named && ConversationMemory.lastReset) {
+            DraftQueue.clear()
+            service.logAuto("会话已经换了：清掉上一个人剩下的分段")
+        }
         // 面板和日志都要知道"这次模型看到了几句"。草稿不对时这是第一判据：
         // 3 条说明读少了（通知/剪贴板没攒到），11~12 条说明读到了，问题在别处。
         CaptureService.lastContextTurns = turns.size

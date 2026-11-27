@@ -44,6 +44,18 @@ object ConversationMemory {
     private val sessions = LinkedHashMap<String, MutableList<Turn>>(16, 0.75f, true)
 
     /**
+     * 上一次 [merge] 是不是"接不上、整段重置"了。
+     *
+     * 为什么要把这个信号暴露出去：重置意味着**换人了**（或界面整块刷新）。
+     * 而 [com.autoreply.app.core.guard.DraftQueue] 里可能还挂着上一个人的第 2、3 段 ——
+     * 不跟着清掉，用户一发，下一段话就填进了新会话里，看起来像"粘贴到了别人那儿"。
+     * merge 本身不该去动别的模块，所以只留一个标记，由调用方决定清什么。
+     */
+    @Volatile
+    var lastReset: Boolean = false
+        private set
+
+    /**
      * 把"屏幕上看到的"并进记忆，返回这一段完整可用的对话。
      *
      * @param key 用 [keyOf] 生成（包名 + 昵称），不要只传昵称 ——
@@ -51,6 +63,7 @@ object ConversationMemory {
      */
     @Synchronized
     fun merge(key: String, visible: List<Turn>): List<Turn> {
+        lastReset = false
         val fresh = visible.filter { it.text.isNotBlank() }
         if (fresh.isEmpty()) return sessions[key]?.toList() ?: emptyList()
 
@@ -97,6 +110,7 @@ object ConversationMemory {
 
         // ④ 三条都不成立：真的换人了 / 消息被清理 / 界面整块刷新。
         //    **宁可丢记忆，也不能接错人。**
+        lastReset = true
         cached.clear()
         cached.addAll(fresh.takeLast(MAX_TURNS))
         trim()

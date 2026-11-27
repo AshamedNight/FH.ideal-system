@@ -264,10 +264,20 @@ class MainActivity : Activity() {
 
         // 和 ReplyRunner 同一条规则：屏幕只能看到可见区，滚上去的靠会话记忆补回来。
         // （必须放在 peer 之后 —— 记忆是按「平台+昵称」分桶的。）
-        val turns = ConversationMemory.merge(
-            ConversationMemory.keyOf(pkg, peer),
-            messages.map { Turn(it.text, it.fromOther) },
-        )
+        // 名字为空时不碰记忆：空 key 会把所有人的对话挤进一个桶。
+        val named = peer.isNotBlank()
+        val turns = if (named) {
+            ConversationMemory.merge(
+                ConversationMemory.keyOf(pkg, peer),
+                messages.map { Turn(it.text, it.fromOther) },
+            )
+        } else {
+            messages.map { Turn(it.text, it.fromOther) }
+        }
+        // 记忆判定"换人了"→ 输入法那边挂着的后续分段不能留给下一个人
+        if (named && ConversationMemory.lastReset) {
+            com.autoreply.app.core.guard.DraftQueue.clear()
+        }
 
         // 聊天记录（默认关）：记「读到的对话」。和 ReplyRunner 是同一条路径的另一半 ——
         // 首页按钮不经过 ReplyRunner，这里漏了就会「自动触发有记录、手动点击没有」。

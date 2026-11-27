@@ -126,7 +126,20 @@ object SessionStore {
                     },
                     SQLiteDatabase.CONFLICT_REPLACE,
                 )
+                // 人确认过的那几条（置信度 1.0）不能被自动抽取覆盖 ——
+                // 用户把"她 28"改成"她 30"，下次抽取到 28 不该翻回去。
+                // 想让它重新自动维护：在「会话记忆」页把那条删掉即可。
+                val human = runCatching {
+                    db.query(
+                        "facts", arrayOf("k"),
+                        "pkg=? AND peer=? AND confidence>=?",
+                        arrayOf(pkg, peer, "0.99"), null, null, null,
+                    ).use { c ->
+                        buildSet { while (c.moveToNext()) add(c.getString(0)) }
+                    }
+                }.getOrDefault(emptySet())
                 facts.forEach { f ->
+                    if (f.key in human) return@forEach
                     db.insertWithOnConflict(
                         "facts", null,
                         ContentValues().apply {
