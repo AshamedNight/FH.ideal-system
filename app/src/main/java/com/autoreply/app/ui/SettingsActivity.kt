@@ -1,6 +1,7 @@
 package com.autoreply.app.ui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
@@ -294,6 +295,10 @@ class SettingsActivity : Activity() {
                 singleLine = false,
             )
         )
+        // 卡片里再高也只够看 8 行；十几条以上就别在卡片里改了。
+        root.addView(action("全屏编辑（条数多的时候用）") {
+            fullScreenEdit("greetingLines", "开场白库 · 一行一条")
+        })
 
         // ---- 多发开场白：勾了就用下面三条顶掉库，按顺序一条一条填 ----
         val multiOn = config.greetingMulti
@@ -608,7 +613,11 @@ class SettingsActivity : Activity() {
         val edit = editBase(value, inputType, 1).apply {
             // 多行字段（开场白一行一句）必须放行换行，否则全被压成一行
             setSingleLine(singleLine)
-            if (!singleLine) maxLines = 6
+            if (!singleLine) {
+                minLines = 4
+                maxLines = 8
+                scrollableInside()
+            }
         }
         inputs[key] = edit
         box.addView(edit)
@@ -623,9 +632,66 @@ class SettingsActivity : Activity() {
         ).apply {
             // 多行块从顶部开始写，否则光标停在中间看着像坏了
             gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            scrollableInside()
         }
         inputs[key] = edit
         return edit
+    }
+
+    /**
+     * 让多行输入框在 ScrollView 里**自己滚**。
+     *
+     * 不补这一下会怎样：手指一落在框上，外层 ScrollView 就把滑动事件抢走，
+     * 框里内容超过可见高度时既看不全、也滚不动 ——
+     * 「开场白填了十几条，改到后面根本够不着」就是这么来的。真机确认过。
+     *
+     * 只对**多行**框生效。单行框绝不能这么干：那样手指落在任何一行输入框上
+     * 都划不动页面，整页会像被钉住。
+     */
+    private fun EditText.scrollableInside() = apply {
+        isVerticalScrollBarEnabled = true
+        scrollBarStyle = ScrollView.SCROLLBARS_INSIDE_INSET
+        setOnTouchListener { view, e ->
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN ->
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL ->
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+            }
+            false
+        }
+    }
+
+    /**
+     * 全屏编辑一个长文本字段。
+     *
+     * 为什么要有：开场白这种"一行一条、几十行"的东西，卡片里给多高都不够 ——
+     * 给 8 行照样得眯着眼找第 13 条。弹一个接近全屏的框，改完点确定回填，
+     * 保存逻辑完全不变（还是走原输入框）。
+     */
+    private fun fullScreenEdit(key: String, title: String) {
+        val src = inputs[key] ?: return
+        val big = editBase(
+            src.text.toString(),
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE,
+            1,
+        ).apply {
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            minLines = 14
+            scrollableInside()
+        }
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(
+                ScrollView(this).apply {
+                    setPadding(dp(16), dp(8), dp(16), 0)
+                    addView(big)
+                }
+            )
+            .setPositiveButton("确定") { _, _ -> src.setText(big.text.toString()) }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

@@ -140,6 +140,8 @@ class PersonaActivity : Activity() {
             // 8 行会把最后一段藏起来 —— 看着像"没导全"，实际是全的。
             maxLines = 12
             minHeight = dp(112)
+            // 超过 12 行要能在框里自己滚，否则后面几段既看不到也划不动
+            scrollableInside()
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
@@ -827,8 +829,35 @@ class PersonaActivity : Activity() {
             setHintTextColor(getColor(R.color.ink_faint))
             setBackgroundResource(R.drawable.bg_input)
             setPadding(dp(10), dp(8), dp(10), dp(8))
-            if (single) setSingleLine() else maxLines = 3
+            if (single) {
+                setSingleLine()
+            } else {
+                maxLines = 3
+                scrollableInside()
+            }
         }
+
+    /**
+     * 让多行输入框在 ScrollView 里**自己滚**（和设置页同一套补丁）。
+     *
+     * 不补的话手指一落在框上，外层 ScrollView 就把滑动事件抢走 ——
+     * 身份写了三段、或者框里内容超过可见高度时，既看不全也滑不动。
+     * 只对多行框生效：单行框也这么干的话，整页会在那一行上卡住划不动。
+     */
+    private fun EditText.scrollableInside() = apply {
+        isVerticalScrollBarEnabled = true
+        scrollBarStyle = ScrollView.SCROLLBARS_INSIDE_INSET
+        setOnTouchListener { view, e ->
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN ->
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL ->
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+            }
+            false
+        }
+    }
 
     private fun space(h: Int) = TextView(this).apply { height = dp(h) }
 
