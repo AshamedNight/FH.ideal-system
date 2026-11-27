@@ -21,6 +21,8 @@ import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.llm.GreetingHooks
 import com.autoreply.app.core.llm.TalkStyle
 import com.autoreply.app.core.log.ChatLogStore
+import com.autoreply.app.core.persona.PersonaLoader
+import com.autoreply.app.core.persona.PersonaPresets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -81,6 +83,41 @@ class SettingsActivity : Activity() {
             setPadding(0, dp(8), 0, 0)
         })
 
+        // ---- 顶部摘要 ----
+        //
+        // 这页有十几段，改完常常忘了"现在生效的到底是哪一套"。把最常查的四项摊在最上面：
+        // 模型、几个平台、哪份人设、开场白几条。只读，不跳转 —— 它是"体检结果"，不是入口。
+        root.addView(summaryCard())
+
+        // ---- 高级调参容器（默认收起，最后才挂到页面上）----
+        //
+        // 时段 / 说话风格 / 精力 / 节奏护栏都是"一年调两次"的东西。
+        // 常驻在上面会把每天要用的（开场白、人设、禁止词）挤到屏幕外。
+        val adv = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+
+        // 模型挪到最上面（2026-11-27）：装完第一步就是填它，原来在第 5 段，
+        // 前面隔着风险档位/目标应用/节奏护栏/演练模式四段，很多人以为"没有填模型的地方"。
+        root.addView(section("模型"))
+        // 分发版：接口与凭据由 assets/distribution.json 内置，界面上不给看、不给改、不给复制。
+        // 只显示一个只读的设备编号 —— master 调额时要靠它认领这台机器。
+        if (config.distributionEnabled) {
+            root.addView(note("这一版已内置接口地址和授权，无需填写，也不能查看或修改。\n真实 Key 在中转服务器上，本机没有。"))
+            root.addView(note("本机编号（给分发方调每日额度用）：\n${config.deviceId}"))
+            root.addView(note("分发版不开代理：成员手机不挂任何 VPN 或代理，直接连公网中转。"))
+        } else {
+            root.addView(field("llmBaseUrl", "接口地址", config.llmBaseUrl, InputType.TYPE_TEXT_VARIATION_URI))
+            root.addView(field("llmApiKey", "API Key", config.llmApiKey, InputType.TYPE_TEXT_VARIATION_PASSWORD))
+            root.addView(field("llmProxy", "代理（可选）", config.llmProxy, InputType.TYPE_TEXT_VARIATION_URI))
+            root.addView(note("代理只作用于「发往模型接口」的请求，目标 App 的流量不经过它 —— 所以不必为此打开手机的系统级 VPN。\n例：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080（Termux 里跑的代理填这里）。走电脑中转时留空。"))
+            root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，也可改成电脑中转：http://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
+            // 模型名也只给开发版改：分发包里成员改成一个上游不认的名字，
+            // 报错是「模型不存在」，看着像中转坏了。固定值在 distribution.json 的 model。
+            root.addView(field("llmModel", "模型名", config.llmModel, InputType.TYPE_CLASS_TEXT))
+        }
+
         root.addView(section("风险档位"))
         root.addView(note("档位决定程序能自动做到哪一步。发送永远由你点，任何档位都不会替你发。"))
 
@@ -98,13 +135,13 @@ class SettingsActivity : Activity() {
         root.addView(note("一行一个包名，可填多个平台。留空表示抓取时不过滤（任何非本 App 界面都抓），方便第一次摸结构。"))
         root.addView(note("改完包名要同步修改 AndroidManifest.xml 里 queries 的 package，否则打不开目标应用。"))
 
-        root.addView(section("节奏护栏"))
-        root.addView(field("hourlyCap", "每小时最多处理（条）", config.hourlyCap.toString(), InputType.TYPE_CLASS_NUMBER))
-        root.addView(field("burstLimit", "连续处理多少条后长冷却", config.burstLimit.toString(), InputType.TYPE_CLASS_NUMBER))
-        root.addView(field("cooldownMinutes", "长冷却时长（分钟，≥3）", config.cooldownMinutes.toString(), InputType.TYPE_CLASS_NUMBER))
-        root.addView(field("minGapSeconds", "两条之间最短间隔（秒，≥30）", config.minGapSeconds.toString(), InputType.TYPE_CLASS_NUMBER))
-        root.addView(field("batchSize", "连点一次处理几个（≤20）", config.batchSize.toString(), InputType.TYPE_CLASS_NUMBER))
-        root.addView(note("实际间隔会在最短值上乘 0.7~1.8 的随机系数，不要设成整齐数字。\n这几个值只在「自动触发」时起作用；手动点「生成并填入」只受每小时上限约束，不会被冷却或精力拦住。\n平台报警后的熔断（30 分钟）任何时候都生效，那才是真正需要等的东西。"))
+        adv.addView(section("节奏护栏"))
+        adv.addView(field("hourlyCap", "每小时最多处理（条）", config.hourlyCap.toString(), InputType.TYPE_CLASS_NUMBER))
+        adv.addView(field("burstLimit", "连续处理多少条后长冷却", config.burstLimit.toString(), InputType.TYPE_CLASS_NUMBER))
+        adv.addView(field("cooldownMinutes", "长冷却时长（分钟，≥3）", config.cooldownMinutes.toString(), InputType.TYPE_CLASS_NUMBER))
+        adv.addView(field("minGapSeconds", "两条之间最短间隔（秒，≥30）", config.minGapSeconds.toString(), InputType.TYPE_CLASS_NUMBER))
+        adv.addView(field("batchSize", "连点一次处理几个（≤20）", config.batchSize.toString(), InputType.TYPE_CLASS_NUMBER))
+        adv.addView(note("实际间隔会在最短值上乘 0.7~1.8 的随机系数，不要设成整齐数字。\n这几个值只在「自动触发」时起作用；手动点「生成并填入」只受每小时上限约束，不会被冷却或精力拦住。\n平台报警后的熔断（30 分钟）任何时候都生效，那才是真正需要等的东西。"))
         root.addView(section("演练模式"))
         root.addView(
             check("演练模式：不调模型、不限速（只测流程）", config.drillMode) { config.drillMode = it }
@@ -124,24 +161,6 @@ class SettingsActivity : Activity() {
             com.autoreply.app.core.guard.PacerGuard(this@SettingsActivity, config).clearCooldown()
             Toast.makeText(this@SettingsActivity, "冷却已清除，可以继续了", Toast.LENGTH_SHORT).show()
         })
-
-        root.addView(section("模型"))
-        // 分发版：接口与凭据由 assets/distribution.json 内置，界面上不给看、不给改、不给复制。
-        // 只显示一个只读的设备编号 —— master 调额时要靠它认领这台机器。
-        if (config.distributionEnabled) {
-            root.addView(note("这一版已内置接口地址和授权，无需填写，也不能查看或修改。\n真实 Key 在中转服务器上，本机没有。"))
-            root.addView(note("本机编号（给分发方调每日额度用）：\n${config.deviceId}"))
-            root.addView(note("分发版不开代理：成员手机不挂任何 VPN 或代理，直接连公网中转。"))
-        } else {
-            root.addView(field("llmBaseUrl", "接口地址", config.llmBaseUrl, InputType.TYPE_TEXT_VARIATION_URI))
-            root.addView(field("llmApiKey", "API Key", config.llmApiKey, InputType.TYPE_TEXT_VARIATION_PASSWORD))
-            root.addView(field("llmProxy", "代理（可选）", config.llmProxy, InputType.TYPE_TEXT_VARIATION_URI))
-            root.addView(note("代理只作用于「发往模型接口」的请求，目标 App 的流量不经过它 —— 所以不必为此打开手机的系统级 VPN。\n例：http://127.0.0.1:7890 或 socks5://127.0.0.1:1080（Termux 里跑的代理填这里）。走电脑中转时留空。"))
-            root.addView(note("接口地址填 mock = 本地假模型，不联网、不用 Key，只能验证管道。\n若要连需要翻墙的模型，也可改成电脑中转：http://电脑内网IP:8787/v1 （见 tools/model-relay.py）"))
-            // 模型名也只给开发版改：分发包里成员改成一个上游不认的名字，
-            // 报错是「模型不存在」，看着像中转坏了。固定值在 distribution.json 的 model。
-            root.addView(field("llmModel", "模型名", config.llmModel, InputType.TYPE_CLASS_TEXT))
-        }
 
         root.addView(section("剪贴板交付（抓不到输入框时用）"))
         root.addView(
@@ -183,8 +202,8 @@ class SettingsActivity : Activity() {
             })
         }
 
-        root.addView(section("时段"))
-        root.addView(
+        adv.addView(section("时段"))
+        adv.addView(
             note(
                 "告诉模型「现在几点」，它会据此调整说话方式 —— 比如上午就不会说「刚下班」。\n" +
                     "留「自动」就跟系统时钟；也可以手动指定，方便测不同时段的效果。"
@@ -218,10 +237,10 @@ class SettingsActivity : Activity() {
         if (timeGroup.checkedRadioButtonId == -1 && timeGroup.childCount > 0) {
             (timeGroup.getChildAt(0) as? RadioButton)?.isChecked = true
         }
-        root.addView(timeGroup)
+        adv.addView(timeGroup)
 
-        root.addView(section("说话风格"))
-        root.addView(
+        adv.addView(section("说话风格"))
+        adv.addView(
             note(
                 "只改语气，不改长度和底线。选项来自一张表（TalkStyle），加风格不用改这里。\n" +
                     "「自然」等于不加任何指令 —— 和你之前的表现完全一致。\n" +
@@ -249,20 +268,20 @@ class SettingsActivity : Activity() {
         if (styleGroup.checkedRadioButtonId == -1 && styleGroup.childCount > 0) {
             (styleGroup.getChildAt(0) as? RadioButton)?.isChecked = true
         }
-        root.addView(styleGroup)
+        adv.addView(styleGroup)
 
-        root.addView(section("精力"))
-        root.addView(
+        adv.addView(section("精力"))
+        adv.addView(
             check("锁定精力（测试时用）", config.energyLocked) { config.energyLocked = it }
         )
-        root.addView(
+        adv.addView(
             note(
                 "开启后精力不再消耗、也不随时间恢复，永远等于下面这个值；\n" +
                     "判定链也不会因为\"累了\"压住你。关掉就恢复程序自己的疲劳曲线 ——\n" +
                     "已经设好的值不会丢，开关只决定用不用。"
             )
         )
-        root.addView(
+        adv.addView(
             field(
                 "energyValue", "锁定值（0~1，如 0.85）",
                 config.energyLockedValue.toString(),
@@ -384,8 +403,27 @@ class SettingsActivity : Activity() {
         })
         root.addView(note("精力只影响「自动」回复的节奏：越低越拖，低到 0.30 以下就完全不自动动。连续测几次会掉到 0.28，那时自动触发会被压住 —— 点这个按钮相当于「我休息好了」。\n手动点「生成并填入」不受精力影响。"))
 
+        // 高级调参（时段 / 说话风格 / 精力 / 节奏护栏 都在这里面，默认收起）
+        //
+        // 按钮文字跟着开合变：只写"高级"的话，用户不知道点下去会展开还是收起。
+        val advToggle = action("展开高级：时段 / 说话风格 / 精力 / 节奏护栏") {}
+        advToggle.setOnClickListener {
+            val open = adv.visibility != View.VISIBLE
+            adv.visibility = if (open) View.VISIBLE else View.GONE
+            advToggle.text = if (open) {
+                "收起高级"
+            } else {
+                "展开高级：时段 / 说话风格 / 精力 / 节奏护栏"
+            }
+        }
+        root.addView(advToggle)
+        root.addView(adv)
+
         // 全页唯一的实心按钮：保存。上面那一堆都是改，只有这一步是"落盘"。
         root.addView(primary("保存") { save() })
+
+        // 编号按屏幕顺序重排一次（高级区是最后挂上去的，否则会跳号）
+        renumberSections(root)
 
         setContentView(ScrollView(this).apply {
             setBackgroundColor(getColor(R.color.paper))
@@ -517,6 +555,8 @@ class SettingsActivity : Activity() {
     private fun section(title: String): ViewGroup {
         sectionIndex++
         return LinearLayout(this).apply {
+            // 标记一下，方便最后按**显示顺序**统一重排编号（高级区是后来才挂上去的）
+            tag = "sechead"
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
             setPadding(0, dp(28), 0, dp(10))
@@ -532,6 +572,30 @@ class SettingsActivity : Activity() {
             })
             addView(mono(title))
         }
+    }
+
+    /**
+     * 按**屏幕上实际顺序**重排段落编号。
+     *
+     * 为什么需要：编号是"创建顺序"给的，而「高级」那一段是最后才挂到页面上的 ——
+     * 不重排的话，用户会看到 01 02 04 05 … 11 12 13 14，然后在最底部突然冒出 03 08 09 10。
+     * 那种跳号看起来就像页面坏了。
+     */
+    private fun renumberSections(container: ViewGroup) {
+        var n = 0
+        fun walk(g: ViewGroup) {
+            for (i in 0 until g.childCount) {
+                val c = g.getChildAt(i)
+                if (c.tag == "sechead" && c is ViewGroup) {
+                    n++
+                    (c.getChildAt(0) as? TextView)?.text = "%02d".format(n)
+                } else if (c is ViewGroup) {
+                    walk(c)
+                }
+            }
+        }
+        walk(container)
+        sectionIndex = n
     }
 
     /** 等宽小标签：11sp + 0.12 字距。中文没有大小写，层级只能靠这两样做出来。 */
@@ -596,6 +660,65 @@ class SettingsActivity : Activity() {
             gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
             if (lines > 1) minLines = lines
         }
+
+    /**
+     * 顶部摘要：四项最常查的当前值。
+     *
+     * 只读、不跳转 —— 它是"体检结果"，不是入口。
+     * 设置页十几段，改完常常忘了现在生效的是哪一套人设、模型是不是填对了；
+     * 这四行省掉的是"翻五屏去确认"。数值取的是**当前生效**，不是输入框里的草稿。
+     */
+    private fun summaryCard(): ViewGroup {
+        val p = PersonaLoader.resolve(this, config).persona
+        val preset = PersonaPresets.list(this)
+            .firstOrNull { it.id == PersonaPresets.activeId(this) }?.name.orEmpty()
+            .ifEmpty { "默认" }
+        val model = if (config.distributionEnabled) {
+            "内置接口（成员版）"
+        } else {
+            val host = config.llmBaseUrl.substringAfter("://").substringBefore("/")
+            config.llmModel.ifEmpty { "未填模型名" } + if (host.isEmpty()) " · 地址未填" else " · $host"
+        }
+        val greet = when {
+            !config.greetingEnabled -> "未启用"
+            config.greetingMulti -> "三条 · ${config.greetingMultiLines.count { it.isNotBlank() }} 已填"
+            else -> "${config.greetingLines.size} 条"
+        }
+        val rows = listOf(
+            "模型" to model,
+            "目标平台" to "${config.targetPackages.size} 个",
+            "当前人设" to "$preset（${p.fewShot.size} 样例 / ${p.rules.size} 准则）",
+            "开场白" to greet,
+        )
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.bg_input)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(14) }
+            rows.forEach { (k, v) ->
+                addView(LinearLayout(this@SettingsActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(TextView(this@SettingsActivity).apply {
+                        text = k
+                        textSize = 11f
+                        setTextColor(getColor(R.color.ink_faint))
+                        width = dp(64)
+                    })
+                    addView(
+                        TextView(this@SettingsActivity).apply {
+                            text = v
+                            textSize = 12f
+                            setTextColor(getColor(R.color.ink))
+                        },
+                        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                    )
+                })
+            }
+        }
+    }
 
     private fun field(
         key: String,
