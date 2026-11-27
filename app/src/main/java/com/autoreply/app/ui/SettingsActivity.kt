@@ -395,6 +395,10 @@ class SettingsActivity : Activity() {
             }
         })
         root.addView(note("只有「输入框对无障碍不可见」的平台才需要它（同城夜聊这类）。抖音、moyi 不需要。\n切过去之后，AutoReply 的草稿会通过输入法上屏 —— 和真键盘打字是同一条通道。\n平时想正常打字，用键盘上的地球图标即可切回你自己的输入法。"))
+        // 语音输入排障：很多机型（尤其国产 ROM）根本没有系统的语音识别服务，
+        // 而"键盘能语音"和"系统有识别服务"是两件事 —— 键盘多半自带一套。
+        // 这里直接把结论摆出来，省得用户对着一句"没有语音识别服务"猜。
+        root.addView(action("语音输入诊断（为什么点「说一句」没反应）") { showVoiceDiag() })
 
         root.addView(section("状态复位"))
         root.addView(action("重置精力（我休息好了）") {
@@ -636,6 +640,50 @@ class SettingsActivity : Activity() {
             ).apply { topMargin = dp(10) }
             setOnClickListener { onClick() }
         }
+
+    /**
+     * 语音输入诊断。
+     *
+     * 用户看到的那句"没有语音识别服务"，真实原因有三种，外观完全一样：
+     *   ① 系统里真的没装（国产 ROM 常见 —— 键盘的语音是键盘自己带的，不经过系统）
+     *   ② 装了但被包可见性挡住（Android 11+；我们已在 manifest 里声明 queries）
+     *   ③ 有服务但不可用（Google 语音服务在国内连不上）
+     * 这个弹窗负责把 ①/②/③ 分开，否则用户只能猜。
+     */
+    private fun showVoiceDiag() {
+        val pm = packageManager
+        val probe = Intent("android.speech.RecognitionService")
+        val svcs = runCatching { pm.queryIntentServices(probe, 0) }.getOrNull().orEmpty()
+        val mic = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        val sys = android.speech.SpeechRecognizer.isRecognitionAvailable(this)
+
+        val sb = StringBuilder()
+        sb.append("系统识别服务：").append(if (sys) "可用" else "不可用").append('\n')
+        sb.append("找到的识别服务：").append(svcs.size).append(" 个\n")
+        svcs.take(5).forEach { ri ->
+            val label = runCatching { ri.loadLabel(pm).toString() }
+                .getOrDefault(ri.serviceInfo.packageName)
+            sb.append("　· ").append(label)
+                .append("（").append(ri.serviceInfo.packageName).append("）\n")
+        }
+        sb.append("麦克风权限：").append(if (mic) "已授权" else "未授权").append("\n\n")
+        sb.append(
+            when {
+                svcs.isEmpty() -> "这台机器没装任何语音识别服务。\n" +
+                    "零成本的办法：点面板「换键盘」→ 用你自己键盘上的语音输入 → 打完切回来，一样能发。"
+                !sys -> "有识别服务，但对 App 不可见或不可用（常见于没装 Google 语音服务的机器）。\n" +
+                    "同样建议先走「换键盘」那条路。"
+                !mic -> "服务可用，只差麦克风权限 —— 回面板点「说一句」，按提示授权即可。"
+                else -> "看起来一切正常。若点「说一句」仍没反应，多半是该服务需要联网，或只装了离线模型。"
+            }
+        )
+        AlertDialog.Builder(this)
+            .setTitle("语音输入诊断")
+            .setMessage(sb.toString().trim())
+            .setPositiveButton("知道了", null)
+            .show()
+    }
 
     /** 实心按钮：全页只留给「保存」。上面那一堆都是改，只有这一步是落盘。 */
     private fun primary(text: String, onClick: () -> Unit): Button =

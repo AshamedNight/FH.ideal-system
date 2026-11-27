@@ -794,7 +794,10 @@ class AutoReplyImeService : InputMethodService() {
             return
         }
         if (!android.speech.SpeechRecognizer.isRecognitionAvailable(this)) {
-            setStatus("这台机器没有语音识别服务 —— 换键盘自己打吧")
+            // 常见原因（跟机型强相关）：国产 ROM 往往只有"键盘自带的语音"，
+            // 而没有系统级的识别服务 —— 键盘那个是自己接的云端，帮不了我们。
+            // 所以给的办法不是"去装一个"，而是"借键盘的语音"：切过去说完再切回来。
+            setStatus("没有系统语音服务 —— 点「换键盘」，用键盘自带的语音，说完切回来")
             return
         }
         val r = recognizer ?: runCatching {
