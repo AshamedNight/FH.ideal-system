@@ -15,6 +15,7 @@
 #   9. 同一作用域里重复声明（新写一份忘了删旧的，报错位置完全对不上）
 #  10. 会话记忆的接缝算法（Python 复刻 + 7 种窗口形状）
 #  11. 事实抽取的正则（"她 28 岁"这类，错了不报错）
+#  12. 平台类漏 import（ScrollView / AlertDialog…）
 #
 # 用法：bash tools/precheck.sh
 # 退出码非 0 就别 push。
@@ -141,9 +142,19 @@ else
     say "  （没有 python，跳过）"
 fi
 
+say "== 12. 用了 Android 平台类却没 import =="
+# 第 6 步只查项目内的类（com.autoreply.*）。平台类漏 import 那边看不见，
+# 本机不编译，只能等 CI —— 2026-11-28 因此白跑一轮（AutoReplyImeService:440 ScrollView）。
+if command -v python >/dev/null 2>&1; then
+    python tools/check_android_imports.py || fail=1
+else
+    say "  （没有 python，跳过）"
+fi
+
+
 echo
 if [ $fail -ne 0 ]; then
     say "自检未通过 —— 修掉再 push，否则 CI 会白跑一轮。"
     exit 1
 fi
-say "自检全部通过。注意：只覆盖「必现失败」「漏 import」「缺构造函数」「重复声明」「记忆接缝」「事实抽取」，其余类型错误仍只能靠 CI。"
+say "自检全部通过。注意：只覆盖「必现失败」「漏 import」「缺构造函数」「重复声明」「记忆接缝」「事实抽取」「平台类 import」，其余类型错误仍只能靠 CI。"
