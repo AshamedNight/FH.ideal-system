@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import com.autoreply.app.R
 import com.autoreply.app.core.AppConfig
 import com.autoreply.app.core.llm.TalkStyle
+import com.autoreply.app.core.llm.TopicBank
 import com.autoreply.app.core.persona.PersonaPresets
 
 /**
@@ -247,7 +248,8 @@ class AutoReplyImeService : InputMethodService() {
         // 再加一排有底色的按钮会跟下面的网格抢注意力。
         val tabReply = tabLabel("回复") { showPage(0) }
         val tabStyle = tabLabel("风格") { showPage(1) }
-        tabs = listOf(tabReply, tabStyle)
+        val tabTopic = tabLabel("话题") { showPage(2) }
+        tabs = listOf(tabReply, tabStyle, tabTopic)
         root.addView(
             LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -257,6 +259,10 @@ class AutoReplyImeService : InputMethodService() {
                 )
                 addView(
                     tabStyle,
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                )
+                addView(
+                    tabTopic,
                     LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
                 )
             }
@@ -405,7 +411,45 @@ class AutoReplyImeService : InputMethodService() {
             }
         }
 
-        // ── 两页装进可滑动容器 ──
+        // ── 第三页：找话题 ──
+        //
+        // 卡住的往往不是"不会回"，而是"没话可说"（对方回个「嗯」）。
+        // 这一页给的是**能直接发出去的提问**，按类分好；点一下就走 replaceAll，
+        // 和常用短语同一套语义（整框替换 + 覆盖前备份）。
+        var topicCat = TopicBank.CATS.first()
+        val topicList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun fillTopics() {
+            topicList.removeAllViews()
+            TopicBank.of(topicCat).forEach { line -> topicList.addView(topicRow(line.text)) }
+        }
+        val pageTopics = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(6))
+            addView(
+                rowOf(
+                    TopicBank.CATS.map { c ->
+                        chip(c, { topicCat == c }) {
+                            topicCat = c
+                            fillTopics()
+                        }
+                    }
+                )
+            )
+            // 固定高度 + 内部滚动：这一页的行数不固定，跟着内容变会让面板上下跳。
+            addView(
+                ScrollView(this@AutoReplyImeService).apply {
+                    isVerticalScrollBarEnabled = false
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        dp(118),
+                    ).apply { topMargin = dp(6) }
+                    addView(topicList)
+                }
+            )
+        }
+        fillTopics()
+
+        // ── 三页装进可滑动容器 ──
         val p = SlidePager(this).apply {
             addView(
                 pageReply,
@@ -416,6 +460,13 @@ class AutoReplyImeService : InputMethodService() {
             )
             addView(
                 pageStyle,
+                FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            addView(
+                pageTopics,
                 FrameLayout.LayoutParams(
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                     android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -446,7 +497,7 @@ class AutoReplyImeService : InputMethodService() {
         hintView = hint
         root.addView(hint)
 
-        currentPage = cfg.imePage.coerceIn(0, 1)
+        currentPage = cfg.imePage.coerceIn(0, 2)
         p.select(currentPage, animate = false)
         updateTabs()
         updateHint()
@@ -588,6 +639,7 @@ class AutoReplyImeService : InputMethodService() {
                 "草稿只进剪贴板 · 回聊天页长按输入框粘贴，自己点发送"
             // 面板上没有发送键，这句话是告诉用户"下一步去哪儿"
             currentPage == 0 -> "发送用 App 自带的按钮"
+            currentPage == 2 -> "点一句就填进输入框（会替换掉框里现有的）"
             cfg.clipboardOnly -> "剪贴板模式：不写输入框，抓不到输入框的平台用它"
             // 演练模式读的是样例表，所以**人设生效、风格不生效** —— 这两件事别混着说
             cfg.drillMode -> "演练模式：风格不生效（人设仍然生效）"
@@ -731,6 +783,25 @@ class AutoReplyImeService : InputMethodService() {
     // 这两个入口解决的是同一个场景：**模型写的不对，但我自己心里有句话**。
     // 我们这个输入法没有键位，原来的唯一出路是切回系统键盘、打完再切回来 ——
     // 一来一回两次切换，比打字本身还累。
+
+    /**
+     * 「话题」页的一行：整宽、可点。
+     *
+     * 和小格不同 —— 这些是完整句子（十来个字），横排会被截成"平时刷手机都…"，
+     * 用户看不出要发什么，所以一列一行，宁可少显示几条。
+     */
+    private fun topicRow(text: String): View = TextView(this).apply {
+        this.text = text
+        textSize = 12f
+        setTextColor(getColor(R.color.ink))
+        setBackgroundResource(R.drawable.bg_input)
+        setPadding(dp(12), dp(10), dp(12), dp(10))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = dp(6) }
+        setOnClickListener { insertPhrase(text) }
+    }
 
     /** 常用短语的小格子：和设置页输入框同一个底，长句自动截断，不撑破一行。 */
     private fun phraseChip(text: String, onClick: () -> Unit): TextView = TextView(this).apply {
