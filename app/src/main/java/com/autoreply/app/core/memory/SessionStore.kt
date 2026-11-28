@@ -29,7 +29,7 @@ import com.autoreply.app.core.llm.Turn
 object SessionStore {
 
     private const val DB_NAME = "session_memory.db"
-    private const val DB_VER = 1
+    private const val DB_VER = 2
 
     private class Helper(ctx: Context) :
         SQLiteOpenHelper(ctx.applicationContext, DB_NAME, null, DB_VER) {
@@ -54,6 +54,7 @@ object SessionStore {
                   v TEXT NOT NULL,
                   confidence REAL NOT NULL,
                   updated_at INTEGER NOT NULL,
+                  src TEXT NOT NULL DEFAULT '',
                   PRIMARY KEY(pkg, peer, k)
                 )
                 """.trimIndent()
@@ -61,7 +62,13 @@ object SessionStore {
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            // v1 是初版。以后加列/加表在这里按版本号分支，别 drop —— 那是用户数据。
+            // v1 → v2：加 src（抽到这条事实的那句原文），用来核对"抽错了没有"。
+            // 只 ALTER，不重建 —— 重建等于把用户已有的记忆清空。
+            if (oldVersion < 2) {
+                runCatching {
+                    db.execSQL("ALTER TABLE facts ADD COLUMN src TEXT NOT NULL DEFAULT ''")
+                }
+            }
         }
     }
 
@@ -109,9 +116,11 @@ object SessionStore {
         peer: String,
         turns: List<Turn>,
         now: Long = System.currentTimeMillis(),
+        /** 人设里"我是谁"，用来挡"把我方说的话当成对方说的"这类误抽。 */
+        selfIdentity: String = "",
     ) {
         if (pkg.isBlank() || peer.isBlank() || turns.isEmpty()) return
-        val facts = FactExtractor.extract(turns)
+        val facts = FactExtractor.extract(turns, selfIdentity)
         val db = open(ctx) ?: return
         runCatching {
             db.beginTransaction()
@@ -149,6 +158,7 @@ object SessionStore {
                             put("v", f.value)
                             put("confidence", f.confidence)
                             put("updated_at", now)
+                            put("src", f.src)
                         },
                         SQLiteDatabase.CONFLICT_REPLACE,
                     )
@@ -169,7 +179,13 @@ object SessionStore {
     )
 
     /** 事实一行（含低置信，供「会话记忆」页核对）。 */
-    data class FactRow(val k: String, val v: String, val confidence: Float)
+    data class FactRow(
+        val k: String,
+        val v: String,
+        val confidence: Float,
+        /** 抽到这条事实的那句原文；人工改过的写"人工修改"。 */
+        val src: String = "",
+    )
 
     /** 全部会话，按最近活跃倒序。 */
     fun sessions(ctx: Context): List<Session> {
@@ -198,11 +214,18 @@ object SessionStore {
         val db = open(ctx) ?: return emptyList()
         val rows = runCatching {
             db.query(
-                "facts", arrayOf("k", "v", "confidence"),
+                "facts", arrayOf("k", "v", "confidence", "src"),
                 "pkg=? AND peer=?", arrayOf(pkg, peer), null, null, null,
             ).use { c ->
                 buildList {
-                    while (c.moveToNext()) add(FactRow(c.getString(0), c.getString(1), c.getFloat(2)))
+                    while (c.moveToNext()) {
+                        add(
+                            FactRow(
+                                c.getString(0), c.getString(1), c.getFloat(2),
+                                c.getString(3).orEmpty(),
+                            )
+                        )
+                    }
                 }
             }
         }.getOrNull().orEmpty()
@@ -234,6 +257,7 @@ object SessionStore {
                     put("v", v)
                     put("confidence", 1.0f)
                     put("updated_at", now)
+                    put("src", "人工修改")
                 },
                 SQLiteDatabase.CONFLICT_REPLACE,
             )

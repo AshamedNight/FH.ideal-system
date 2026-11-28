@@ -18,13 +18,24 @@ import com.autoreply.app.core.llm.Turn
  *
  * 正则硬命中（"28岁"）给 0.9；关键词沾边（说过"美容"就当职业）给 0.7。
  * 只有 ≥ [MIN_CONFIDENCE] 的才会进提示词，其余留在库里等人看。
+ *
+ * ## 为什么每条都记来源（[Fact.src]）
+ *
+ * 抽错了要能一眼看出错在哪句（2026-11-28 真机：把我方说的"淄博"
+ * 记成了对方的城市）。只显示结论的话，用户只能猜。
  */
 object FactExtractor {
 
     /** 低于这个值不进提示词 —— 猜错的代价是模型一本正经地报错信息。 */
     const val MIN_CONFIDENCE = 0.7f
 
-    data class Fact(val key: String, val value: String, val confidence: Float)
+    data class Fact(
+        val key: String,
+        val value: String,
+        val confidence: Float,
+        /** 抽到它的那句原文（截断），给"会话记忆"页核对用。 */
+        val src: String = "",
+    )
 
     /**
      * 城市表。不做省市区识别，只认常见市名 —— 认错了比认不出更糟。
@@ -50,59 +61,93 @@ object FactExtractor {
     /** "今年 28" 这种也算，但只在没有"28岁"时兜底。 */
     private val AGE_ALT = Regex("""今年\s*(\d{1,2})""")
 
-    fun extract(turns: List<Turn>): List<Fact> {
-        val said = turns.filter { it.fromOther }
-            .joinToString("\n") { it.text }
-        if (said.isBlank()) return emptyList()
+    private val AVOID = Regex("""(讨厌|不喜欢|受不了|别叫|别问|反感)([\u4e00-\u9fa5A-Za-z]{1,6})""")
 
+    /**
+     * @param selfIdentity 人设里"我是谁"那段。用来挡一类必然发生的误抽：
+     *   方向判错时（气泡在左侧就被当成对方），我方说的「我在淄博做美容」
+     *   会被抽成"对方在淄博做美容"。对方的城市/职业正好和我一样的概率很低，
+     *   而把这句当成我方说的概率不低 —— 所以命中人设的直接丢掉。
+     */
+    fun extract(turns: List<Turn>, selfIdentity: String = ""): List<Fact> {
+        val mine = selfIdentity.replace("\n", " ")
         val out = LinkedHashMap<String, Fact>()
-        fun put(key: String, value: String, conf: Float) {
-            if (value.isNotBlank()) out[key] = Fact(key, value, conf)
+
+        fun put(key: String, value: String, conf: Float, src: String) {
+            if (value.isBlank() || out.containsKey(key)) return
+            out[key] = Fact(key, value, conf, src.take(30))
         }
 
-        // 年龄：14~60 之外一律当误命中（"3 岁"多是孩子）
-        val age = (AGE.find(said) ?: AGE_ALT.find(said))
-            ?.groupValues?.getOrNull(1)?.toIntOrNull()
-            ?.takeIf { it in 14..60 }
-        if (age != null) put("age", "$age 岁", 0.9f)
+        // 逐句扫，命中即定 —— 这样每条事实都能带上"从哪句来的"
+        for (t in turns) {
+            if (!t.fromOther) continue
+            val s = t.text
+            if (s.isBlank()) continue
 
-        CITIES.firstOrNull { said.contains(it) }?.let { put("city", it, 0.8f) }
-
-        JOBS.firstOrNull { said.contains(it) }?.let { put("job", "做$it", 0.7f) }
-
-        // 婚育：顺序敏感 —— "离婚"里含"婚"，先判离/结
-        when {
-            said.contains("离婚") || said.contains("离异") -> put("marriage", "离异", 0.9f)
-            said.contains("已婚") || said.contains("结过婚") -> put("marriage", "已婚", 0.9f)
-            said.contains("单身") || said.contains("没对象") -> put("marriage", "单身", 0.7f)
-        }
-        val kid = listOf("女儿", "儿子", "孩子", "娃").firstOrNull { said.contains(it) }
-        if (kid != null) {
-            // 孩子年龄：同一句里找最近的"数字岁"
-            val kidAge = Regex("""$kid[^。！\n]{0,6}?(\d{1,2})\s*岁""")
-                .find(said)?.groupValues?.getOrNull(1)
-            put("kid", if (kidAge != null) "有$kid $kidAge 岁" else "有$kid", 0.8f)
-        }
-
-        // 诉求：她要什么，比她的资料更影响"该怎么聊"
-        when {
-            said.contains("找对象") || said.contains("找老公") || said.contains("找老婆") ||
-                said.contains("结婚") -> put("want", "想找对象", 0.8f)
-            said.contains("无聊") || said.contains("寂寞") || said.contains("找人聊") ||
-                said.contains("陪聊") -> put("want", "想找人聊天", 0.7f)
-        }
-
-        // 雷区：只取"讨厌/不喜欢/别叫/别问"后面几个字，够模型避开就够了
-        Regex("""(讨厌|不喜欢|受不了|别叫|别问|反感)([\u4e00-\u9fa5A-Za-z]{1,6})""")
-            .find(said)?.let { m ->
-                put("avoid", "不喜欢「${m.groupValues[2]}」", 0.8f)
+            if (!out.containsKey("age")) {
+                val age = (AGE.find(s) ?: AGE_ALT.find(s))
+                    ?.groupValues?.getOrNull(1)?.toIntOrNull()
+                    ?.takeIf { it in 14..60 }
+                if (age != null) put("age", "$age 岁", 0.9f, s)
             }
 
-        return out.values.toList()
-    }
+            if (!out.containsKey("city")) {
+                CITIES.firstOrNull { s.contains(it) }?.let { put("city", it, 0.8f, s) }
+            }
 
-    /** 给提示词看的一行：key 转成人话，只留高置信。 */
-    fun describe(f: Fact): String = f.value
+            if (!out.containsKey("job")) {
+                JOBS.firstOrNull { s.contains(it) }?.let { put("job", "做$it", 0.7f, s) }
+            }
+
+            if (!out.containsKey("marriage")) {
+                when {
+                    s.contains("离婚") || s.contains("离异") -> put("marriage", "离异", 0.9f, s)
+                    s.contains("已婚") || s.contains("结过婚") -> put("marriage", "已婚", 0.9f, s)
+                    s.contains("单身") || s.contains("没对象") -> put("marriage", "单身", 0.7f, s)
+                }
+            }
+
+            if (!out.containsKey("kid")) {
+                val kid = listOf("女儿", "儿子", "孩子", "娃").firstOrNull { s.contains(it) }
+                if (kid != null) {
+                    val kidAge = Regex("""$kid[^。！\n]{0,6}?(\d{1,2})\s*岁""")
+                        .find(s)?.groupValues?.getOrNull(1)
+                    put("kid", if (kidAge != null) "有$kid $kidAge 岁" else "有$kid", 0.8f, s)
+                }
+            }
+
+            if (!out.containsKey("want")) {
+                when {
+                    s.contains("找对象") || s.contains("找老公") || s.contains("找老婆") ||
+                        s.contains("结婚") -> put("want", "想找对象", 0.8f, s)
+                    s.contains("无聊") || s.contains("寂寞") || s.contains("找人聊") ||
+                        s.contains("陪聊") -> put("want", "想找人聊天", 0.7f, s)
+                }
+            }
+
+            if (!out.containsKey("avoid")) {
+                AVOID.find(s)?.let { m -> put("avoid", "不喜欢「${m.groupValues[2]}」", 0.8f, s) }
+            }
+        }
+
+        // 命中人设的「城市/职业」降成低置信：多半是把我方说的话当成了对方说的。
+        //
+        // 为什么是"降级"而不是"丢弃"：同城交友平台上，对方真的和我同城
+        // （都淄博）一点也不稀奇 —— 直接丢会误杀真事实。
+        // 降到 0.5 的效果是：**不进提示词**，但会留在「会话记忆」页并标「不确定」，
+        // 用户看一眼来源就知道该确认还是该删。
+        val tainted = { v: String ->
+            val core = v.removePrefix("做").trim()
+            core.isNotEmpty() && mine.contains(core)
+        }
+        return out.values.map { f ->
+            if ((f.key == "city" || f.key == "job") && tainted(f.value)) {
+                f.copy(confidence = 0.5f)
+            } else {
+                f
+            }
+        }
+    }
 
     /** 事实的固定顺序：稳定的顺序能让上游的前缀缓存更愿意命中。 */
     val ORDER = listOf("age", "city", "job", "marriage", "kid", "want", "avoid")

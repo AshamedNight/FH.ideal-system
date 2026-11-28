@@ -280,8 +280,18 @@ class ReplyRunner(
             try {
                 // 会话记忆放在这个线程里做：SQLite 读写不该落在主线程上
                 // （自动触发那条路是从无障碍回调进来的，本身就在主线程）。
+                // 人设身份用来挡一类必然误抽：方向判错时，我方说的
+                // 「我在淄博做美容」会被抽成"对方在淄博做美容"。
+                val identity = runCatching {
+                    com.autoreply.app.core.persona.PersonaLoader.resolve(service, config)
+                        .persona.identity
+                }.getOrDefault("")
                 val facts = SessionStore.digest(service, pkg, peer)
-                SessionStore.observe(service, pkg, peer, turns)
+                SessionStore.observe(service, pkg, peer, turns, selfIdentity = identity)
+                service.logAuto(
+                    if (facts.isEmpty()) "记忆：这个名字还没有事实"
+                    else "记忆：带上 ${facts.size} 条关于对方"
+                )
                 // 构造要读 assets/persona.json，属于 IO；每次新建还能让改完人设立即生效
                 val flow = ReplyFlow(service, config)
                 val outcome = flow.decide(

@@ -143,27 +143,42 @@ class MemoryActivity : Activity() {
 
     private fun factRow(s: SessionStore.Session, f: SessionStore.FactRow): View =
         LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.VERTICAL
             setPadding(0, dp(9), 0, dp(9))
             setOnClickListener { editFact(s, f) }
-            addView(TextView(this@MemoryActivity).apply {
-                text = FactExtractor.labelOf(f.k)
-                textSize = 11f
-                setTextColor(getColor(R.color.ink_faint))
-                width = dp(52)
-            })
-            addView(TextView(this@MemoryActivity).apply {
-                text = f.v
-                textSize = 13f
-                setTextColor(getColor(R.color.ink))
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            if (f.confidence < FactExtractor.MIN_CONFIDENCE) {
-                // 低置信不进提示词，但要让人看见"它记了这么一条、而且不太确定"
+            addView(LinearLayout(this@MemoryActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
                 addView(TextView(this@MemoryActivity).apply {
-                    text = "不确定"
+                    text = FactExtractor.labelOf(f.k)
+                    textSize = 11f
+                    setTextColor(getColor(R.color.ink_faint))
+                    width = dp(52)
+                })
+                addView(TextView(this@MemoryActivity).apply {
+                    text = f.v
+                    textSize = 13f
+                    setTextColor(getColor(R.color.ink))
+                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                if (f.confidence < FactExtractor.MIN_CONFIDENCE) {
+                    // 低置信不进提示词，但要让人看见"它记了这么一条、而且不太确定"
+                    addView(TextView(this@MemoryActivity).apply {
+                        text = "不确定"
+                        textSize = 10f
+                        setTextColor(getColor(R.color.ink_faint))
+                    })
+                }
+            })
+            // 来源：抽到它的那句原文。抽错的时候只有这一行能说明"它错在哪"，
+            // 光看结论（"城市 淄博"）永远想不明白为什么会记成这样。
+            if (f.src.isNotBlank()) {
+                addView(TextView(this@MemoryActivity).apply {
+                    text = "来源：${f.src}"
                     textSize = 10f
                     setTextColor(getColor(R.color.ink_faint))
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    setPadding(dp(52), dp(2), 0, 0)
                 })
             }
         }

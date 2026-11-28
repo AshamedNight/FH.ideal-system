@@ -331,10 +331,14 @@ class MainActivity : Activity() {
             val flow = ReplyFlow(this@MainActivity, config)
             // 会话记忆：读"她是谁"、写回这一轮抽到的事实。和 ReplyRunner 同一条规则 ——
             // 首页按钮不经过 ReplyRunner，这里漏了就会"自动触发记得、手动点击忘"。
+            val identity = runCatching {
+                com.autoreply.app.core.persona.PersonaLoader
+                    .resolve(this@MainActivity, config).persona.identity
+            }.getOrDefault("")
             val facts = com.autoreply.app.core.memory.SessionStore
                 .digest(this@MainActivity, pkg, peer)
             com.autoreply.app.core.memory.SessionStore
-                .observe(this@MainActivity, pkg, peer, turns)
+                .observe(this@MainActivity, pkg, peer, turns, selfIdentity = identity)
             val outcome = flow.decide(
                 turns,
                 selfSaidAgoSeconds = selfAgo,
@@ -364,6 +368,22 @@ class MainActivity : Activity() {
                     append(android.text.format.DateFormat.format("HH:mm:ss", now))
                     append("）：\n")
                     trace.forEach { append("  ").append(it).append('\n') }
+                    // 「关于对方」必须在这里单独列出来。
+                    //
+                    // 它拼在 user 消息里，而下面那段提示词只显示**前 1200 字** ——
+                    // system（人设/样例/准则）就占满了，用户永远看不到这一段，
+                    // 于是"记了却看不到"被当成"没记"（2026-11-28 真机反馈）。
+                    append("  ")
+                    append(
+                        when {
+                            // 名字都读不到 → 记忆整条被跳过。这条要说清楚，
+                            // 否则用户只会看到"记了却没带上"，以为功能坏了。
+                            peer.isBlank() -> "关于对方：跳过（读不到昵称，避免串会话）"
+                            facts.isEmpty() -> "关于对方：无（这个名字还没记到事实）"
+                            else -> "关于对方（${facts.size} 条）：" + facts.joinToString("；")
+                        }
+                    )
+                    append('\n')
                 }
 
                 when (outcome) {
