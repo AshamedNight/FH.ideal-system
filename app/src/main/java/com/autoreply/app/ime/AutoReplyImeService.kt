@@ -52,6 +52,9 @@ class AutoReplyImeService : InputMethodService() {
      */
     private var lastCommitted: String? = null
 
+    /** 上一次 [replaceAll] 覆盖前，是否把原来的内容备份进了剪贴板（状态行要说清）。 */
+    private var lastFillBackedUp = false
+
     /**
      * 当前绑定的输入框属于哪个 App。
      *
@@ -753,8 +756,14 @@ class AutoReplyImeService : InputMethodService() {
      * `commit()` 内部会先擦掉我们自己上一次写的草稿，正好符合这个语义。
      */
     private fun insertPhrase(text: String) {
-        val ok = commit(text)
-        setStatus(if (ok) "已插入：${text.take(14)}" else "先点一下输入框，再点这句")
+        val ok = replaceAll(text)
+        setStatus(
+            when {
+                !ok -> "先点一下输入框，再点这句"
+                lastFillBackedUp -> "已替换（原内容在剪贴板）：${text.take(10)}"
+                else -> "已插入：${text.take(14)}"
+            }
+        )
         refreshDraftLine()
         mainHandler.postDelayed({ refreshDraftLine() }, 250L)
     }
@@ -817,9 +826,9 @@ class AutoReplyImeService : InputMethodService() {
                 setStatus("没听清，再说一次")
                 return
             }
-            // commit 会先擦掉我们自己上一次写的草稿再写 —— 正是这里想要的：
-            // 用户说的这句就是要替换掉模型那句，不是接在后面。
-            val ok = commit(text)
+            // 用户说的这句就是要替换掉框里原有的内容（包括模型那句），
+            // 所以走 replaceAll 而不是"接着写"。
+            val ok = replaceAll(text)
             setStatus(if (ok) "已填入：${text.take(16)}" else "先点一下输入框，再说一次")
             refreshDraftLine()
             mainHandler.postDelayed({ refreshDraftLine() }, 250L)
@@ -932,16 +941,14 @@ class AutoReplyImeService : InputMethodService() {
 
     /** 清掉我们自己的草稿再写入，避免和上一次的句子叠在一起。 */
     private fun commitGreeting(text: String) {
-        val ic = currentInputConnection
-        if (ic == null) {
+        // 整框替换：点「用开场白」就是要发这条，框里原有的内容留在前面会变成口头禅叠句
+        if (!replaceAll(text)) {
             setStatus("输入框没绑上，先点一下输入框")
             return
         }
-        clearOwnDraft(ic)
-        ic.commitText(text, 1)
-        lastCommitted = text
         setStatus("已写入：${text.take(12)}")
         refreshDraftLine()
+        mainHandler.postDelayed({ refreshDraftLine() }, 250L)
     }
 
     /** 「复制草稿」：把框里现有的内容放进剪贴板（带回读校验）。 */
@@ -1223,6 +1230,52 @@ class AutoReplyImeService : InputMethodService() {
         // 只删光标两侧各 120 字符：草稿本来就短，
         // 这个范围足够清掉上一段，又不会误删更早的对话内容
         if (replaceFirst) ic.deleteSurroundingText(120, 120) else clearOwnDraft(ic)
+        ic.commitText(text, 1)
+        lastCommitted = text
+        pendingText = null
+        pendingPkg = ""
+        verifyWritten(text)
+        return true
+    }
+
+    /**
+     * 整框替换：不管框里原来是什么，都换成 [text]。
+     *
+     * 什么时候用：**用户亲手点的动作** —— 点常用短语、点「用开场白」、说一句。
+     * 那一刻"我要发的是这句"是明确的，旧内容要是留在前面，就变成
+     * 「11先聊两句吧，我这边不急」（真机截图确认过）。
+     *
+     * 什么时候**不能**用：自动填入 / 自动触发。那条路上框里可能是用户自己
+     * 打了一半的话（或者平台预填的招呼），替他清掉是不可接受的 ——
+     * 自动那条路仍然只走 [clearOwnDraft]。
+     *
+     * 覆盖前把原内容放进剪贴板：误点一下至少还能粘回来。
+     */
+    fun replaceAll(text: String): Boolean {
+        val ic = currentInputConnection ?: run {
+            pendingText = text
+            pendingPkg = ""
+            pendingAt = System.currentTimeMillis()
+            return false
+        }
+        val before = try {
+            ic.getTextBeforeCursor(2000, 0)?.toString().orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        val after = try {
+            ic.getTextAfterCursor(2000, 0)?.toString().orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        val total = before.length + after.length
+        // 原来的内容不是我们写的那段 → 先备份再覆盖（是我们自己的草稿就不用备份）
+        val ours = lastCommitted?.let { before.endsWith(it) } == true
+        lastFillBackedUp = total > 0 && !ours && copyDraft(before + after)
+        if (total > 0) {
+            runCatching { ic.setSelection(0, total) }
+                .onFailure { ic.deleteSurroundingText(before.length, after.length) }
+        }
         ic.commitText(text, 1)
         lastCommitted = text
         pendingText = null
