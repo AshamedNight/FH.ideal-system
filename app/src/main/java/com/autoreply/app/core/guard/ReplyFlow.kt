@@ -146,6 +146,20 @@ class ReplyFlow(context: Context, private val config: AppConfig) {
                 return Outcome.Silent("没有对方发来的消息")
             }
 
+        // ---- 2 之前：对方还没回，就别追一句 ----
+        //
+        // 真机症状（2026-11-28）：刚发完开场白，程序又写了一句，
+        // 而屏幕最后一条是我方气泡 —— 看起来像"它在回复我自己"。
+        // 根因是这里只取"最后一条**对方**消息"，不检查它是不是**最后一条消息**：
+        // 我发完招呼之后，对方那句「你好」还是旧的，却照样被拿去生成。
+        //
+        // 判据取最硬的那条：最新一条不是我方的，才叫"对方说了新话"。
+        // 手动点「生成下一条」不受此限 —— 那是用户明确要求现在就写。
+        if (!manual && turns.lastOrNull()?.fromOther != true) {
+            step("② 该不该回：对方还没回（最后一句是我说的），不主动追")
+            return Outcome.Silent("对方还没回，先不追")
+        }
+
         // ---- 2. 该不该开口 ----
         val judgment = NecessityJudge.judge(
             text = last.text,

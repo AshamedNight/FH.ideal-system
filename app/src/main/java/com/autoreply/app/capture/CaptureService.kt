@@ -947,6 +947,13 @@ class CaptureService : AccessibilityService() {
         // L0 档不自动：那个档位的定义就是"人自己停在页面里，程序只负责填"
         if (cfg.level < AppConfig.LEVEL_NOTIFY) return
 
+        // 最后一条如果是**我方的**（刚发完招呼、或刚发完一句），就不该自动生成。
+        //
+        // 真机症状（2026-11-28）：发完开场白后程序又写了一句，屏幕上看着像"在回我自己"。
+        // 根因是下面只取"最后一条**对方**消息"，对方那句旧招呼照样会被拿去生成。
+        // 判定链里也有一道同样的门（ReplyFlow），这里先拦是为了**连模型都不调**。
+        if (messages.lastOrNull()?.fromOther != true) return
+
         val last = messages.lastOrNull { it.fromOther } ?: return
         // 指纹必须带昵称。交友平台大量新会话第一句都是「你好」，
         // 只按「条数 + 文本」判断的话，从 A 会话切到 B 会话，
